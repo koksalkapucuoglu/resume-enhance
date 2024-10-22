@@ -1,0 +1,143 @@
+{% load crispy_forms_tags %}
+
+<form method="post">
+    {% csrf_token %}
+
+    <div>
+        <h2>Personal Information</h2>
+        {{ user_form|crispy }}
+    </div>
+
+    <div>
+        <h2>Education</h2>
+        <div id="education-forms">
+            {% for form in education_formset %}
+                <div class="education-form card">
+                    {{ form|crispy }}
+                    <button type="button" class="btn btn-danger remove-education">Remove</button>
+                </div>
+            {% endfor %}
+        </div>
+        <button type="button" id="add-education" class="btn btn-primary">Add Education</button>
+    </div>
+
+    <div>
+        <h2>Experience</h2>
+        <div id="experience-forms">
+            {% for form in experience_formset %}
+                <div class="experience-form card">
+                    {{ form|crispy }}
+                    <button type="button" class="btn btn-danger remove-experience">Remove</button>
+                </div>
+            {% endfor %}
+        </div>
+        <button type="button" id="add-experience" class="btn btn-primary">Add Experience</button>
+    </div>
+
+    <div>
+        <h2>Projects</h2>
+        <div id="project-forms">
+            {% for form in project_formset %}
+                <div class="experience-form card">
+                    {{ form|crispy }}
+                    <button type="button" class="btn btn-danger remove-project">Remove</button>
+                </div>
+            {% endfor %}
+        </div>
+        <button type="button" id="add-project" class="btn btn-primary">Add Experience</button>
+    </div>
+
+    <br><br>
+    <button type="submit" class="btn btn-success">Submit</button>
+</form>
+
+<!-- Education form template -->
+<template id="education-form-template">
+    <div class="education-form card">
+        {{ education_formset.empty_form|crispy }}
+        <button type="button" class="btn btn-danger remove-education">Remove</button>
+    </div>
+</template>
+
+<!-- Experience form template -->
+<template id="experience-form-template">
+    <div class="experience-form card">
+        {{ experience_formset.empty_form|crispy }}
+        <button type="button" class="btn btn-danger remove-experience">Remove</button>
+    </div>
+</template>
+
+
+<!-- Project form template -->
+<template id="project-form-template">
+    <div class="project-form card">
+        {{ project_formset.empty_form|crispy }}
+        <button type="button" class="btn btn-danger remove-project">Remove</button>
+    </div>
+</template>
+
+<style>
+    .card {
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 16px;
+        background-color: #f9f9f9;
+        position: relative;
+    }
+
+    .remove-education, .remove-experience, .remove-project {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+    }
+</style>
+
+<script>
+    function attachRemoveEvent(button) {
+        button.addEventListener('click', function () {
+            button.closest('.card').remove();
+        });
+    }
+
+    // Initialize remove event for existing education, experience and project forms
+    document.querySelectorAll('.remove-education').forEach(attachRemoveEvent);
+    document.querySelectorAll('.remove-experience').forEach(attachRemoveEvent);
+    document.querySelectorAll('.remove-project').forEach(attachRemoveEvent);
+
+    // Handle adding new education forms
+    const educationFormsContainer = document.getElementById('education-forms');
+    const addEducationButton = document.getElementById('add-education');
+    const educationFormTemplate = document.getElementById('education-form-template').content;
+
+    addEducationButton.addEventListener('click', () => {
+        const newEducationForm = educationFormTemplate.cloneNode(true);
+        const removeButton = newEducationForm.querySelector('.remove-education');
+        attachRemoveEvent(removeButton);
+        educationFormsContainer.appendChild(newEducationForm);
+    });
+
+    // Handle adding new experience forms
+    const experienceFormsContainer = document.getElementById('experience-forms');
+    const addExperienceButton = document.getElementById('add-experience');
+    const experienceFormTemplate = document.getElementById('experience-form-template').content;
+
+    addExperienceButton.addEventListener('click', () => {
+        const newExperienceForm = experienceFormTemplate.cloneNode(true);
+        const removeButton = newExperienceForm.querySelector('.remove-experience');
+        attachRemoveEvent(removeButton);
+        experienceFormsContainer.appendChild(newExperienceForm);
+    });
+
+    // Handle adding new project forms
+    const projectFormsContainer = document.getElementById('project-forms');
+    const addProjectButton = document.getElementById('add-project');
+    const projectFormTemplate = document.getElementById('project-form-template').content;
+
+    addProjectButton.addEventListener('click', () => {
+        const newProjectForm = projectFormTemplate.cloneNode(true);
+        const removeButton = newProjectForm.querySelector('.remove-project');
+        attachRemoveEvent(removeButton);
+        projectFormsContainer.appendChild(newProjectForm);
+    });
+</script>
