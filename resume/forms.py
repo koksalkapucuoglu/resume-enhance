@@ -51,11 +51,11 @@ class EducationForm(forms.Form):
 
 class ExperienceForm(forms.Form):
     title = forms.CharField(max_length=255, label="Role Title")
-    start_date = forms.DateField(
+    start_date = MonthYearField(
         widget=MonthYearDateInput(format='%Y-%m'),
         label='Start Date'
     )
-    end_date = forms.DateField(
+    end_date = MonthYearField(
         widget=MonthYearDateInput(format='%Y-%m'),
         label='End Date',
         required=False

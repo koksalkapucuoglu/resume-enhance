@@ -3,49 +3,52 @@
 <form method="post">
     {% csrf_token %}
 
-    <div>
+    <section class="userinfo-section">
         <h2>Personal Information</h2>
         {{ user_form|crispy }}
-    </div>
+    </section>
 
-    <div>
+    <section class="education-section">
         <h2>Education</h2>
-        <div id="education-forms">
+        <div id="education-container">
+            {{ education_formset.management_form }}
             {% for form in education_formset %}
                 <div class="education-form card">
                     {{ form|crispy }}
                     <button type="button" class="btn btn-danger remove-education">Remove</button>
                 </div>
             {% endfor %}
+            <button type="button" id="add-education" class="btn btn-primary">Add Education</button>
         </div>
-        <button type="button" id="add-education" class="btn btn-primary">Add Education</button>
-    </div>
+    </section>
 
-    <div>
+    <section class="experience-section">
         <h2>Experience</h2>
-        <div id="experience-forms">
+        <div id="experience-container">
+            {{ experience_formset.management_form }}
             {% for form in experience_formset %}
                 <div class="experience-form card">
                     {{ form|crispy }}
                     <button type="button" class="btn btn-danger remove-experience">Remove</button>
                 </div>
             {% endfor %}
+            <button type="button" id="add-experience" class="btn btn-primary">Add Experience</button>
         </div>
-        <button type="button" id="add-experience" class="btn btn-primary">Add Experience</button>
-    </div>
+    </section>
 
-    <div>
-        <h2>Projects</h2>
-        <div id="project-forms">
+    <section class="project-section">
+        <h2>Project</h2>
+        <div id="project-container">
+            {{ project_formset.management_form }}
             {% for form in project_formset %}
-                <div class="experience-form card">
+                <div class="project-form card">
                     {{ form|crispy }}
                     <button type="button" class="btn btn-danger remove-project">Remove</button>
                 </div>
             {% endfor %}
+            <button type="button" id="add-project" class="btn btn-primary">Add Project</button>
         </div>
-        <button type="button" id="add-project" class="btn btn-primary">Add Experience</button>
-    </div>
+    </section>
 
     <br><br>
     <button type="submit" class="btn btn-success">Submit</button>
@@ -94,50 +97,188 @@
 </style>
 
 <script>
-    function attachRemoveEvent(button) {
-        button.addEventListener('click', function () {
-            button.closest('.card').remove();
-        });
+    // Dynamic ability for education form
+    const EDUCATION_SELECTORS = {
+        form: '.education-form',
+        container: '#education-container',
+        addButton: '#add-education',
+        totalForms: '#id_education-TOTAL_FORMS',
+        template: '#education-form-template'
     }
 
-    // Initialize remove event for existing education, experience and project forms
-    document.querySelectorAll('.remove-education').forEach(attachRemoveEvent);
-    document.querySelectorAll('.remove-experience').forEach(attachRemoveEvent);
-    document.querySelectorAll('.remove-project').forEach(attachRemoveEvent);
+    const educationElements = {
+        forms: document.querySelectorAll(EDUCATION_SELECTORS.form),
+        container: document.querySelector(EDUCATION_SELECTORS.container),
+        addButton: document.querySelector(EDUCATION_SELECTORS.addButton),
+        totalForms: document.querySelector(EDUCATION_SELECTORS.totalForms),
+        template: document.querySelector(EDUCATION_SELECTORS.template)
+    }
 
-    // Handle adding new education forms
-    const educationFormsContainer = document.getElementById('education-forms');
-    const addEducationButton = document.getElementById('add-education');
-    const educationFormTemplate = document.getElementById('education-form-template').content;
+    let educationFormIndex = educationElements.forms.length - 1
+    let educationFormCount = educationElements.forms.length
 
-    addEducationButton.addEventListener('click', () => {
-        const newEducationForm = educationFormTemplate.cloneNode(true);
-        const removeButton = newEducationForm.querySelector('.remove-education');
-        attachRemoveEvent(removeButton);
-        educationFormsContainer.appendChild(newEducationForm);
-    });
+    educationElements.addButton.addEventListener('click', addEducationForm)
 
-    // Handle adding new experience forms
-    const experienceFormsContainer = document.getElementById('experience-forms');
-    const addExperienceButton = document.getElementById('add-experience');
-    const experienceFormTemplate = document.getElementById('experience-form-template').content;
+    function addEducationForm(e) {
+        e.preventDefault()
+        
+        try {
+            const template = educationElements.template
+            const newForm = template.content.cloneNode(true)
+    
+            educationFormIndex++
+            educationFormCount++
+            newForm.querySelector('.education-form').innerHTML =
+                newForm.querySelector('.education-form').innerHTML.replace(
+                    RegExp('education-__prefix__-', 'g'),
+                    `education-${educationFormIndex}-`
+            )
+    
+            educationElements.container.insertBefore(newForm, educationElements.addButton)
+            educationElements.totalForms.setAttribute('value', `${educationFormCount}`)
+        } catch (error) {
+            console.error('Error adding education form:', error)
+        }
+    }
 
-    addExperienceButton.addEventListener('click', () => {
-        const newExperienceForm = experienceFormTemplate.cloneNode(true);
-        const removeButton = newExperienceForm.querySelector('.remove-experience');
-        attachRemoveEvent(removeButton);
-        experienceFormsContainer.appendChild(newExperienceForm);
-    });
+    // Dynamic ability for experience form
+    const EXPERIENCE_SELECTORS = {
+        form: '.experience-form',
+        container: '#experience-container',
+        addButton: '#add-experience',
+        totalForms: '#id_experience-TOTAL_FORMS',
+        template: '#experience-form-template'
+    }
 
-    // Handle adding new project forms
-    const projectFormsContainer = document.getElementById('project-forms');
-    const addProjectButton = document.getElementById('add-project');
-    const projectFormTemplate = document.getElementById('project-form-template').content;
+    const experienceElements = {
+        forms: document.querySelectorAll(EXPERIENCE_SELECTORS.form),
+        container: document.querySelector(EXPERIENCE_SELECTORS.container),
+        addButton: document.querySelector(EXPERIENCE_SELECTORS.addButton),
+        totalForms: document.querySelector(EXPERIENCE_SELECTORS.totalForms),
+        template: document.querySelector(EXPERIENCE_SELECTORS.template)
+    }
 
-    addProjectButton.addEventListener('click', () => {
-        const newProjectForm = projectFormTemplate.cloneNode(true);
-        const removeButton = newProjectForm.querySelector('.remove-project');
-        attachRemoveEvent(removeButton);
-        projectFormsContainer.appendChild(newProjectForm);
+    let experienceFormIndex = experienceElements.forms.length - 1
+    let experienceFormCount = experienceElements.forms.length
+
+    experienceElements.addButton.addEventListener('click', addExperienceForm)
+
+    function addExperienceForm(e) {
+        e.preventDefault()
+        
+        try {
+            const template = experienceElements.template
+            const newForm = template.content.cloneNode(true)
+    
+            experienceFormIndex++
+            experienceFormCount++
+            newForm.querySelector('.experience-form').innerHTML =
+                newForm.querySelector('.experience-form').innerHTML.replace(
+                    RegExp('experience-__prefix__-', 'g'),
+                    `experience-${experienceFormIndex}-`
+            )
+    
+            experienceElements.container.insertBefore(newForm, experienceElements.addButton)
+            experienceElements.totalForms.setAttribute('value', `${experienceFormCount}`)
+        } catch (error) {
+            console.error('Error adding experience form:', error)
+        }
+    }
+    
+    // Dynamic ability for project form
+    const PROJECT_SELECTORS = {
+        form: '.project-form',
+        container: '#project-container',
+        addButton: '#add-project',
+        totalForms: '#id_project-TOTAL_FORMS',
+        template: '#project-form-template'
+    }
+
+    const projectElements = {
+        forms: document.querySelectorAll(PROJECT_SELECTORS.form),
+        container: document.querySelector(PROJECT_SELECTORS.container),
+        addButton: document.querySelector(PROJECT_SELECTORS.addButton),
+        totalForms: document.querySelector(PROJECT_SELECTORS.totalForms),
+        template: document.querySelector(PROJECT_SELECTORS.template)
+    }
+
+    let projectFormIndex = projectElements.forms.length - 1
+    let projectFormCount = projectElements.forms.length
+
+    projectElements.addButton.addEventListener('click', addProjectForm)
+
+    function addProjectForm(e) {
+        e.preventDefault()
+        
+        try {
+            const template = projectElements.template
+            const newForm = template.content.cloneNode(true)
+    
+            projectFormIndex++
+            projectFormCount++
+            newForm.querySelector('.project-form').innerHTML =
+                newForm.querySelector('.project-form').innerHTML.replace(
+                    RegExp('project-__prefix__-', 'g'),
+                    `project-${projectFormIndex}-`
+            )
+    
+            projectElements.container.insertBefore(newForm, projectElements.addButton)
+            projectElements.totalForms.setAttribute('value', `${projectFormCount}`)
+        } catch (error) {
+            console.error('Error adding project form:', error)
+        }
+    }
+    
+    document.addEventListener('click', function(e) {
+        if (e.target && e.target.classList.contains('remove-education')) {
+            e.target.closest('.card').remove()
+
+            const forms = document.querySelectorAll('.education-form')
+            forms.forEach((form, index) => {
+                form.innerHTML = form.innerHTML.replace(
+                    RegExp('education-\\d+-', 'g'),
+                    `education-${index}-`
+                )
+            })
+
+            // Update total forms count
+            educationElements.totalForms.setAttribute('value', forms.length)
+            educationFormIndex = forms.length - 1
+            educationFormCount = forms.length
+        }
+        
+        if (e.target && e.target.classList.contains('remove-experience')) {
+            e.target.closest('.card').remove()
+
+            const forms = document.querySelectorAll('.experience-form')
+            forms.forEach((form, index) => {
+                form.innerHTML = form.innerHTML.replace(
+                    RegExp('experience-\\d+-', 'g'),
+                    `experience-${index}-`
+                )
+            })
+
+            // Update total forms count
+            experienceElements.totalForms.setAttribute('value', forms.length)
+            experienceFormIndex = forms.length - 1
+            experienceFormCount = forms.length
+        }
+        
+        if (e.target && e.target.classList.contains('remove-project')) {
+            e.target.closest('.card').remove()
+
+            const forms = document.querySelectorAll('.project-form')
+            forms.forEach((form, index) => {
+                form.innerHTML = form.innerHTML.replace(
+                    RegExp('project-\\d+-', 'g'),
+                    `project-${index}-`
+                )
+            })
+
+            // Update total forms count
+            projectElements.totalForms.setAttribute('value', forms.length)
+            projectFormIndex = forms.length - 1
+            projectFormCount = forms.length
+        }
     });
 </script>

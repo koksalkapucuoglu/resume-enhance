@@ -4,6 +4,6 @@ from . import views
 app_name = 'resume'
 
 urlpatterns = [
-    path('form', views.user_info, name='user_info'),
+    path('form', views.ResumeFormView.as_view(), name="resume_form"),
     path('education_form', views.EducationView.as_view(), name="education"),
 ]
