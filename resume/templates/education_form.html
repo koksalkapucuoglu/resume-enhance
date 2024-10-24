@@ -1,0 +1,112 @@
+{% load crispy_forms_tags %}
+
+<form method="post">
+    {% csrf_token %}
+
+    <section class="education-section">
+        <h2>Education</h2>
+        <div id="education-container">
+            {{ education_formset.management_form }}
+            {% for form in education_formset %}
+                <div class="education-form card">
+                    {{ form|crispy }}
+                    <button type="button" class="btn btn-danger remove-education">Remove</button>
+                </div>
+            {% endfor %}
+        <button type="button" id="add-education" class="btn btn-primary">Add Education</button>
+        </div>
+    </section>
+
+    <br><br>
+    <button type="submit" class="btn btn-success">Submit</button>
+</form>
+
+<!-- Education form template -->
+<template id="education-form-template">
+    <div class="education-form card">
+        {{ education_formset.empty_form|crispy }}
+        <button type="button" class="btn btn-danger remove-education">Remove</button>
+    </div>
+</template>
+
+<style>
+    .card {
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 16px;
+        background-color: #f9f9f9;
+        position: relative;
+    }
+
+    .remove-education {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+    }
+</style>
+
+<script>
+    const EDUCATION_SELECTORS = {
+        form: '.education-form',
+        container: '#education-container',
+        addButton: '#add-education',
+        totalForms: '#id_education-TOTAL_FORMS',
+        template: '#education-form-template'
+    }
+
+    const educationElements = {
+        forms: document.querySelectorAll(EDUCATION_SELECTORS.form),
+        container: document.querySelector(EDUCATION_SELECTORS.container),
+        addButton: document.querySelector(EDUCATION_SELECTORS.addButton),
+        totalForms: document.querySelector(EDUCATION_SELECTORS.totalForms),
+        template: document.querySelector(EDUCATION_SELECTORS.template)
+    }
+
+    let educationFormIndex = educationElements.forms.length - 1
+    let educationFormCount = educationElements.forms.length
+
+    educationElements.addButton.addEventListener('click', addEducationForm)
+
+    function addEducationForm(e) {
+        e.preventDefault()
+        
+        try {
+            const template = educationElements.template
+            const newForm = template.content.cloneNode(true)
+    
+            educationFormIndex++
+            educationFormCount++
+            newForm.querySelector('.education-form').innerHTML =
+                newForm.querySelector('.education-form').innerHTML.replace(
+                    RegExp('education-__prefix__-', 'g'),
+                    `education-${educationFormIndex}-`
+            )
+    
+            educationElements.container.insertBefore(newForm, educationElements.addButton)
+            educationElements.totalForms.setAttribute('value', `${educationFormCount}`)
+        } catch (error) {
+            console.error('Error adding education form:', error)
+        }
+    }
+
+    document.addEventListener('click', function(e) {
+        if (e.target && e.target.classList.contains('remove-education')) {
+            e.target.closest('.card').remove()
+
+            const forms = document.querySelectorAll('.education-form')
+            forms.forEach((form, index) => {
+                form.innerHTML = form.innerHTML.replace(
+                    RegExp('education-\\d+-', 'g'),
+                    `education-${index}-`
+                )
+            })
+
+            // Update total forms count
+            educationElements.totalForms.setAttribute('value', forms.length)
+            educationFormIndex = forms.length - 1
+            educationFormCount = forms.length
+        }
+    });
+
+</script>

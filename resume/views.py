@@ -1,6 +1,13 @@
 from django.shortcuts import render
-from .forms import UserInfoForm, EducationForm, ExperienceForm, ProjectForm
 from django.forms import formset_factory
+from django.views.generic import TemplateView
+from django.urls import reverse_lazy
+from django.shortcuts import redirect
+
+from .forms import UserInfoForm, EducationForm, ExperienceForm, ProjectForm
+
+
+EducationFormSet = formset_factory(EducationForm, extra=0)
 
 
 def user_info(request):
@@ -33,3 +40,32 @@ def user_info(request):
         'experience_formset': experience_formset,
         'project_formset': project_formset,
     })
+
+
+class EducationView(TemplateView):
+    template_name = "education_form.html"
+
+    def get(self, *args, **kwargs):
+        education_formset = EducationFormSet(
+            initial=[
+                {
+                    'school': 'Init School',
+                    'degree': 'Init Degree',
+                    'field_of_study': 'Init Field of Study',
+                }
+            ],
+            prefix='education'
+        )
+        context = {'education_formset': education_formset}
+        return self.render_to_response(context)
+
+    def post(self, *args, **kwargs):
+        education_formset = EducationFormSet(
+            self.request.POST, prefix='education')
+
+        if education_formset.is_valid():
+            pass
+            #return redirect(reverse_lazy("resume:education"))
+
+        context = {'education_formset': education_formset}
+        return self.render_to_response(context)

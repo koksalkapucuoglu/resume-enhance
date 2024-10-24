@@ -1,8 +1,21 @@
 from django import forms
-
+from datetime import datetime
 
 class MonthYearDateInput(forms.DateInput):
     input_type = 'month'
+
+
+class MonthYearField(forms.Field):
+    def to_python(self, value):
+        if not value:
+            return None
+
+        try:
+            return datetime.strptime(value, '%Y-%m').date()
+        except (ValueError, TypeError):
+            raise forms.ValidationError(
+                'Invalid data format. It should be YYYY-MM')
+
 
 
 class UserInfoForm(forms.Form):
@@ -27,10 +40,10 @@ class EducationForm(forms.Form):
     school = forms.CharField(max_length=100, label='School')
     degree = forms.CharField(max_length=100, label='Degree')
     field_of_study = forms.CharField(max_length=100, label='Field of Study')
-    start_date = forms.DateField(
+    start_date = MonthYearField(
         widget=MonthYearDateInput(format='%Y-%m'),
         label='Start Date')
-    end_date = forms.DateField(
+    end_date = MonthYearField(
         widget=MonthYearDateInput(format='%Y-%m'),
         label='End(Expected) Date'
     )
