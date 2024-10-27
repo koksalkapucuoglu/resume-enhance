@@ -39,7 +39,7 @@ class UserInfoForm(forms.Form):
 class EducationForm(forms.Form):
     school = forms.CharField(max_length=100, label='School')
     degree = forms.CharField(max_length=100, label='Degree')
-    field_of_study = forms.CharField(max_length=100, label='Field of Study')
+    field_of_study = forms.CharField(widget=forms.Textarea, label='Field of Study')
     start_date = MonthYearField(
         widget=MonthYearDateInput(format='%Y-%m'),
         label='Start Date')

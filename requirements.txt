@@ -3,3 +3,5 @@ djangorestframework==3.15.2
 psycopg2-binary==2.9.7
 django-crispy-forms==2.3
 crispy-bootstrap4
+openai==1.52.2
+python-dotenv==1.0.1

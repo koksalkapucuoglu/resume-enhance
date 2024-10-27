@@ -1,6 +1,8 @@
 {% load crispy_forms_tags %}
+<script src="https://unpkg.com/htmx.org@2.0.3"></script>
 
-<form method="post">
+<div class="page-container">
+    <form method="post">
     {% csrf_token %}
 
     <section class="userinfo-section">
@@ -29,7 +31,22 @@
             {% for form in experience_formset %}
                 <div class="experience-form card">
                     {{ form|crispy }}
-                    <button type="button" class="btn btn-danger remove-experience">Remove</button>
+                    <div class="card-buttons">
+                            <div class="my-indicator"></div>
+                            <button type="button"
+                                    class="btn btn-primary enhance-experience"
+                                    hx-post="{% url 'resume:enhance_experience' %}"
+                                    hx-trigger="click"
+                                    hx-vals='{"field_id": "{{ form.description.id_for_label }}"}'
+                                    hx-target="#{{ form.description.id_for_label }}"
+                                    hx-swap="outerHTML"
+                                    hx-indicator=".my-indicator"
+                            >Enhance
+                            </button>
+                            <button type="button"
+                                    class="btn btn-danger remove-experience"
+                            >Remove</button>
+                        </div>
                 </div>
             {% endfor %}
             <button type="button" id="add-experience" class="btn btn-primary">Add Experience</button>
@@ -43,7 +60,22 @@
             {% for form in project_formset %}
                 <div class="project-form card">
                     {{ form|crispy }}
-                    <button type="button" class="btn btn-danger remove-project">Remove</button>
+                    <div class="card-buttons">
+                            <div class="my-indicator"></div>
+                            <button type="button"
+                                    class="btn btn-primary enhance-project"
+                                    hx-post="{% url 'resume:enhance_project' %}"
+                                    hx-trigger="click"
+                                    hx-vals='{"field_id": "{{ form.description.id_for_label }}"}'
+                                    hx-target="#{{ form.description.id_for_label }}"
+                                    hx-swap="outerHTML"
+                                    hx-indicator=".my-indicator"
+                            >Enhance
+                            </button>
+                            <button type="button"
+                                    class="btn btn-danger remove-project"
+                            >Remove</button>
+                        </div>
                 </div>
             {% endfor %}
             <button type="button" id="add-project" class="btn btn-primary">Add Project</button>
@@ -53,6 +85,7 @@
     <br><br>
     <button type="submit" class="btn btn-success">Submit</button>
 </form>
+</div>
 
 <!-- Education form template -->
 <template id="education-form-template">
@@ -66,7 +99,22 @@
 <template id="experience-form-template">
     <div class="experience-form card">
         {{ experience_formset.empty_form|crispy }}
-        <button type="button" class="btn btn-danger remove-experience">Remove</button>
+        <div class="card-buttons">
+            <div class="my-indicator"></div>
+            <button type="button"
+                    class="btn btn-primary enhance-experience"
+                    hx-post="{% url 'resume:enhance_experience' %}"
+                    hx-trigger="click"
+                    hx-vals='{"field_id": "{{ experience_formset.empty_form.description.id_for_label }}"}'
+                    hx-target="#{{ experience_formset.empty_form.description.id_for_label }}"
+                    hx-swap="outerHTML"
+                    hx-indicator=".my-indicator"
+            >Enhance
+            </button>
+            <button type="button"
+                    class="btn btn-danger remove-experience"
+            >Remove</button>
+        </div>
     </div>
 </template>
 
@@ -75,11 +123,31 @@
 <template id="project-form-template">
     <div class="project-form card">
         {{ project_formset.empty_form|crispy }}
-        <button type="button" class="btn btn-danger remove-project">Remove</button>
+        <div class="card-buttons">
+            <div class="my-indicator"></div>
+            <button type="button"
+                    class="btn btn-primary enhance-project"
+                    hx-post="{% url 'resume:enhance_project' %}"
+                    hx-trigger="click"
+                    hx-vals='{"field_id": "{{ project_formset.empty_form.description.id_for_label }}"}'
+                    hx-target="#{{ project_formset.empty_form.description.id_for_label }}"
+                    hx-swap="outerHTML"
+                    hx-indicator=".my-indicator"
+            >Enhance
+            </button>
+            <button type="button"
+                    class="btn btn-danger remove-project"
+            >Remove</button>
+        </div>
     </div>
 </template>
 
 <style>
+    .page-container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 0 20px;
+    }
     .card {
         border: 1px solid #ddd;
         border-radius: 8px;
@@ -88,11 +156,40 @@
         background-color: #f9f9f9;
         position: relative;
     }
-
-    .remove-education, .remove-experience, .remove-project {
+    .card-buttons {
         position: absolute;
         top: 10px;
         right: 10px;
+        display: flex;
+        gap: 10px;
+    }
+    .remove-education{
+        position: absolute;
+        top: 10px;
+        right: 10px;
+    }
+    .my-indicator {
+        display: none;
+        border: 2px solid #f3f3f3;
+        border-top: 2px solid #3498db;
+        border-radius: 50%;
+        width: 20px;
+        height: 20px;
+        animation: spin .5s linear infinite;
+    }
+    .my-indicator{
+        display:none;
+    }
+    .htmx-request .my-indicator{
+        display:inline;
+    }
+    .htmx-request.my-indicator{
+        display:inline;
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
     }
 </style>
 
@@ -136,6 +233,10 @@
     
             educationElements.container.insertBefore(newForm, educationElements.addButton)
             educationElements.totalForms.setAttribute('value', `${educationFormCount}`)
+
+            // reload htmx to recognize new form
+            htmx.process(educationElements.container);
+
         } catch (error) {
             console.error('Error adding education form:', error)
         }
@@ -180,6 +281,10 @@
     
             experienceElements.container.insertBefore(newForm, experienceElements.addButton)
             experienceElements.totalForms.setAttribute('value', `${experienceFormCount}`)
+
+            // reload htmx to recognize new form
+            htmx.process(experienceElements.container);
+
         } catch (error) {
             console.error('Error adding experience form:', error)
         }
@@ -224,6 +329,10 @@
     
             projectElements.container.insertBefore(newForm, projectElements.addButton)
             projectElements.totalForms.setAttribute('value', `${projectFormCount}`)
+
+            // reload htmx to recognize new form
+            htmx.process(projectElements.container);
+
         } catch (error) {
             console.error('Error adding project form:', error)
         }
