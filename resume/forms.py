@@ -14,8 +14,8 @@ class MonthYearField(forms.Field):
             return datetime.strptime(value, '%Y-%m').date()
         except (ValueError, TypeError):
             raise forms.ValidationError(
-                'Invalid data format. It should be YYYY-MM')
-
+                'Invalid data format. It should be YYYY-MM'
+            )
 
 
 class UserInfoForm(forms.Form):
@@ -27,7 +27,7 @@ class UserInfoForm(forms.Form):
         required=False
     )
     github = forms.URLField(label='Github Profile Url', required=False)
-    linkedin = forms.URLField(label='Linkedin Profile Url', required=False,)
+    linkedin = forms.URLField(label='Linkedin Profile Url', required=False)
     skills = forms.CharField(
         widget=forms.Textarea(
             attrs={
@@ -39,7 +39,7 @@ class UserInfoForm(forms.Form):
 class EducationForm(forms.Form):
     school = forms.CharField(max_length=100, label='School')
     degree = forms.CharField(max_length=100, label='Degree')
-    field_of_study = forms.CharField(widget=forms.Textarea, label='Field of Study')
+    field_of_study = forms.CharField(max_length=100, label='Field of Study')
     start_date = MonthYearField(
         widget=MonthYearDateInput(format='%Y-%m'),
         label='Start Date')
@@ -50,7 +50,46 @@ class EducationForm(forms.Form):
 
 
 class ExperienceForm(forms.Form):
-    title = forms.CharField(max_length=255, label="Role Title")
+    title = forms.CharField(
+        max_length=255,
+        label="Role Title",
+    )
+    start_date = MonthYearField(
+        widget=MonthYearDateInput(format='%Y-%m'),
+        label='Start Date',
+    )
+    end_date = MonthYearField(
+        widget=MonthYearDateInput(format='%Y-%m'),
+        label='End Date',
+        required=False
+    )
+    current_role = forms.BooleanField(
+        label="I am currently working in this role"
+    )
+    company = forms.CharField(
+        max_length=255,
+        label="Company Name"
+    )
+    description = forms.CharField(
+        widget=forms.Textarea,
+        label="Description"
+    )
+
+
+class ProjectForm(forms.Form):
+    name = forms.CharField(
+        max_length=255,
+        label="Name"
+    )
+    description = forms.CharField(
+        widget=forms.Textarea,
+        label="Description"
+    )
+    link = forms.URLField(label='Link', required=False)
+
+
+class TestForm(forms.Form):
+    title = forms.CharField(max_length=255, label="Title")
     start_date = MonthYearField(
         widget=MonthYearDateInput(format='%Y-%m'),
         label='Start Date'
@@ -60,15 +99,4 @@ class ExperienceForm(forms.Form):
         label='End Date',
         required=False
     )
-    current_role = forms.BooleanField(
-        required=False,
-        label="I am currently working in this role"
-    )
-    company = forms.CharField(max_length=255, label="Company Name")
     description = forms.CharField(widget=forms.Textarea, label="Description")
-
-
-class ProjectForm(forms.Form):
-    name = forms.CharField(max_length=255, label="Name")
-    description = forms.CharField(widget=forms.Textarea, label="Description")
-    link = forms.URLField(label='Link', required=False)

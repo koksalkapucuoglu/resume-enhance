@@ -1,0 +1,94 @@
+\documentclass{resume_faangpath_simple_template} % Use the custom resume.cls style
+\usepackage{fontawesome5}
+\usepackage[left=0.4 in,top=0.4in,right=0.4 in,bottom=0.4in]{geometry} % Document margins
+\newcommand{\tab}[1]{\hspace{.2667\textwidth}\rlap{#1}}
+\newcommand{\itab}[1]{\hspace{0em}\rlap{#1}}
+
+\name{<<user_data.full_name>>} % Your name
+
+\address{
+    <<user_data.email>>
+    <% if user_data.phone %>
+    \\
+    <<user_data.phone|tex_escape>>
+    <% endif %>
+}
+
+\address{
+    <% if user_data.linkedin %>
+    \href{<<user_data.linkedin|tex_escape>>}{\faIcon{linkedin} linkedin}
+    <% endif %>
+    <% if user_data.linkedin and user_data.github %>
+    \\
+    <% endif %>
+    <% if user_data.github %>
+    \href{<<user_data.github|tex_escape>>}{\faIcon{github} github}
+    <% endif %>
+}
+
+\begin{document}
+
+%----------------------------------------------------------------------------------------
+%	EDUCATION SECTION
+%----------------------------------------------------------------------------------------
+
+\begin{rSection}{Education}
+
+<% for edu in education_data %>
+{\bf << edu.degree|tex_escape >> of << edu.field_of_study|tex_escape >>}, << edu.school|tex_escape >> \hfill {<< edu.start_date >> - << edu.end_date >>}\\
+<% endfor %>
+
+%Minor in Linguistics \smallskip \\
+%Member of Eta Kappa Nu \\
+%Member of Upsilon Pi Epsilon \\
+
+
+\end{rSection}
+
+%----------------------------------------------------------------------------------------
+% TECHINICAL STRENGTHS
+%----------------------------------------------------------------------------------------
+\begin{rSection}{SKILLS}
+
+<<user_data.skills>>
+
+\end{rSection}
+
+%----------------------------------------------------------------------------------------
+%	WORK EXPERIENCE SECTION
+%----------------------------------------------------------------------------------------
+
+\begin{rSection}{EXPERIENCE}
+
+<% for exp in experience_data %>
+\textbf{<<exp.title>>} \hfill <<exp.start_date>> - <<exp.end_date>>\\
+<<exp.company>>
+ \begin{itemize}
+     <% for desc in exp.description %>
+     \item <<desc>>
+     <% endfor %>
+ \end{itemize}
+<% endfor %>
+
+\end{rSection}
+
+%----------------------------------------------------------------------------------------
+%	PROJECT SECTION
+%----------------------------------------------------------------------------------------
+
+\begin{rSection}{PROJECTS \& PUBLICATIONS}
+
+\vspace{-1.25em}
+
+<% for pro in project_data %>
+\item \textbf{<<pro.name|tex_escape>>} {<<pro.description|tex_escape>>}
+<% if pro.link %>
+    \href{<<pro.link|tex_escape>>}{\faIcon{link}}
+<% endif %>
+
+
+<% endfor %>
+
+\end{rSection}
+
+\end{document}

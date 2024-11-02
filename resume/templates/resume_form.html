@@ -7,7 +7,9 @@
 
     <section class="userinfo-section">
         <h2>Personal Information</h2>
-        {{ user_form|crispy }}
+        <div class="card">
+            {{ user_form|crispy }}
+        </div>
     </section>
 
     <section class="education-section">
@@ -54,7 +56,7 @@
     </section>
 
     <section class="project-section">
-        <h2>Project</h2>
+        <h2>Project & Publications</h2>
         <div id="project-container">
             {{ project_formset.management_form }}
             {% for form in project_formset %}
@@ -84,7 +86,17 @@
 
     <br><br>
     <button type="submit" class="btn btn-success">Submit</button>
+    <br><br>
+    <button type="button"  class="btn btn-success" onclick="openPopup()">Preview</button>
+
 </form>
+</div>
+
+<!-- Preview pop-up -->
+<div class="popup" id="popup">
+        <div class="popup-content">
+            <iframe id="htmlPreview" srcdoc="" frameborder="0"></iframe>
+        </div>
 </div>
 
 <!-- Education form template -->
@@ -190,6 +202,33 @@
     @keyframes spin {
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
+    }
+    .popup-content {
+      width: 40%;
+      height: 90%;
+      margin: 0 auto;
+      border: 5px solid #ccc;
+    }
+    .popup {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.7);
+      justify-content: center;
+      align-items: center;
+    }
+    .popup.show {
+      display: flex;
+      width: 100%;
+      height: 100%;
+    }
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
     }
 </style>
 
@@ -341,14 +380,21 @@
     document.addEventListener('click', function(e) {
         if (e.target && e.target.classList.contains('remove-education')) {
             e.target.closest('.card').remove()
-
+            
             const forms = document.querySelectorAll('.education-form')
+
+            /*
+            TODO
+            Bu bölüm, element için remove dediğimizde, formdaki diğer elementlerin
+            içeriğini beklenmedik şekilde sıfırlıyor.
             forms.forEach((form, index) => {
                 form.innerHTML = form.innerHTML.replace(
                     RegExp('education-\\d+-', 'g'),
                     `education-${index}-`
                 )
             })
+   
+             */
 
             // Update total forms count
             educationElements.totalForms.setAttribute('value', forms.length)
@@ -358,14 +404,20 @@
         
         if (e.target && e.target.classList.contains('remove-experience')) {
             e.target.closest('.card').remove()
-
+            
             const forms = document.querySelectorAll('.experience-form')
+
+            /*
+            TODO
+            Bu bölüm, element için remove dediğimizde, formdaki diğer elementlerin
+            içeriğini beklenmedik şekilde sıfırlıyor.
             forms.forEach((form, index) => {
                 form.innerHTML = form.innerHTML.replace(
                     RegExp('experience-\\d+-', 'g'),
                     `experience-${index}-`
                 )
             })
+            */
 
             // Update total forms count
             experienceElements.totalForms.setAttribute('value', forms.length)
@@ -375,19 +427,64 @@
         
         if (e.target && e.target.classList.contains('remove-project')) {
             e.target.closest('.card').remove()
-
+            
             const forms = document.querySelectorAll('.project-form')
+            
+            /*
+            TODO
+            Bu bölüm, element için remove dediğimizde, formdaki diğer elementlerin
+            içeriğini beklenmedik şekilde sıfırlıyor.
+            
             forms.forEach((form, index) => {
                 form.innerHTML = form.innerHTML.replace(
                     RegExp('project-\\d+-', 'g'),
                     `project-${index}-`
                 )
             })
-
+            */
+            
             // Update total forms count
             projectElements.totalForms.setAttribute('value', forms.length)
             projectFormIndex = forms.length - 1
             projectFormCount = forms.length
         }
     });
+
+    function openPopup() {
+      const popup = document.getElementById('popup');
+      const htmlPreview = document.getElementById('htmlPreview');
+
+      // Form elemanını seç ve FormData oluştur
+        const form = document.querySelector('form');
+        const formData = new FormData(form);
+
+        // CSRF token'ını formdan al
+        const csrfToken = form.querySelector('[name=csrfmiddlewaretoken]').value;
+
+        // Django'dan HTML içeriğini al
+        fetch("{% url 'resume:preview-resume-form' %}", {
+            method: "POST",
+            headers: {
+                "X-CSRFToken": csrfToken // Token'ı Header olarak ekle
+            },
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.html) {
+                htmlPreview.srcdoc = data.html;
+                popup.classList.add('show');
+            } else {
+                console.error("Preview Error: Invalid HTML");
+            }
+        })
+        .catch(error => console.error("Preview Error:", error));
+    }
+
+    window.onclick = function(event) {
+      const popup = document.getElementById('popup');
+      if (event.target == popup) {
+        popup.classList.remove('show');
+      }
+    }
 </script>

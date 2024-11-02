@@ -1,0 +1,96 @@
+\documentclass{resume} % Use the custom resume.cls style
+\usepackage{fontawesome5}
+\usepackage[left=0.4 in,top=0.4in,right=0.4 in,bottom=0.4in]{geometry} % Document margins
+\newcommand{\tab}[1]{\hspace{.2667\textwidth}\rlap{#1}}
+\newcommand{\itab}[1]{\hspace{0em}\rlap{#1}}
+\name{Koksal Kapucuoglu} % Your name
+% You can merge both of these into a single line, if you do not have a website.
+\address{koksalkapucuoglu@gmail.com \\ +999999999}
+
+\address{
+    \href{https://linkedin.com/in/koksalkapucuoglu}{\faIcon{linkedin} linkedin} \\
+    \href{https://github.com/koksalkapucuoglu}{\faIcon{github} github}
+}  %
+
+\begin{document}
+
+
+%----------------------------------------------------------------------------------------
+%	EDUCATION SECTION
+%----------------------------------------------------------------------------------------
+
+\begin{rSection}{Education}
+
+{\bf Master of Electronic Engineering}, Istanbul Technical University \hfill {2019 - 2022}
+
+{\bf Bachelor of Electric \& Electronic Engineering}, Marmara University \hfill {2013 - 2017}
+%Minor in Linguistics \smallskip \\
+%Member of Eta Kappa Nu \\
+%Member of Upsilon Pi Epsilon \\
+
+
+\end{rSection}
+
+%----------------------------------------------------------------------------------------
+% TECHINICAL STRENGTHS
+%----------------------------------------------------------------------------------------
+\begin{rSection}{SKILLS}
+
+Python, Django, Django Rest Framework, Celery, RabbitMQ, Redis, Helm, PostgreSQL, MySQL, MsSQL, Docker, Git, AWS, Deep Learning, Github Actions
+
+
+\end{rSection}
+
+\begin{rSection}{EXPERIENCE}
+
+\textbf{Software Development Specialist} \hfill Aug 2022 - Present\\
+Gozen Digital Aviation
+ \begin{itemize}
+    \itemsep -3pt {}
+     \item Contributed to the design and implementation of a robust microservices architecture using Django, Django Rest Framework, Celery, RabbitMQ, and PostgreSQL, delivering efficient backend solutions for a comprehensive management software for flight training operations.
+     \item Collaborated with DevOps on Kubernetes Helm files, ensuring smooth deployments.
+    \item Utilized Docker to standardize development environments, reducing deployment errors.
+    \item Implemented AWS S3 integration for secure file storage and retrieval within the document management system, incorporating an authorization mechanism to control access using Django permissions.
+    \item Led two data migration projects: developed a Django-based solution to migrate data from MySQL to PostgreSQL and utilized complex SQL queries for another project that MSSQL to MySQL.
+ \end{itemize}
+
+\textbf{Software Engineer} \hfill Oct 2019 - Aug 2022\\
+Rigeltech
+ \begin{itemize}
+    \itemsep -3pt {}
+     \item Built a dashboard website and mobile app (using a no-code platform) for fitness data monitoring, enhacing user engagement.
+     \item Developed an admin panel for real-time log monitoring, enhancing operational efficiency.
+    \item Maintained the WalkOVR API, integrated into all Rigeltech products, ensuring seamless data transfer and compatibility across platforms.
+   \item Developed software that analyzes Euler data and converts it into BVH format for animation, optimizing data processing for accurate and realistic 3D motion rendering.
+    \item Applied machine learning techniques to refining walking and stopping movements for more precise motion tracking.
+    \item Defined requirements and created user stories based on planned features and customer feedback.
+ \end{itemize}
+
+\textbf{Software Engineer} \hfill Feb 2018 - Sep 2019\\
+Sersa Technology
+ \begin{itemize}
+    \itemsep -3pt {}
+     \item Managed the Orange Pi Turkey website, creating guides to enhance customer experience and site traffic.
+     \item Developed a social media post sharing automation app at Orange Pi, increased brand awareness and engagement.
+    \item Resolved technical issues for Orange Pi and Jhctech industrial computers, improving system reliability.
+ \end{itemize}
+
+\end{rSection}
+
+%----------------------------------------------------------------------------------------
+%	WORK EXPERIENCE SECTION
+%----------------------------------------------------------------------------------------
+
+\begin{rSection}{PROJECTS \& PUBLICATIONS}
+
+\vspace{-1.25em}
+\item \textbf{Track and Notify Todo.} {Developed a todo management application that allows users to define their todo statuses and receive email reminders at specified intervals. This solution uses Django, Celery, Celery Beat, RabbitMQ, and Docker.
+\href{https://github.com/koksalkapucuoglu/track-and-notify_todo/}{\faIcon{github} github}}
+\item \textbf{Email Newspaper App.} {Developed an email subscription application that allows users to receive daily newspaper from the site author upon subscribing, utilizing Django, Celery, Celery Beat, RabbitMQ, and Docker.
+\href{https://github.com/koksalkapucuoglu/python-subscribe-email-newspaper-app}{\faIcon{github} github}}
+\item \textbf{Online Triage Onboarding and Quiz.} {Developed an online triage onboarding and quiz system that increased correct referral rates using Django, HTML, CSS, JavaScript, AJAX, jQuery, and deployed on AWS EC2. This project contributed to improved user redirection at emergency.}\item \textbf{Tomato Leaf Disease Detection Using Hyperparameter Optimization in CNN.} {This study utilized the AlexNet network to classify tomato leaf data from the PlantVillage dataset. To enhance classification accuracy, optimization methods such as dropout, batch normalization, Adam/SGD optimizers, learning rate adjustments, batch size, epoch selection, and data augmentation were employed.
+\href{https://www.researchgate.net/publication/358010251_Tomato_Leaf_Disease_Detection_Using_Hyperparameter_Optimization_in_CNN}{\faIcon{registered} researchgate}}
+
+\end{rSection}
+
+\end{document}

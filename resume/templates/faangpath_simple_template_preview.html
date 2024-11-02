@@ -1,0 +1,107 @@
+{% load crispy_forms_tags %}
+
+<div class="pdf-container">
+    <div class="pdf-content">
+
+        <div class="user-info">
+            <strong class="name">{{ user_data.full_name|upper }}</strong>
+            <p style='line-height: 0;'>{{ user_data.email }} ⋄ {{ user_data.phone }}</p>
+            <p style='line-height: 0;'>{{ user_data.linkedin }} ⋄ {{ user_data.github }}</p>
+        </div>
+
+        <p class='section'>EDUCATION</p>
+        <hr/>
+        {% for edu in education_data %}
+            <div class="title-date">
+                  <div class="title">{{ edu.degree }} of {{ edu.field_of_study }}, {{ edu.school }}</div>
+                  <div class="date">{{ edu.start_date|date:"M Y"}} - {{ edu.end_date|date:"M Y" }}</div>
+            </div>
+        {% endfor %}
+        <br>
+
+        <p class='section'>SKILLS</p>
+        <hr/>
+        <p style='margin:0 0 0 0'>{{ user_data.skills }}
+        </p>
+        <br>
+
+        <p class='section'>EXPERIENCE</p>
+        <hr/>
+        {% for exp in experience_data %}
+            <div class="title-date">
+                  <div class="title">{{ exp.title }}</div>
+                  <div class="date">{{ exp.start_date|date:"M Y"}} - {{ exp.end_date|date:"M Y" }}</div>
+            </div>
+            <p class='position'>{{ exp.company }}</p>
+            <ul>
+            {% for desc in exp.description %}
+                <li>{{ desc }}</li>
+            {% endfor %}
+            </ul>
+        {% endfor %}
+        <br>
+
+        <p class='section'>PROJECTS & PUBLICATIONS</p>
+        <hr/>
+        {% for pro in project_data %}
+            <div class="project-name-description">
+                  <div class="name">{{ pro.name }}</div>
+                  <div class="description">{{ pro.description }}</div>
+            </div>
+        {% endfor %}
+
+    </div>
+  </div>
+
+<style>
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 0;
+      font-size:15px;
+    }
+    .pdf-container {
+      background-color: white;
+      overflow: auto;
+    }
+    .pdf-content {
+      padding: 2rem;
+        width: 90vw;
+        height: 100vh;
+    }
+    .user-info {
+      text-align: center;
+    }
+    .user-info .name {
+      font-size: 25px;
+    }
+    .section {
+      font-weight: bold;
+      font-size: 18px;
+      line-height: 0;
+    }
+    .title-date {
+      overflow: auto; /* Float'ın etkilerini temizlemek için */
+      font-size: 15px;
+    }
+    .title {
+      font-weight: bold;
+      float: left;
+    }
+    .date {
+      float: right; /* Sağa yaslar */
+    }
+    .position {
+      font-size: 15px;
+      line-height: 0;
+    }
+    .project-name-description {
+      overflow: auto;
+    }
+    .project-name-description .name {
+      font-weight: bold;
+      float: left;
+      margin-right: 5px;
+    }
+</style>

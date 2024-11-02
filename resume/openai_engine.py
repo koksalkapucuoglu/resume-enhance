@@ -41,6 +41,7 @@ def send_openai_message(user_message:str, meta_prompt:str = None):
         return f"Error: {str(e)}"
 
 
+# TODO Convert class based structure
 def enhance_resume_experience(user_message:str):
     """
     Enhances work experience descriptions to be suitable for a resume in the STAR format.
