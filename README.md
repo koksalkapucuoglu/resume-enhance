@@ -73,3 +73,14 @@ Pdf Export
 
 ![Pdf Export](https://github.com/koksalkapucuoglu/resume-enhance/blob/main/screenshots/pdf_export.png?raw=true)
 
+
+## Planned Features
+
+- Extract resume information from an existing PDF and fill the form automatically.  
+- Import resume details from LinkedIn and fill the form automatically.  
+- Add support for multiple LaTeX templates.  
+- Implement an authentication system.  
+- Improve the user interface (UI).  
+- Provide options for selecting different GPT models.  
+- Add multi-language support.  
+- Add a flexible section structure for resumes.   
