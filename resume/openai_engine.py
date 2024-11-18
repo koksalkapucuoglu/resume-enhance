@@ -23,6 +23,7 @@ def send_openai_message(user_message:str, meta_prompt:str = None):
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
+            #model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": meta_prompt},
                 {"role": "user", "content": user_message}

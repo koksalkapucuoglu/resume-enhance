@@ -64,7 +64,8 @@ class ExperienceForm(forms.Form):
         required=False
     )
     current_role = forms.BooleanField(
-        label="I am currently working in this role"
+        label="I am currently working in this role",
+        required=False
     )
     company = forms.CharField(
         max_length=255,

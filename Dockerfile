@@ -1,31 +1,35 @@
-FROM python:3.12.7-alpine
+FROM python:3.12.7-slim
 
 WORKDIR /app
 
-# Gerekli sistem bağımlılıklarını yükleyin
-RUN apk update && apk add --no-cache \
-    postgresql-dev \
+# Install required system dependencies (Debian-based)
+RUN apt-get update && apt-get install -y \
+    postgresql-client \
     gcc \
     python3-dev \
     musl-dev \
-    fontconfig-dev \
-    freetype-dev \
-    zlib-dev \
-    perl
+    libpq-dev \
+    build-essential \
+    fontconfig \
+    freetype2-demos \
+    zlib1g-dev \
+    perl \
+    texlive-latex-base \
+    texlive-latex-extra \
+    texlive-fonts-recommended \
+    texlive-fonts-extra \
+    texlive-xetex \
+    texlive-science \
+    texlive-pstricks \
+    texlive-latex-recommended \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Minimal texlive kurulumu ve gerekli LaTeX paketlerini yükleyin
-RUN apk add --no-cache texlive \
-    texmf-dist-latexextra \
-    texmf-dist-fontsextra \
-    texmf-dist-mathscience \
-    texmf-dist-pictures \
-    texmf-dist-pstricks \
-    texmf-dist-latexrecommended
-
+# Install Python dependencies
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy the application code
 COPY . /app/
 
+# Set environment variables
 ENV PYTHONUNBUFFERED=1
-

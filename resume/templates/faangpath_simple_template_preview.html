@@ -13,8 +13,14 @@
         <hr/>
         {% for edu in education_data %}
             <div class="title-date">
-                  <div class="title">{{ edu.degree }} of {{ edu.field_of_study }}, {{ edu.school }}</div>
-                  <div class="date">{{ edu.start_date|date:"M Y"}} - {{ edu.end_date|date:"M Y" }}</div>
+                <div class="left-content">
+                    <span class="title">{{ edu.degree }} of</span>  
+                    <span class="title">{{ edu.field_of_study }}</span>, 
+                    <span class="school">{{ edu.school }}</span>
+                </div>
+                <div class="date">
+                    {{ edu.start_date|date:"M Y"}} - {{ edu.end_date|date:"M Y" }}
+                </div>
             </div>
         {% endfor %}
         <br>
@@ -45,8 +51,8 @@
         <hr/>
         {% for pro in project_data %}
             <div class="project-name-description">
-                  <div class="name">{{ pro.name }}</div>
-                  <div class="description">{{ pro.description }}</div>
+                  <span class="name">{{ pro.name }}</span>
+                  <span class="description">{{ pro.description }}</span>
             </div>
         {% endfor %}
 
@@ -82,15 +88,27 @@
       line-height: 0;
     }
     .title-date {
-      overflow: auto; /* Float'ın etkilerini temizlemek için */
-      font-size: 15px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 15px;
+        margin-bottom: 10px;
     }
+    
+    .left-content {
+        display: inline;
+    }
+    
     .title {
-      font-weight: bold;
-      float: left;
+        font-weight: bold;
     }
+    
+    .school {
+        font-weight: normal;
+    }
+    
     .date {
-      float: right; /* Sağa yaslar */
+        text-align: right;
     }
     .position {
       font-size: 15px;
@@ -98,6 +116,7 @@
     }
     .project-name-description {
       overflow: auto;
+      padding-bottom: 3px;
     }
     .project-name-description .name {
       font-weight: bold;

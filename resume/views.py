@@ -25,6 +25,95 @@ ExperienceFormSet = formset_factory(ExperienceForm, extra=0)
 ProjectFormSet = formset_factory(ProjectForm, extra=0)
 TestFormSet = formset_factory(TestForm, extra=0)
 
+def get_init_values_for_resume_form():
+    """
+    This function return initial values for resume form as context dict.
+    """
+    user_form = UserInfoForm(
+        initial={
+            'full_name': 'firstname lastname',
+            'email': 'firstname.lastname@gmail.com',
+            'phone': '+1 123 456 7890',
+            'skills': 'Django, Flask, Fastapi',
+        }
+    )
+    education_formset = EducationFormSet(
+        initial=[
+            {
+                'school': 'Stanford University',
+                'degree': 'Master',
+                'field_of_study': 'Computer Science',
+                'start_date': '2024-01',
+                'end_date': '2024-12',
+            },
+            {
+                'school': 'Stanford University',
+                'degree': 'Bachelor',
+                'field_of_study': 'Computer Science',
+                'start_date': '2023-01',
+                'end_date': '2023-12',
+            }
+        ],
+        prefix='education'
+    )
+    experience_formset = ExperienceFormSet(
+        initial=[
+            {
+                'title': 'Role Name',
+                'start_date': '2024-01',
+                'end_date': '2024-10',
+                'current_role': False,
+                'company': 'Company Last',
+                'description': """Achieved X% growth for XYZ using A, B, and C skills.
+    Led XYZ which led to X% improvement in ABC.
+    Developed XYZ that did A, B and C using X, Y, and Z.""",
+            },
+            {
+                'title': 'Role Name',
+                'start_date': '2023-01',
+                'end_date': '2023-12',
+                'current_role': False,
+                'company': 'Company First',
+                'description': """Achieved X% growth for XYZ using A, B, and C skills.
+            Led XYZ which led to X% improvement in ABC.
+            Developed XYZ that did A, B and C using X, Y, and Z.""",
+            }
+        ],
+        prefix='experience'
+    )
+    project_formset = ProjectFormSet(
+        initial=[
+            {
+                'name': 'Hiring Search Tool',
+                'description': """Built a tool to search for Hiring Managers and Recruiters by using ReactJS, NodeJS, Firebase
+    and boolean queries. Over 25000 people have used it so far, with 5000+ queries being saved and shared, and search
+    results even better than LinkedIn.""",
+                'link': None,
+            },
+            {
+                'name': 'Short Project Title.',
+                'description': """Build a project that does something and had quantified success using A, B, and C. This
+    project’s description spans two lines and also won an award.""",
+                'link': None,
+            },
+            {
+                'name': 'Short Project Title.',
+                'description': """Build a project that does something and had quantified success using A, B, and C. This
+    project’s description spans two lines and also won an award.""",
+                'link': None,
+            }
+        ],
+        prefix='project'
+    )
+
+    context = {
+        'user_form': user_form,
+        'education_formset': education_formset,
+        'experience_formset': experience_formset,
+        'project_formset': project_formset,
+    }
+    return context
+
 
 class ResumeFormView(TemplateView):
     """
@@ -37,55 +126,12 @@ class ResumeFormView(TemplateView):
     template_name = "resume_form.html"
 
     def get(self, *args, **kwargs):
-        """education_formset = EducationFormSet(prefix='education')
+        education_formset = EducationFormSet(prefix='education')
         experience_formset = ExperienceFormSet(prefix='experience')
         project_formset = ProjectFormSet(prefix='project')
-        user_form = UserInfoForm()"""
+        user_form = UserInfoForm()
 
-        user_form = UserInfoForm(
-            initial={
-                'full_name': 'Köksal Kapucuoğlu',
-                'email': 'koksalkapucuoglu@gmail.com',
-                'phone': '+90 531 675 42 15',
-                'skills': 'Django, Flask, Fastapi',
-            }
-        )
-        education_formset = EducationFormSet(
-            initial=[
-                {
-                    'school': 'Marmara',
-                    'degree': 'Master',
-                    'field_of_study': 'Electronic',
-                    'start_date': '2023-01',
-                    'end_date': '2023-05',
-                }
-            ],
-            prefix='education'
-        )
-        experience_formset = ExperienceFormSet(
-            initial=[
-                {
-                    'title': 'Developer',
-                    'start_date': '2023-01',
-                    'end_date': '2023-05',
-                    'current_role': False,
-                    'company': 'GDA',
-                    'description': 'Implemented Backend Api',
-                }
-            ],
-            prefix='experience'
-        )
-        project_formset = ProjectFormSet(
-            initial=[
-                {
-                    'name': 'Project',
-                    'description': 'LLL implemented',
-                    'link': None,
-                }
-            ],
-            prefix='project'
-        )
-
+        # context = get_init_values_for_resume_form()
         context = {
             'user_form': user_form,
             'education_formset': education_formset,
