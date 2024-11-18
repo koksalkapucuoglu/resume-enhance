@@ -59,17 +59,17 @@ Run project
 
 Resume Forms
 
-![Resume Form](https://github.com/koksalkapucuoglu/resume-enhance/blob/master/screenshots/resume_part1.png?raw=true)
+![Resume Form](https://github.com/koksalkapucuoglu/resume-enhance/blob/main/screenshots/resume_part1.png?raw=true)
 
-![Resume Form](https://github.com/koksalkapucuoglu/resume-enhance/blob/master/screenshots/resume_part2.png?raw=true)
+![Resume Form](https://github.com/koksalkapucuoglu/resume-enhance/blob/main/screenshots/resume_part2.png?raw=true)
 
 
 Preview
 
-![Preview](https://github.com/koksalkapucuoglu/resume-enhance/blob/master/screenshots/preview.png?raw=true)
+![Preview](https://github.com/koksalkapucuoglu/resume-enhance/blob/main/screenshots/preview.png?raw=true)
 
 
 Pdf Export
 
-![Pdf Export](https://github.com/koksalkapucuoglu/resume-enhance/blob/master/screenshots/pdf_export.png?raw=true)
+![Pdf Export](https://github.com/koksalkapucuoglu/resume-enhance/blob/main/screenshots/pdf_export.png?raw=true)
 
