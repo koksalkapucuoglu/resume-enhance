@@ -57,13 +57,6 @@ Run project
 
 ## Project Screenshots
 
-Resume Forms
-
-![Resume Form](https://github.com/koksalkapucuoglu/resume-enhance/blob/main/screenshots/resume_part1.png?raw=true)
-
-![Resume Form](https://github.com/koksalkapucuoglu/resume-enhance/blob/main/screenshots/resume_part2.png?raw=true)
-
-
 Preview
 
 ![Preview](https://github.com/koksalkapucuoglu/resume-enhance/blob/main/screenshots/preview.png?raw=true)
