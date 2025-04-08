@@ -1,5 +1,6 @@
 {% load crispy_forms_tags %}
 <script src="https://unpkg.com/htmx.org@2.0.3"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
 
 <div class="page-container">
     <form method="post">
@@ -94,9 +95,9 @@
 
 <!-- Preview pop-up -->
 <div class="popup" id="popup">
-        <div class="popup-content">
-            <iframe id="htmlPreview" srcdoc="" frameborder="0"></iframe>
-        </div>
+    <div class="popup-content">
+        <iframe id="htmlPreview" srcdoc="" frameborder="0"></iframe>
+    </div>
 </div>
 
 <!-- Education form template -->
@@ -155,80 +156,189 @@
 </template>
 
 <style>
-    .page-container {
-        max-width: 800px;
-        margin: 0 auto;
-        padding: 0 20px;
-    }
-    .card {
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        padding: 16px;
-        margin-bottom: 16px;
-        background-color: #f9f9f9;
-        position: relative;
-    }
-    .card-buttons {
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        display: flex;
-        gap: 10px;
-    }
-    .remove-education{
-        position: absolute;
-        top: 10px;
-        right: 10px;
-    }
-    .my-indicator {
-        display: none;
-        border: 2px solid #f3f3f3;
-        border-top: 2px solid #3498db;
-        border-radius: 50%;
-        width: 20px;
-        height: 20px;
-        animation: spin .5s linear infinite;
-    }
-    .my-indicator{
-        display:none;
-    }
-    .htmx-request .my-indicator{
-        display:inline;
-    }
-    .htmx-request.my-indicator{
-        display:inline;
+    /* General page styling */
+    body {
+        font-family: 'Arial', sans-serif;
+        background-color: #f4f4f9;
+        color: #333;
+        line-height: 1.6;
     }
 
-    @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
+    .page-container {
+        max-width: 900px;
+        margin: 20px auto;
+        padding: 20px;
+        background: #fff;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
     }
+
+    h2 {
+        font-size: 1.8rem;
+        color: #444;
+        margin-bottom: 15px;
+        border-bottom: 2px solid #ddd;
+        padding-bottom: 5px;
+    }
+
+    .card {
+        border: 1px solid #ddd;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 20px;
+        background-color: #f9f9f9;
+        transition: box-shadow 0.3s ease, transform 0.2s ease;
+    }
+
+    .card:hover {
+        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        transform: translateY(-5px);
+    }
+
+    .btn {
+        display: inline-block;
+        padding: 10px 20px;
+        font-size: 1rem;
+        border-radius: 5px;
+        border: none;
+        cursor: pointer;
+        transition: background-color 0.3s ease, transform 0.2s ease;
+    }
+
+    .btn-primary {
+        background-color: #007bff;
+        color: #fff;
+    }
+
+    .btn-primary:hover {
+        background-color: #0056b3;
+        transform: scale(1.05);
+    }
+
+    .btn-danger {
+        background-color: #dc3545;
+        color: #fff;
+    }
+
+    .btn-danger:hover {
+        background-color: #a71d2a;
+        transform: scale(1.05);
+    }
+
+    .btn-success {
+        background-color: #28a745;
+        color: #fff;
+    }
+
+    .btn-success:hover {
+        background-color: #1e7e34;
+        transform: scale(1.05);
+    }
+
+    .card-buttons {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+    }
+
     .popup-content {
-      width: 40%;
-      height: 90%;
-      margin: 0 auto;
-      border: 5px solid #ccc;
+        width: 50%;
+        height: 90%; 
+        margin: 0 auto;
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        animation: fadeIn 0.3s ease;
     }
+
     .popup {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background-color: rgba(0, 0, 0, 0.7);
-      justify-content: center;
-      align-items: center;
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.7);
+        justify-content: center;
+        align-items: center;
     }
+
     .popup.show {
-      display: flex;
-      width: 100%;
-      height: 100%;
+        display: flex;
     }
+
     iframe {
-      width: 100%;
-      height: 100%;
-      border: none;
+        width: 100%;
+        height: 120%;
+        border: none;
+        font-size: 1.2rem;
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: scale(0.9);
+        }
+        to {
+            opacity: 1;
+            transform: scale(1);
+        }
+    }
+
+    /* Form section styling */
+    section {
+        margin-bottom: 30px;
+    }
+
+    .userinfo-section, .education-section, .experience-section, .project-section {
+        padding: 15px;
+        border: 1px solid #ddd;
+        border-radius: 10px;
+        background: #fdfdfd;
+    }
+
+    .userinfo-section h2, .education-section h2, .experience-section h2, .project-section h2 {
+        color: #555;
+    }
+
+    /* Input field styling */
+    input, select, textarea {
+        width: 100%;
+        padding: 10px;
+        margin: 10px 0;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+        font-size: 1rem;
+    }
+
+    input:focus, select:focus, textarea:focus {
+        outline: none;
+        border-color: #007bff;
+        box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+    }
+
+    /* Smooth transitions for buttons */
+    .btn {
+        transition: all 0.3s ease;
+    }
+
+    .btn:hover {
+        transform: scale(1.05);
+    }
+
+    [id^="div_id_experience-"][id$="-current_role"] {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    [id^="div_id_experience-"][id$="-current_role"] .form-check-input {
+        order: 2; 
+        width: 1rem;
+    }
+
+    [id^="div_id_experience-"][id$="-current_role"] .form-check-label {
+        order: 1; 
     }
 </style>
 
@@ -451,10 +561,10 @@
     });
 
     function openPopup() {
-      const popup = document.getElementById('popup');
-      const htmlPreview = document.getElementById('htmlPreview');
+        const popup = document.getElementById('popup');
+        const htmlPreview = document.getElementById('htmlPreview');
 
-      // Form elemanını seç ve FormData oluştur
+        // Form elemanını seç ve FormData oluştur
         const form = document.querySelector('form');
         const formData = new FormData(form);
 
@@ -482,9 +592,9 @@
     }
 
     window.onclick = function(event) {
-      const popup = document.getElementById('popup');
-      if (event.target == popup) {
-        popup.classList.remove('show');
-      }
+        const popup = document.getElementById('popup');
+        if (event.target == popup) {
+            popup.classList.remove('show');
+        }
     }
 </script>

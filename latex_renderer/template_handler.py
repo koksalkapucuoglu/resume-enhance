@@ -1,5 +1,6 @@
 import pathlib
 from typing import Dict
+from datetime import datetime
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
@@ -26,6 +27,7 @@ class JinjaLatexHandler:
         )
 
         self.env.filters['tex_escape'] = self.tex_escape
+        self.env.filters['date_format'] = self.date_format
 
     @staticmethod
     def tex_escape(text: str) -> str:
@@ -47,6 +49,20 @@ class JinjaLatexHandler:
             '>': r'\textgreater{}',
         }
         return ''.join(conv.get(c, c) for c in str(text))
+
+    @staticmethod
+    def date_format(date_string, format_str="%B %Y"):
+        """
+        Format a date string from "YYYY-MM-DD" to desired format.
+        Default format is "Month Year" (e.g., April 2025)
+        """
+        if not date_string:
+            return ""
+        try:
+            date_obj = datetime.strptime(str(date_string), "%Y-%m-%d")
+            return date_obj.strftime(format_str)
+        except ValueError:
+            return date_string
 
     def render_tex_template(self, template_name: str, context: Dict,
                       output_path: pathlib.Path) -> pathlib.Path:

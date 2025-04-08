@@ -1,4 +1,4 @@
-\documentclass{resume_faangpath_simple_template} % Use the custom resume.cls style
+\documentclass{faangpath_simple_template_resume} % Use the custom resume.cls style
 \usepackage{fontawesome5}
 \usepackage[left=0.4 in,top=0.4in,right=0.4 in,bottom=0.4in]{geometry} % Document margins
 \newcommand{\tab}[1]{\hspace{.2667\textwidth}\rlap{#1}}
@@ -35,7 +35,7 @@
 \begin{rSection}{Education}
 
 <% for edu in education_data %>
-{\bf << edu.degree|tex_escape >> of << edu.field_of_study|tex_escape >>}, << edu.school|tex_escape >> \hfill {<< edu.start_date >> - << edu.end_date >>}\\
+{\bf << edu.degree|tex_escape >> of << edu.field_of_study|tex_escape >>}, << edu.school|tex_escape >> \hfill {<< edu.start_date|date_format("%b %Y") >> - << edu.end_date|date_format("%b %Y") >>}\\
 <% endfor %>
 
 %Minor in Linguistics \smallskip \\
@@ -61,7 +61,7 @@
 \begin{rSection}{EXPERIENCE}
 
 <% for exp in experience_data %>
-\textbf{<<exp.title>>} \hfill <<exp.start_date>> - <<exp.end_date>>\\
+\textbf{<<exp.title>>} \hfill <<exp.start_date|date_format("%b %Y")>> - <<exp.end_date|date_format("%b %Y")>>\\
 <<exp.company>>
  \begin{itemize}
      <% for desc in exp.description %>

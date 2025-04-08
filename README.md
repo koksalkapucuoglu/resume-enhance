@@ -45,9 +45,9 @@ Build
 Setup .env
 
 ```bash
-  mkdir .env
+  mv .env_copy .env
 ```
-* add **OPENAI_API_KEY = 'api key'** to .env file
+* fill .env file
 
 Run project
 
