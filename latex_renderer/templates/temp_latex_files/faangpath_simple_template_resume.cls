@@ -18,7 +18,7 @@
 %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\ProvidesClass{resume_faangpath_simple_template}[2010/07/10 v0.9 Resume class]
+\ProvidesClass{faangpath_simple_template_resume}[2010/07/10 v0.9 Resume class]
 
 \LoadClass[25pt,letterpaper]{article} % Font size and paper type
 

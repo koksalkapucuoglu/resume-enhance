@@ -1,7 +1,7 @@
 import os
 import re
+import secrets
 from datetime import datetime
-
 
 from django.conf import settings
 from django.contrib import messages
@@ -120,8 +120,7 @@ class ResumeFormView(TemplateView):
     Handle the display and processing of a resume form, including sections
     for user information, education, experience, and projects.
 
-    Upon valid form submission,
-    generate a LaTeX-based PDF resume and return it as a downloadable file.
+    If valid form submission,generate a LaTeX-based PDF resume and return it as a downloadable file.
     """
     template_name = "resume_form.html"
 
@@ -131,13 +130,13 @@ class ResumeFormView(TemplateView):
         project_formset = ProjectFormSet(prefix='project')
         user_form = UserInfoForm()
 
-        # context = get_init_values_for_resume_form()
-        context = {
+        context = get_init_values_for_resume_form()
+        """context = {
             'user_form': user_form,
             'education_formset': education_formset,
             'experience_formset': experience_formset,
             'project_formset': project_formset,
-        }
+        }"""
         return self.render_to_response(context)
 
     @staticmethod
@@ -176,12 +175,9 @@ class ResumeFormView(TemplateView):
             or renders the form again in case of validation failure.
         """
         user_form = UserInfoForm(self.request.POST)
-        education_formset = EducationFormSet(
-            self.request.POST, prefix='education')
-        experience_formset = ExperienceFormSet(
-            self.request.POST, prefix='experience')
-        project_formset = ProjectFormSet(
-            self.request.POST, prefix='project')
+        education_formset = EducationFormSet(self.request.POST, prefix='education')
+        experience_formset = ExperienceFormSet(self.request.POST, prefix='experience')
+        project_formset = ProjectFormSet(self.request.POST, prefix='project')
 
         if (
                 user_form.is_valid()
@@ -195,9 +191,6 @@ class ResumeFormView(TemplateView):
                 for form in education_formset if form.cleaned_data
             ]
 
-            # TODO: TEST: 2 form datasından biri valid, diğeri valid olmazsa ne yapıyor
-            # TODO: Date formatları tex'de Oct 2019 yerine 2019-10-01 olarak gözüküyor
-
             experience_data = self._split_experience_description(experience_formset)
             project_data = [
                 form.cleaned_data
@@ -209,7 +202,7 @@ class ResumeFormView(TemplateView):
             )
             output_tex = (
                     settings.LATEX_SETTINGS['TEMP_DIR']
-                  / f"resume_{datetime.now().strftime('%Y%m%d_%H%M%S')}.tex"
+                  / f"resume_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{secrets.token_hex(4)}.tex"
             )
             tex_context = {
                 'user_data': user_data,
@@ -218,6 +211,7 @@ class ResumeFormView(TemplateView):
                 'project_data': project_data,
                 'generation_date': datetime.now().strftime('%Y-%m-%d'),
             }
+
             try:
                 tex_file = latex_handler.render_tex_template(
                     template_name=base_tex_template,
@@ -235,7 +229,6 @@ class ResumeFormView(TemplateView):
 
                 os.remove(pdf_file_path)
                 return response
-
             except Exception as e:
                 messages.error(self.request, f"Failed to render PDF: {str(e)}")
                 return redirect('resume:resume_form')
@@ -512,3 +505,7 @@ def preview_resume_form(request):
             ).content.decode('utf-8')
             return JsonResponse({'html': rendered_html})
     return JsonResponse({'error': 'Invalid request'}, status=400)
+
+
+def index(request):
+    return render(request, 'resume/index.html')  # Render the index template

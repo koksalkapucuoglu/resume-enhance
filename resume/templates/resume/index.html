@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resume Index</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f4f4f9;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+        .card {
+            width: 200px;
+            height: 150px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 6px 10px rgba(0, 0, 0, 0.15);
+        }
+        .card.manual {
+            background-color: #e0f7fa;
+        }
+        .card.upload {
+            background-color: #ffe0b2;
+        }
+        .card.linkedin {
+            background-color: #d1c4e9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card manual" onclick="window.location.href='/resume/form/'">Manual</div>
+        <div class="card upload">Upload CV</div>
+        <div class="card linkedin">Use LinkedIn</div>
+    </div>
+</body>
+</html>
