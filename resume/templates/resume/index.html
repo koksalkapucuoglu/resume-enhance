@@ -29,6 +29,8 @@
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             cursor: pointer;
             transition: transform 0.2s, box-shadow 0.2s;
+            position: relative;
+            overflow: hidden;
         }
         .card:hover {
             transform: translateY(-5px);
@@ -43,13 +45,63 @@
         .card.linkedin {
             background-color: #d1c4e9;
         }
+        .card h2 {
+            font-size: 1.2rem;
+            font-weight: normal;
+            margin: 0;
+        }
+        .card .upload-content {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 90%;
+            height: auto;
+            background-color: rgba(255, 255, 255, 0.9);
+            z-index: 1;
+            text-align: center;
+        }
+        .card.upload:hover .upload-content {
+            display: flex;
+        }
+        .upload-content input[type="file"] {
+            margin-bottom: 10px;
+            width: 100%;
+        }
+        .upload-content button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .upload-content button:hover {
+            background-color: #0056b3;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="card manual" onclick="window.location.href='/resume/form/'">Manual</div>
-        <div class="card upload">Upload CV</div>
+        <div class="card upload">
+            <h2>Upload CV</h2>
+            <div class="upload-content">
+                <form id="upload-cv-form" action="{% url 'resume:upload_cv' %}" method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <input type="file" name="cv_file" accept="application/pdf" required>
+                    <button type="submit">Upload</button>
+                </form>
+                <p id="uploaded-file-name" style="margin-top: 10px; color: green; display: none;">File uploaded: <span id="file-name"></span></p>
+            </div>
+        </div>
         <div class="card linkedin">Use LinkedIn</div>
     </div>
+    <script>
+    </script>
 </body>
 </html>
