@@ -1,5 +1,6 @@
 import os
 import re
+import json
 import secrets
 from datetime import datetime
 
@@ -15,10 +16,13 @@ from resume.forms import (
     UserInfoForm, EducationForm, ExperienceForm, ProjectForm, TestForm
 )
 from resume.openai_engine import (
-    enhance_resume_experience, enhance_project_description
+    enhance_resume_experience, enhance_project_description, extract_resume_data
 )
 from latex_renderer import  TexToPdfConverter, latex_handler
 
+from django.urls import reverse
+from django.views.decorators.csrf import csrf_exempt
+from PyPDF2 import PdfReader
 
 EducationFormSet = formset_factory(EducationForm, extra=0)
 ExperienceFormSet = formset_factory(ExperienceForm, extra=0)
@@ -115,6 +119,75 @@ def get_init_values_for_resume_form():
     return context
 
 
+def populate_formsets_from_extracted_json(extracted_json):
+    """
+    Populates user_form, education_formset, experience_formset, and project_formset
+    using the extracted JSON data.
+
+    Args:
+        extracted_json (dict): The JSON data extracted from the resume.
+
+    Returns:
+        dict: A dictionary containing the populated forms and formsets.
+    """
+    # User Info Form
+    user_form = UserInfoForm(
+        initial={
+            'full_name': extracted_json.get('user_info', {}).get('full_name', ''),
+            'email': extracted_json.get('user_info', {}).get('email', ''),
+            'phone': extracted_json.get('user_info', {}).get('phone', ''),
+            'github': extracted_json.get('user_info', {}).get('github', ''),
+            'linkedin': extracted_json.get('user_info', {}).get('linkedin', ''),
+            'skills': ', '.join(extracted_json.get('user_info', {}).get('skills', [])),
+        }
+    )
+
+    # Education Formset
+    education_initial = [
+        {
+            'school': edu.get('school', ''),
+            'degree': edu.get('degree', ''),
+            'field_of_study': edu.get('field_of_study', ''),
+            'start_date': edu.get('start_date', ''),
+            'end_date': edu.get('end_date', ''),
+        }
+        for edu in extracted_json.get('education', [])
+    ]
+    education_formset = EducationFormSet(initial=education_initial, prefix='education')
+
+    # Experience Formset
+    experience_initial = [
+        {
+            'title': exp.get('title', ''),
+            'company': exp.get('company', ''),
+            'start_date': exp.get('start_date', ''),
+            'end_date': exp.get('end_date', ''),
+            'current_role': exp.get('current_role', False),
+            'description': exp.get('description', ''),
+        }
+        for exp in extracted_json.get('experience', [])
+    ]
+    experience_formset = ExperienceFormSet(initial=experience_initial, prefix='experience')
+
+    # Project Formset
+    project_initial = [
+        {
+            'name': proj.get('name', ''),
+            'description': proj.get('description', ''),
+            'link': proj.get('link', ''),
+        }
+        for proj in extracted_json.get('projects_and_publications', [])
+    ]
+    project_formset = ProjectFormSet(initial=project_initial, prefix='project')
+
+    return {
+        'user_form': user_form,
+        'education_formset': education_formset,
+        'experience_formset': experience_formset,
+        'project_formset': project_formset,
+    }
+
+
 class ResumeFormView(TemplateView):
     """
     Handle the display and processing of a resume form, including sections
@@ -124,19 +197,23 @@ class ResumeFormView(TemplateView):
     """
     template_name = "resume_form.html"
 
-    def get(self, *args, **kwargs):
+    def get(self, request, *args, **kwargs):
         education_formset = EducationFormSet(prefix='education')
         experience_formset = ExperienceFormSet(prefix='experience')
         project_formset = ProjectFormSet(prefix='project')
         user_form = UserInfoForm()
 
-        context = get_init_values_for_resume_form()
-        """context = {
+        # context = get_init_values_for_resume_form()
+        context = {
             'user_form': user_form,
             'education_formset': education_formset,
             'experience_formset': experience_formset,
             'project_formset': project_formset,
-        }"""
+        }
+        extracted_json = request.session.pop('extracted_json', None)
+        if extracted_json:
+            context = populate_formsets_from_extracted_json(extracted_json)
+
         return self.render_to_response(context)
 
     @staticmethod
@@ -509,3 +586,40 @@ def preview_resume_form(request):
 
 def index(request):
     return render(request, 'resume/index.html')  # Render the index template
+
+
+@csrf_exempt
+def upload_cv(request):
+    if request.method == "POST":
+        cv_file = request.FILES.get('cv_file')
+        print("[INFO]: CV file uploaded:", cv_file.name)
+
+        # Ensure the uploaded file is a PDF
+        if not cv_file.name.endswith(".pdf"):
+            return JsonResponse(
+            {"error": "Only PDF files are allowed."}, status=400
+        )
+
+        # Extract data from the PDF
+        reader = PdfReader(cv_file)
+
+        extracted_text = " ".join(page.extract_text() for page in reader.pages)
+        import time
+        start_time = time.time()
+        extracted_json_string = extract_resume_data(extracted_text)
+        end_time = time.time()
+        print(f"OpenAI API response time: {end_time - start_time} seconds")
+
+        if extracted_json_string.startswith("```json"):
+            extracted_json_string = extracted_json_string[7:-3].strip()
+
+        try:
+            extracted_json = json.loads(extracted_json_string)
+            request.session['extracted_json'] = extracted_json
+        except json.JSONDecodeError as e:
+            print("[ERROR]: Failed to decode JSON:", str(e))
+            return JsonResponse({"error": "Failed to parse extracted JSON"}, status=500)
+        
+        return redirect("resume:resume_form")
+
+    return redirect("resume:index")

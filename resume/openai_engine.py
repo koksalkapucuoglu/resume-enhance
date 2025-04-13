@@ -22,8 +22,9 @@ def send_openai_message(user_message:str, meta_prompt:str = None):
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            #model="gpt-3.5-turbo",
+            # model="gpt-4o-mini",
+            model="gpt-3.5-turbo",
+            # model="gpt-4o",
             messages=[
                 {"role": "system", "content": meta_prompt},
                 {"role": "user", "content": user_message}
@@ -86,6 +87,98 @@ def enhance_project_description(user_message:str):
     Ensure each response is ready for resume use, focused on key details. 
 Responses should maintain clarity and impact without being lengthy.
     """.strip()
+
+    return send_openai_message(
+        user_message=user_message, meta_prompt=meta_prompt
+    )
+
+def extract_resume_data(user_message: str):
+    """
+    Extracts structured resume data from a given text using OpenAI GPT.
+
+    Parameters:
+        user_message (str): The raw text extracted from a resume.
+
+    Returns:
+        str: A JSON string containing structured resume data.
+    """
+
+    meta_prompt = """
+    Act as a resume parser. I will provide you with raw text extracted from a resume. 
+    Your task is to extract and structure the data into the following JSON format:
+
+    {
+        "user_info": {
+            "full_name": "extracted_full_name",
+            "email": "extracted_email",
+            "phone": "extracted_phone",
+            "address": "extracted_address",
+            "linkedin": "extracted_linkedin_url",
+            "github": "extracted_github_url",
+            "skills": ["extracted_skill1", "extracted_skill2"]
+        },
+        "experience": [
+            {
+                "title": "extracted_job_title1",
+                "company": "extracted_company1",
+                "start_date": "extracted_start_date1",
+                "end_date": "extracted_end_date1",
+                "description": "extracted_job_description1",
+                "current_role": "True/False if currently working in this role" but Boolean
+            },
+            {
+                "title": "extracted_job_title2",
+                "company": "extracted_company2",
+                "start_date": "extracted_start_date2",
+                "end_date": "extracted_end_date2",
+                "current_role": "True/False if currently working in this role" but Boolean
+            }
+        ],
+        "education": [
+            {
+                "degree": "extracted_degree1",
+                "school": "extracted_school1",
+                "field_of_study": "extracted_field_of_study1",
+                "start_date": "extracted_start_date1",
+                "end_date": "extracted_end_date1"
+            },
+            {
+                "degree": "extracted_degree2",
+                "school": "extracted_school2",
+                "start_date": "extracted_start_date2",
+                "end_date": "extracted_end_date2"
+            }
+        ],
+        "projects_and_publications": [
+            {
+                "name": "extracted_project_or_publication_title1",
+                "description": "extracted_project_or_publication_description1",
+                "link": "extracted_link"
+            },
+            {
+                "name": "extracted_project_or_publication_title2",
+                "description": "extracted_project_or_publication_description2",
+                "link": "extracted_link2"
+            }
+        ]
+    }
+
+    For the "experience" section:
+    - If a job contains multiple tasks, projects, or responsibilities grouped under a single job title, concatenate all tasks, projects, or responsibilities into a single string and place it in the "description" field.
+    - Ensure that the concatenated string maintains readability, with each task or project separated by a newline or bullet point.
+    - If the start and end dates are not explicitly mentioned for a task or project, inherit them from the main job entry.
+
+    degree should be Bachelor, Master, or PhD.
+    field of study should be Computer Science, Engineering, etc.
+    The start and end dates should be in the format YYYY-MM
+
+    For project section, if link is not valid url, leave it empty.
+
+    For linkendin and github, if not valid url, leave it empty.
+    
+    Ensure the JSON is well-structured and includes all relevant information. 
+    If a section is missing in the input text, leave it empty in the JSON.
+    """
 
     return send_openai_message(
         user_message=user_message, meta_prompt=meta_prompt
