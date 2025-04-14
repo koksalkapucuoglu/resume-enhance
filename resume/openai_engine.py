@@ -23,8 +23,8 @@ def send_openai_message(user_message:str, meta_prompt:str = None):
     try:
         response = client.chat.completions.create(
             # model="gpt-4o-mini",
-            model="gpt-3.5-turbo",
-            # model="gpt-4o",
+            # model="gpt-3.5-turbo",
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": meta_prompt},
                 {"role": "user", "content": user_message}
@@ -168,16 +168,82 @@ def extract_resume_data(user_message: str):
     - Ensure that the concatenated string maintains readability, with each task or project separated by a newline or bullet point.
     - If the start and end dates are not explicitly mentioned for a task or project, inherit them from the main job entry.
 
-    degree should be Bachelor, Master, or PhD.
-    field of study should be Computer Science, Engineering, etc.
+    For "education" section:
+    - degree should be Bachelor, Master, or PhD.
+    - field of study should be Computer Science, Engineering, etc.
+    
     The start and end dates should be in the format YYYY-MM
 
-    For project section, if link is not valid url, leave it empty.
+    For "projects_and_publications" section:
+    - if link is not valid url, leave it empty.
 
-    For linkendin and github, if not valid url, leave it empty.
+    For "user_info" section:
+    - if linkendin and github not valid url, leave it empty.
     
     Ensure the JSON is well-structured and includes all relevant information. 
     If a section is missing in the input text, leave it empty in the JSON.
+    """
+
+    return send_openai_message(
+        user_message=user_message, meta_prompt=meta_prompt
+    )
+
+def extract_linkedin_resume_data(user_message: str):
+    """
+    Parses LinkedIn profile data from a PDF file using OpenAI's API.
+
+    Args:
+        file: The uploaded LinkedIn PDF file.
+
+    Returns:
+        str: Parsed data as a JSON string.
+    """
+    meta_prompt = """
+    Act as a LinkedIn profile parser. I will provide you with raw text extracted from a LinkedIn profile.  
+    Your task is to extract and structure the data into the following JSON format:
+
+    {
+    "user_info": {
+        "full_name": "extracted_full_name",
+        "email": "extracted_email",
+        "phone": "extracted_phone",
+        "address": "extracted_address",
+        "linkedin": "extracted_linkedin_url",
+        "github": "extracted_github_url",
+        "skills": ["extracted_skill1", "extracted_skill2"]
+    },
+    "experience": [
+        {
+        "title": "job_title",
+        "company": "company_name",
+        "start_date": "YYYY-MM",
+        "end_date": "YYYY-MM or null if current",
+        "location": "city, country (if available)",
+        "description": "full_description",
+        "current_role": true/false
+        }
+    ],
+    "education": [
+        {
+        "school": "university_name",
+        "degree": "Bachelor / Master / PhD",
+        "field_of_study": "field_name",
+        "start_date": "YYYY-MM",
+        "end_date": "YYYY-MM"
+        }
+    ]
+    }
+
+    Guidelines:
+    - Dates must be in YYYY-MM format if months are available; otherwise just YYYY.
+    - Extract skills and certifications from any relevant sections or lists.
+    - For `current_role`, mark as `true` if the person is still working in that position.
+    - If any field is missing in the input, set it to null or leave it empty.
+    - Remove page numbers or artifacts (e.g., “Page 1 of 3”) from descriptions.
+    - In descriptions, preserve newlines if present.
+    - If there is only YYYY, use 01 as MM and result should be YYYY-01.
+
+    Ensure the JSON output is well-formed, accurate, and complete.
     """
 
     return send_openai_message(

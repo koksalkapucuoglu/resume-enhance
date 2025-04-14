@@ -11,23 +11,23 @@ from django.shortcuts import redirect, render
 from django.views.generic import TemplateView
 from django.views.decorators.http import require_http_methods
 from django.http import FileResponse, JsonResponse, HttpResponse
+from django.views.decorators.csrf import csrf_exempt
+
+from PyPDF2 import PdfReader
 
 from resume.forms import (
-    UserInfoForm, EducationForm, ExperienceForm, ProjectForm, TestForm
+    UserInfoForm, EducationForm, ExperienceForm, ProjectForm
 )
 from resume.openai_engine import (
-    enhance_resume_experience, enhance_project_description, extract_resume_data
+    enhance_resume_experience, enhance_project_description, extract_resume_data, extract_linkedin_resume_data
 )
 from latex_renderer import  TexToPdfConverter, latex_handler
 
-from django.urls import reverse
-from django.views.decorators.csrf import csrf_exempt
-from PyPDF2 import PdfReader
 
 EducationFormSet = formset_factory(EducationForm, extra=0)
 ExperienceFormSet = formset_factory(ExperienceForm, extra=0)
 ProjectFormSet = formset_factory(ProjectForm, extra=0)
-TestFormSet = formset_factory(TestForm, extra=0)
+
 
 def get_init_values_for_resume_form():
     """
@@ -319,85 +319,6 @@ class ResumeFormView(TemplateView):
         return self.render_to_response(context)
 
 
-class TestView(TemplateView):
-    """
-    This view is used for test process of ResumeFormView
-    """
-    template_name = "test_form.html"
-
-    def get(self, *args, **kwargs):
-        test_formset = TestFormSet(
-            initial=[
-                {
-                    'title': 'Test',
-                    'start_date': '2023-01',
-                    'end_date': '2023-05',
-                    'description': 'Implemented Backend Api',
-                }
-            ],
-            prefix='test'
-        )
-        context = {'test_formset': test_formset}
-        return self.render_to_response(context)
-
-    @staticmethod
-    def _split_test_description(formset):
-        test_data = list()
-        for form in formset:
-            if form.is_valid():
-                cleaned_data = form.cleaned_data
-                cleaned_data['description'] = list(
-                    filter(None, map(
-                        str.strip,
-                        cleaned_data.get('description', '').split('\n')
-                    )
-                           )
-                )
-                test_data.append(cleaned_data)
-        return test_data
-
-
-    def post(self, *args, **kwargs):
-        test_formset = TestFormSet(
-            self.request.POST, prefix='test')
-        base_tex_template = 'test.tex'
-
-        if test_formset.is_valid():
-            test_data = self._split_test_description(test_formset)
-
-            output_tex = settings.LATEX_SETTINGS['TEMP_DIR'] / f"test_{datetime.now().strftime('%Y%m%d_%H%M%S')}.tex"
-
-            context = {
-                'test_data': test_data,
-                'generation_date': datetime.now().strftime('%Y-%m-%d')
-            }
-
-            try:
-                tex_file = latex_handler.render_tex_template(
-                    base_tex_template, context, output_tex
-                )
-
-                pdf_file_path = TexToPdfConverter(tex_file).render_pdf()
-
-                response = FileResponse(
-                    open(pdf_file_path, 'rb'),
-                    content_type='application/pdf'
-                )
-                response[ 'Content-Disposition'] = 'inline; filename="test.pdf"'
-
-                os.remove(pdf_file_path)
-                return response
-
-            except Exception as e:
-                messages.error(self.request, f"Failed to render PDF: {str(e)}")
-                return redirect('resume:test_form')
-
-        context = {
-            'test_formset': test_formset
-        }
-        return self.render_to_response(context)
-
-
 def get_field_value(request, prefix, field):
     """
     Extracts the index and value of a specific field from a POST request based on a
@@ -470,35 +391,6 @@ def enhance_project(request):
         field='description',
         enhance_function=enhance_project_description
     )
-
-
-@require_http_methods(["POST"])
-def enhance_test_form(request):
-    return enhance_field(
-        request,
-        prefix='test',
-        field='description',
-        enhance_function=enhance_resume_experience
-    )
-
-
-@require_http_methods(["POST"])
-def preview_test_form(request):
-    if request.method == "POST":
-        test_formset = TestFormSet(request.POST, prefix='test')
-        if test_formset.is_valid():
-            test_data = [
-                form.cleaned_data
-                for form in test_formset if form.cleaned_data
-            ]
-
-            rendered_html = render(
-                request,
-                template_name='test_preview.html',
-                context={'test_formset': test_data}
-            ).content.decode('utf-8')
-            return JsonResponse({'html': rendered_html})
-    return JsonResponse({'error': 'Invalid request'}, status=400)
 
 
 @require_http_methods(["POST"])
@@ -585,7 +477,7 @@ def preview_resume_form(request):
 
 
 def index(request):
-    return render(request, 'resume/index.html')  # Render the index template
+    return render(request, 'index.html')
 
 
 @csrf_exempt
@@ -607,6 +499,42 @@ def upload_cv(request):
         import time
         start_time = time.time()
         extracted_json_string = extract_resume_data(extracted_text)
+        end_time = time.time()
+        print(f"OpenAI API response time: {end_time - start_time} seconds")
+
+        if extracted_json_string.startswith("```json"):
+            extracted_json_string = extracted_json_string[7:-3].strip()
+
+        try:
+            extracted_json = json.loads(extracted_json_string)
+            request.session['extracted_json'] = extracted_json
+        except json.JSONDecodeError as e:
+            print("[ERROR]: Failed to decode JSON:", str(e))
+            return JsonResponse({"error": "Failed to parse extracted JSON"}, status=500)
+        
+        return redirect("resume:resume_form")
+
+    return redirect("resume:index")
+
+
+def upload_linkedin(request):
+    if request.method == 'POST' and request.FILES.get('linkedin_file'):
+        linkedin_file = request.FILES['linkedin_file']
+        print("[INFO]: CV file uploaded:", linkedin_file.name)
+
+        # Ensure the uploaded file is a PDF
+        if not linkedin_file.name.endswith(".pdf"):
+            return JsonResponse(
+            {"error": "Only PDF files are allowed."}, status=400
+        )
+
+        # Extract data from the PDF
+        reader = PdfReader(linkedin_file)
+
+        extracted_text = " ".join(page.extract_text() for page in reader.pages)
+        import time
+        start_time = time.time()
+        extracted_json_string = extract_linkedin_resume_data(extracted_text)
         end_time = time.time()
         print(f"OpenAI API response time: {end_time - start_time} seconds")
 

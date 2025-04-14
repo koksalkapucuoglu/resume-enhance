@@ -65,7 +65,8 @@
             z-index: 1;
             text-align: center;
         }
-        .card.upload:hover .upload-content {
+        .card.upload:hover .upload-content,
+        .card.linkedin:hover .upload-content {
             display: flex;
         }
         .upload-content input[type="file"] {
@@ -83,6 +84,58 @@
         .upload-content button:hover {
             background-color: #0056b3;
         }
+        .tooltip {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: #333;
+            color: #fff;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            z-index: 2;
+        }
+        .tooltip:hover {
+            background-color: #555;
+        }
+        .popup {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 300px;
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            z-index: 3;
+        }
+        .popup h3 {
+            margin-top: 0;
+        }
+        .popup button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .popup button:hover {
+            background-color: #0056b3;
+        }
+        .popup-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 2;
+        }
     </style>
 </head>
 <body>
@@ -99,9 +152,36 @@
                 <p id="uploaded-file-name" style="margin-top: 10px; color: green; display: none;">File uploaded: <span id="file-name"></span></p>
             </div>
         </div>
-        <div class="card linkedin">Use LinkedIn</div>
+        <div class="card linkedin">
+            <h2>Use LinkedIn</h2>
+            <div class="tooltip" onclick="showPopup()">?</div>
+            <div class="upload-content">
+                <form id="upload-linkedin-form" action="{% url 'resume:upload_linkedin' %}" method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <input type="file" name="linkedin_file" accept="application/pdf" required>
+                    <button type="submit">Upload</button>
+                </form>
+                <p id="linkedin-uploaded-file-name" style="margin-top: 10px; color: green; display: none;">File uploaded: <span id="linkedin-file-name"></span></p>
+            </div>
+        </div>
+    </div>
+    <div class="popup-overlay" id="popup-overlay" onclick="hidePopup()"></div>
+    <div class="popup" id="popup">
+        <h3>How to Download LinkedIn Profile</h3>
+        <p>1. Go to your LinkedIn profile.</p>
+        <p>2. Click on the "More" button and select "Save to PDF."</p>
+        <p>3. Upload the downloaded PDF here.</p>
+        <button onclick="hidePopup()">Close</button>
     </div>
     <script>
+        function showPopup() {
+            document.getElementById('popup').style.display = 'block';
+            document.getElementById('popup-overlay').style.display = 'block';
+        }
+        function hidePopup() {
+            document.getElementById('popup').style.display = 'none';
+            document.getElementById('popup-overlay').style.display = 'none';
+        }
     </script>
 </body>
 </html>

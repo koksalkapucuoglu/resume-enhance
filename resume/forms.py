@@ -87,17 +87,3 @@ class ProjectForm(forms.Form):
         label="Description"
     )
     link = forms.URLField(label='Link', required=False)
-
-
-class TestForm(forms.Form):
-    title = forms.CharField(max_length=255, label="Title")
-    start_date = MonthYearField(
-        widget=MonthYearDateInput(format='%Y-%m'),
-        label='Start Date'
-    )
-    end_date = MonthYearField(
-        widget=MonthYearDateInput(format='%Y-%m'),
-        label='End Date',
-        required=False
-    )
-    description = forms.CharField(widget=forms.Textarea, label="Description")
