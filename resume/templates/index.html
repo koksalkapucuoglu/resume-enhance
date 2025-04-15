@@ -136,6 +136,45 @@
             background-color: rgba(0, 0, 0, 0.5);
             z-index: 2;
         }
+        .upload-spinner {
+            display: none;
+            width: 24px;
+            height: 24px;
+            border: 3px solid #007bff;
+            border-top: 3px solid #e0e0e0;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+        .upload-spinner.active {
+            display: inline-block;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg);}
+            100% { transform: rotate(360deg);}
+        }
+        .global-loading-overlay {
+            display: none;
+            position: fixed;
+            z-index: 9999;
+            top: 0; left: 0; right: 0; bottom: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(100, 100, 100, 0.4);
+            justify-content: center;
+            align-items: center;
+        }
+        .global-spinner {
+            width: 60px;
+            height: 60px;
+            border: 6px solid #007bff;
+            border-top: 6px solid #e0e0e0;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            background: white;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+        }
     </style>
 </head>
 <body>
@@ -148,6 +187,7 @@
                     {% csrf_token %}
                     <input type="file" name="cv_file" accept="application/pdf" required>
                     <button type="submit">Upload</button>
+                    <span class="upload-spinner"></span>
                 </form>
                 <p id="uploaded-file-name" style="margin-top: 10px; color: green; display: none;">File uploaded: <span id="file-name"></span></p>
             </div>
@@ -160,10 +200,15 @@
                     {% csrf_token %}
                     <input type="file" name="linkedin_file" accept="application/pdf" required>
                     <button type="submit">Upload</button>
+                    <span class="upload-spinner"></span>
                 </form>
                 <p id="linkedin-uploaded-file-name" style="margin-top: 10px; color: green; display: none;">File uploaded: <span id="linkedin-file-name"></span></p>
             </div>
         </div>
+    </div>
+    <!-- Global loading overlay -->
+    <div class="global-loading-overlay" id="global-loading-overlay">
+        <div class="global-spinner"></div>
     </div>
     <div class="popup-overlay" id="popup-overlay" onclick="hidePopup()"></div>
     <div class="popup" id="popup">
@@ -182,6 +227,23 @@
             document.getElementById('popup').style.display = 'none';
             document.getElementById('popup-overlay').style.display = 'none';
         }
+
+        // Remove disabling of buttons/inputs, just show overlay after a short delay
+        function showGlobalLoading() {
+            setTimeout(function() {
+                document.getElementById('global-loading-overlay').style.display = 'flex';
+            }, 100); // 100ms delay to allow form submission to proceed
+        }
+        function hideGlobalLoading() {
+            document.getElementById('global-loading-overlay').style.display = 'none';
+        }
+
+        document.getElementById('upload-cv-form').addEventListener('submit', function(e) {
+            showGlobalLoading();
+        });
+        document.getElementById('upload-linkedin-form').addEventListener('submit', function(e) {
+            showGlobalLoading();
+        });
     </script>
 </body>
 </html>

@@ -35,7 +35,9 @@
                 <div class="experience-form card">
                     {{ form|crispy }}
                     <div class="card-buttons">
-                            <div class="my-indicator"></div>
+                            <div class="my-indicator">
+                                <span class="spinner"></span>
+                            </div>
                             <button type="button"
                                     class="btn btn-primary enhance-experience"
                                     hx-post="{% url 'resume:enhance_experience' %}"
@@ -64,7 +66,9 @@
                 <div class="project-form card">
                     {{ form|crispy }}
                     <div class="card-buttons">
-                            <div class="my-indicator"></div>
+                            <div class="my-indicator">
+                                <span class="spinner"></span>
+                            </div>
                             <button type="button"
                                     class="btn btn-primary enhance-project"
                                     hx-post="{% url 'resume:enhance_project' %}"
@@ -113,7 +117,9 @@
     <div class="experience-form card">
         {{ experience_formset.empty_form|crispy }}
         <div class="card-buttons">
-            <div class="my-indicator"></div>
+            <div class="my-indicator">
+                <span class="spinner"></span>
+            </div>
             <button type="button"
                     class="btn btn-primary enhance-experience"
                     hx-post="{% url 'resume:enhance_experience' %}"
@@ -137,7 +143,9 @@
     <div class="project-form card">
         {{ project_formset.empty_form|crispy }}
         <div class="card-buttons">
-            <div class="my-indicator"></div>
+            <div class="my-indicator">
+                <span class="spinner"></span>
+            </div>
             <button type="button"
                     class="btn btn-primary enhance-project"
                     hx-post="{% url 'resume:enhance_project' %}"
@@ -339,6 +347,39 @@
 
     [id^="div_id_experience-"][id$="-current_role"] .form-check-label {
         order: 1; 
+    }
+
+    .my-indicator {
+        display: inline-block;
+        width: 24px;
+        height: 24px;
+        vertical-align: middle;
+        margin-right: 8px;
+        position: relative;
+    }
+    .my-indicator .spinner {
+        display: none;
+        width: 24px;
+        height: 24px;
+        border: 3px solid #007bff;
+        border-top: 3px solid #e0e0e0;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        position: absolute;
+        top: 0; left: 0;
+    }
+    .my-indicator.htmx-request .spinner {
+        display: inline-block;
+    }
+    @keyframes spin {
+        0% { transform: rotate(0deg);}
+        100% { transform: rotate(360deg);}
+    }
+
+    .htmx-enhance-disabled,
+    .btn[disabled] {
+        opacity: 0.6;
+        pointer-events: none;
     }
 </style>
 
@@ -597,4 +638,48 @@
             popup.classList.remove('show');
         }
     }
+
+    // Disable Enhance button while htmx request is in progress
+    document.body.addEventListener('htmx:beforeRequest', function(evt) {
+        const trigger = evt.detail.elt;
+        if (trigger && (trigger.classList.contains('enhance-experience') || trigger.classList.contains('enhance-project'))) {
+            trigger.disabled = true;
+            // Optional: add a class for styling if needed
+            trigger.classList.add('htmx-enhance-disabled');
+        }
+    });
+    document.body.addEventListener('htmx:afterRequest', function(evt) {
+        const trigger = evt.detail.elt;
+        if (trigger && (trigger.classList.contains('enhance-experience') || trigger.classList.contains('enhance-project'))) {
+            trigger.disabled = false;
+            trigger.classList.remove('htmx-enhance-disabled');
+        }
+    });
+
+    // Disable all buttons while any Enhance button is loading (htmx request in progress)
+    let enhanceLoadingCount = 0;
+
+    document.body.addEventListener('htmx:beforeRequest', function(evt) {
+        const trigger = evt.detail.elt;
+        if (trigger && (trigger.classList.contains('enhance-experience') || trigger.classList.contains('enhance-project'))) {
+            enhanceLoadingCount++;
+            document.querySelectorAll('button').forEach(btn => {
+                btn.disabled = true;
+                btn.classList.add('htmx-enhance-disabled');
+            });
+        }
+    });
+
+    document.body.addEventListener('htmx:afterRequest', function(evt) {
+        const trigger = evt.detail.elt;
+        if (trigger && (trigger.classList.contains('enhance-experience') || trigger.classList.contains('enhance-project'))) {
+            enhanceLoadingCount = Math.max(0, enhanceLoadingCount - 1);
+            if (enhanceLoadingCount === 0) {
+                document.querySelectorAll('button').forEach(btn => {
+                    btn.disabled = false;
+                    btn.classList.remove('htmx-enhance-disabled');
+                });
+            }
+        }
+    });
 </script>

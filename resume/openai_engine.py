@@ -240,7 +240,7 @@ def extract_linkedin_resume_data(user_message: str):
     - For `current_role`, mark as `true` if the person is still working in that position.
     - If any field is missing in the input, set it to null or leave it empty.
     - Remove page numbers or artifacts (e.g., “Page 1 of 3”) from descriptions.
-    - In descriptions, preserve newlines if present.
+    - In descriptions, use newlines as element, no bullet.
     - If there is only YYYY, use 01 as MM and result should be YYYY-01.
 
     Ensure the JSON output is well-formed, accurate, and complete.

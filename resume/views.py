@@ -15,13 +15,14 @@ from django.views.decorators.csrf import csrf_exempt
 
 from PyPDF2 import PdfReader
 
-from resume.forms import (
-    UserInfoForm, EducationForm, ExperienceForm, ProjectForm
-)
+from resume.forms import UserInfoForm, EducationForm, ExperienceForm, ProjectForm
 from resume.openai_engine import (
-    enhance_resume_experience, enhance_project_description, extract_resume_data, extract_linkedin_resume_data
+    enhance_resume_experience,
+    enhance_project_description,
+    extract_resume_data,
+    extract_linkedin_resume_data,
 )
-from latex_renderer import  TexToPdfConverter, latex_handler
+from latex_renderer import TexToPdfConverter, latex_handler
 
 
 EducationFormSet = formset_factory(EducationForm, extra=0)
@@ -35,86 +36,86 @@ def get_init_values_for_resume_form():
     """
     user_form = UserInfoForm(
         initial={
-            'full_name': 'firstname lastname',
-            'email': 'firstname.lastname@gmail.com',
-            'phone': '+1 123 456 7890',
-            'skills': 'Django, Flask, Fastapi',
+            "full_name": "firstname lastname",
+            "email": "firstname.lastname@gmail.com",
+            "phone": "+1 123 456 7890",
+            "skills": "Django, Flask, Fastapi",
         }
     )
     education_formset = EducationFormSet(
         initial=[
             {
-                'school': 'Stanford University',
-                'degree': 'Master',
-                'field_of_study': 'Computer Science',
-                'start_date': '2024-01',
-                'end_date': '2024-12',
+                "school": "Stanford University",
+                "degree": "Master",
+                "field_of_study": "Computer Science",
+                "start_date": "2024-01",
+                "end_date": "2024-12",
             },
             {
-                'school': 'Stanford University',
-                'degree': 'Bachelor',
-                'field_of_study': 'Computer Science',
-                'start_date': '2023-01',
-                'end_date': '2023-12',
-            }
+                "school": "Stanford University",
+                "degree": "Bachelor",
+                "field_of_study": "Computer Science",
+                "start_date": "2023-01",
+                "end_date": "2023-12",
+            },
         ],
-        prefix='education'
+        prefix="education",
     )
     experience_formset = ExperienceFormSet(
         initial=[
             {
-                'title': 'Role Name',
-                'start_date': '2024-01',
-                'end_date': '2024-10',
-                'current_role': False,
-                'company': 'Company Last',
-                'description': """Achieved X% growth for XYZ using A, B, and C skills.
+                "title": "Role Name",
+                "start_date": "2024-01",
+                "end_date": "2024-10",
+                "current_role": False,
+                "company": "Company Last",
+                "description": """Achieved X% growth for XYZ using A, B, and C skills.
     Led XYZ which led to X% improvement in ABC.
     Developed XYZ that did A, B and C using X, Y, and Z.""",
             },
             {
-                'title': 'Role Name',
-                'start_date': '2023-01',
-                'end_date': '2023-12',
-                'current_role': False,
-                'company': 'Company First',
-                'description': """Achieved X% growth for XYZ using A, B, and C skills.
+                "title": "Role Name",
+                "start_date": "2023-01",
+                "end_date": "2023-12",
+                "current_role": False,
+                "company": "Company First",
+                "description": """Achieved X% growth for XYZ using A, B, and C skills.
             Led XYZ which led to X% improvement in ABC.
             Developed XYZ that did A, B and C using X, Y, and Z.""",
-            }
+            },
         ],
-        prefix='experience'
+        prefix="experience",
     )
     project_formset = ProjectFormSet(
         initial=[
             {
-                'name': 'Hiring Search Tool',
-                'description': """Built a tool to search for Hiring Managers and Recruiters by using ReactJS, NodeJS, Firebase
+                "name": "Hiring Search Tool",
+                "description": """Built a tool to search for Hiring Managers and Recruiters by using ReactJS, NodeJS, Firebase
     and boolean queries. Over 25000 people have used it so far, with 5000+ queries being saved and shared, and search
     results even better than LinkedIn.""",
-                'link': None,
+                "link": None,
             },
             {
-                'name': 'Short Project Title.',
-                'description': """Build a project that does something and had quantified success using A, B, and C. This
+                "name": "Short Project Title.",
+                "description": """Build a project that does something and had quantified success using A, B, and C. This
     project’s description spans two lines and also won an award.""",
-                'link': None,
+                "link": None,
             },
             {
-                'name': 'Short Project Title.',
-                'description': """Build a project that does something and had quantified success using A, B, and C. This
+                "name": "Short Project Title.",
+                "description": """Build a project that does something and had quantified success using A, B, and C. This
     project’s description spans two lines and also won an award.""",
-                'link': None,
-            }
+                "link": None,
+            },
         ],
-        prefix='project'
+        prefix="project",
     )
 
     context = {
-        'user_form': user_form,
-        'education_formset': education_formset,
-        'experience_formset': experience_formset,
-        'project_formset': project_formset,
+        "user_form": user_form,
+        "education_formset": education_formset,
+        "experience_formset": experience_formset,
+        "project_formset": project_formset,
     }
     return context
 
@@ -133,58 +134,60 @@ def populate_formsets_from_extracted_json(extracted_json):
     # User Info Form
     user_form = UserInfoForm(
         initial={
-            'full_name': extracted_json.get('user_info', {}).get('full_name', ''),
-            'email': extracted_json.get('user_info', {}).get('email', ''),
-            'phone': extracted_json.get('user_info', {}).get('phone', ''),
-            'github': extracted_json.get('user_info', {}).get('github', ''),
-            'linkedin': extracted_json.get('user_info', {}).get('linkedin', ''),
-            'skills': ', '.join(extracted_json.get('user_info', {}).get('skills', [])),
+            "full_name": extracted_json.get("user_info", {}).get("full_name", ""),
+            "email": extracted_json.get("user_info", {}).get("email", ""),
+            "phone": extracted_json.get("user_info", {}).get("phone", ""),
+            "github": extracted_json.get("user_info", {}).get("github", ""),
+            "linkedin": extracted_json.get("user_info", {}).get("linkedin", ""),
+            "skills": ", ".join(extracted_json.get("user_info", {}).get("skills", [])),
         }
     )
 
     # Education Formset
     education_initial = [
         {
-            'school': edu.get('school', ''),
-            'degree': edu.get('degree', ''),
-            'field_of_study': edu.get('field_of_study', ''),
-            'start_date': edu.get('start_date', ''),
-            'end_date': edu.get('end_date', ''),
+            "school": edu.get("school", ""),
+            "degree": edu.get("degree", ""),
+            "field_of_study": edu.get("field_of_study", ""),
+            "start_date": edu.get("start_date", ""),
+            "end_date": edu.get("end_date", ""),
         }
-        for edu in extracted_json.get('education', [])
+        for edu in extracted_json.get("education", [])
     ]
-    education_formset = EducationFormSet(initial=education_initial, prefix='education')
+    education_formset = EducationFormSet(initial=education_initial, prefix="education")
 
     # Experience Formset
     experience_initial = [
         {
-            'title': exp.get('title', ''),
-            'company': exp.get('company', ''),
-            'start_date': exp.get('start_date', ''),
-            'end_date': exp.get('end_date', ''),
-            'current_role': exp.get('current_role', False),
-            'description': exp.get('description', ''),
+            "title": exp.get("title", ""),
+            "company": exp.get("company", ""),
+            "start_date": exp.get("start_date", ""),
+            "end_date": exp.get("end_date", ""),
+            "current_role": exp.get("current_role", False),
+            "description": exp.get("description", ""),
         }
-        for exp in extracted_json.get('experience', [])
+        for exp in extracted_json.get("experience", [])
     ]
-    experience_formset = ExperienceFormSet(initial=experience_initial, prefix='experience')
+    experience_formset = ExperienceFormSet(
+        initial=experience_initial, prefix="experience"
+    )
 
     # Project Formset
     project_initial = [
         {
-            'name': proj.get('name', ''),
-            'description': proj.get('description', ''),
-            'link': proj.get('link', ''),
+            "name": proj.get("name", ""),
+            "description": proj.get("description", ""),
+            "link": proj.get("link", ""),
         }
-        for proj in extracted_json.get('projects_and_publications', [])
+        for proj in extracted_json.get("projects_and_publications", [])
     ]
-    project_formset = ProjectFormSet(initial=project_initial, prefix='project')
+    project_formset = ProjectFormSet(initial=project_initial, prefix="project")
 
     return {
-        'user_form': user_form,
-        'education_formset': education_formset,
-        'experience_formset': experience_formset,
-        'project_formset': project_formset,
+        "user_form": user_form,
+        "education_formset": education_formset,
+        "experience_formset": experience_formset,
+        "project_formset": project_formset,
     }
 
 
@@ -195,22 +198,23 @@ class ResumeFormView(TemplateView):
 
     If valid form submission,generate a LaTeX-based PDF resume and return it as a downloadable file.
     """
+
     template_name = "resume_form.html"
 
     def get(self, request, *args, **kwargs):
-        education_formset = EducationFormSet(prefix='education')
-        experience_formset = ExperienceFormSet(prefix='experience')
-        project_formset = ProjectFormSet(prefix='project')
+        education_formset = EducationFormSet(prefix="education")
+        experience_formset = ExperienceFormSet(prefix="experience")
+        project_formset = ProjectFormSet(prefix="project")
         user_form = UserInfoForm()
 
-        # context = get_init_values_for_resume_form()
+        # context = get_init_values_for_resume_form()
         context = {
-            'user_form': user_form,
-            'education_formset': education_formset,
-            'experience_formset': experience_formset,
-            'project_formset': project_formset,
+            "user_form": user_form,
+            "education_formset": education_formset,
+            "experience_formset": experience_formset,
+            "project_formset": project_formset,
         }
-        extracted_json = request.session.pop('extracted_json', None)
+        extracted_json = request.session.pop("extracted_json", None)
         if extracted_json:
             context = populate_formsets_from_extracted_json(extracted_json)
 
@@ -233,10 +237,10 @@ class ResumeFormView(TemplateView):
         for form in formset:
             if form.is_valid():
                 cleaned_data = form.cleaned_data
-                cleaned_data['description'] = list(
-                    filter(None, map(
-                            str.strip, cleaned_data.get('description', '').split('\n')
-                        )
+                cleaned_data["description"] = list(
+                    filter(
+                        None,
+                        map(str.strip, cleaned_data.get("description", "").split("\n")),
                     )
                 )
                 experience_data.append(cleaned_data)
@@ -252,69 +256,66 @@ class ResumeFormView(TemplateView):
             or renders the form again in case of validation failure.
         """
         user_form = UserInfoForm(self.request.POST)
-        education_formset = EducationFormSet(self.request.POST, prefix='education')
-        experience_formset = ExperienceFormSet(self.request.POST, prefix='experience')
-        project_formset = ProjectFormSet(self.request.POST, prefix='project')
+        education_formset = EducationFormSet(self.request.POST, prefix="education")
+        experience_formset = ExperienceFormSet(self.request.POST, prefix="experience")
+        project_formset = ProjectFormSet(self.request.POST, prefix="project")
 
         if (
-                user_form.is_valid()
-                and education_formset.is_valid()
-                and experience_formset.is_valid()
-                and project_formset.is_valid()
+            user_form.is_valid()
+            and education_formset.is_valid()
+            and experience_formset.is_valid()
+            and project_formset.is_valid()
         ):
             user_data = user_form.cleaned_data
             education_data = [
-                form.cleaned_data
-                for form in education_formset if form.cleaned_data
+                form.cleaned_data for form in education_formset if form.cleaned_data
             ]
 
             experience_data = self._split_experience_description(experience_formset)
             project_data = [
-                form.cleaned_data
-                for form in project_formset if form.cleaned_data
+                form.cleaned_data for form in project_formset if form.cleaned_data
             ]
 
             base_tex_template = self.request.POST.get(
-                'base_tex_template', settings.LATEX_SETTINGS['DEFAULT_TEMPLATE']
+                "base_tex_template", settings.LATEX_SETTINGS["DEFAULT_TEMPLATE"]
             )
             output_tex = (
-                    settings.LATEX_SETTINGS['TEMP_DIR']
-                  / f"resume_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{secrets.token_hex(4)}.tex"
+                settings.LATEX_SETTINGS["TEMP_DIR"]
+                / f"resume_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{secrets.token_hex(4)}.tex"
             )
             tex_context = {
-                'user_data': user_data,
-                'education_data': education_data,
-                'experience_data': experience_data,
-                'project_data': project_data,
-                'generation_date': datetime.now().strftime('%Y-%m-%d'),
+                "user_data": user_data,
+                "education_data": education_data,
+                "experience_data": experience_data,
+                "project_data": project_data,
+                "generation_date": datetime.now().strftime("%Y-%m-%d"),
             }
 
             try:
                 tex_file = latex_handler.render_tex_template(
                     template_name=base_tex_template,
                     context=tex_context,
-                    output_path=output_tex
+                    output_path=output_tex,
                 )
 
                 pdf_file_path = TexToPdfConverter(tex_file).render_pdf()
 
                 response = FileResponse(
-                    open(pdf_file_path, 'rb'),
-                    content_type='application/pdf'
+                    open(pdf_file_path, "rb"), content_type="application/pdf"
                 )
-                response[ 'Content-Disposition'] = 'inline; filename="resume.pdf"'
+                response["Content-Disposition"] = 'inline; filename="resume.pdf"'
 
                 os.remove(pdf_file_path)
                 return response
             except Exception as e:
                 messages.error(self.request, f"Failed to render PDF: {str(e)}")
-                return redirect('resume:resume_form')
+                return redirect("resume:resume_form")
 
         context = {
-            'user_form': user_form,
-            'education_formset': education_formset,
-            'experience_formset': experience_formset,
-            'project_formset': project_formset,
+            "user_form": user_form,
+            "education_formset": education_formset,
+            "experience_formset": experience_formset,
+            "project_formset": project_formset,
         }
         return self.render_to_response(context)
 
@@ -336,14 +337,12 @@ def get_field_value(request, prefix, field):
     """
     form_index = None
     field_value = None
-    field_id = request.POST.get('field_id')
+    field_id = request.POST.get("field_id")
 
     if field_id:
-        form_index_match = re.search(fr"id_{prefix}-(\d+)-{field}", field_id)
+        form_index_match = re.search(rf"id_{prefix}-(\d+)-{field}", field_id)
         form_index = form_index_match.group(1)
-        field_value = request.POST.get(
-            request.POST.get('field_id').strip('id_')
-        )
+        field_value = request.POST.get(request.POST.get("field_id").strip("id_"))
 
     return form_index, field_value
 
@@ -377,9 +376,9 @@ def enhance_field(request, prefix, field, enhance_function):
 def enhance_experience(request):
     return enhance_field(
         request,
-        prefix='experience',
-        field='description',
-        enhance_function=enhance_resume_experience
+        prefix="experience",
+        field="description",
+        enhance_function=enhance_resume_experience,
     )
 
 
@@ -387,9 +386,9 @@ def enhance_experience(request):
 def enhance_project(request):
     return enhance_field(
         request,
-        prefix='project',
-        field='description',
-        enhance_function=enhance_project_description
+        prefix="project",
+        field="description",
+        enhance_function=enhance_project_description,
     )
 
 
@@ -406,6 +405,7 @@ def preview_resume_form(request):
         JsonResponse: A JSON response containing the rendered HTML preview
         or an error message.
     """
+
     def split_experience_description(formset):
         """
         Splits and cleans the experience descriptions from the formset,
@@ -422,81 +422,78 @@ def preview_resume_form(request):
         for form in formset:
             if form.is_valid():
                 cleaned_data = form.cleaned_data
-                cleaned_data['description'] = list(
-                    filter(None, map(
-                        str.strip,
-                        cleaned_data.get('description', '').split('\n')
+                cleaned_data["description"] = list(
+                    filter(
+                        None,
+                        map(str.strip, cleaned_data.get("description", "").split("\n")),
                     )
-                           )
                 )
                 experience_data.append(cleaned_data)
         return experience_data
 
     if request.method == "POST":
         user_form = UserInfoForm(request.POST)
-        education_formset = EducationFormSet(request.POST, prefix='education')
-        experience_formset = ExperienceFormSet(request.POST, prefix='experience')
-        project_formset = ProjectFormSet(request.POST, prefix='project')
+        education_formset = EducationFormSet(request.POST, prefix="education")
+        experience_formset = ExperienceFormSet(request.POST, prefix="experience")
+        project_formset = ProjectFormSet(request.POST, prefix="project")
 
         if (
-                user_form.is_valid()
-                and education_formset.is_valid()
-                and experience_formset.is_valid()
-                and project_formset.is_valid()
+            user_form.is_valid()
+            and education_formset.is_valid()
+            and experience_formset.is_valid()
+            and project_formset.is_valid()
         ):
             user_data = user_form.cleaned_data
             education_data = [
-                form.cleaned_data
-                for form in education_formset if form.cleaned_data
+                form.cleaned_data for form in education_formset if form.cleaned_data
             ]
             experience_data = split_experience_description(experience_formset)
             project_data = [
-                form.cleaned_data
-                for form in project_formset if form.cleaned_data
+                form.cleaned_data for form in project_formset if form.cleaned_data
             ]
 
             context = {
-                'user_data': user_data,
-                'education_data': education_data,
-                'experience_data': experience_data,
-                'project_data': project_data,
-                'generation_date': datetime.now().strftime('%Y-%m-%d'),
+                "user_data": user_data,
+                "education_data": education_data,
+                "experience_data": experience_data,
+                "project_data": project_data,
+                "generation_date": datetime.now().strftime("%Y-%m-%d"),
             }
             template_name = settings.TEX_PREVIEW_HTML_MAP.get(
-                settings.LATEX_SETTINGS['DEFAULT_TEMPLATE'], None)
+                settings.LATEX_SETTINGS["DEFAULT_TEMPLATE"], None
+            )
             if not template_name:
-                return JsonResponse({'error': 'Selected tex does not map any html preview'}, status=400)
+                return JsonResponse(
+                    {"error": "Selected tex does not map any html preview"}, status=400
+                )
 
             rendered_html = render(
-                request,
-                template_name=template_name,
-                context=context
-            ).content.decode('utf-8')
-            return JsonResponse({'html': rendered_html})
-    return JsonResponse({'error': 'Invalid request'}, status=400)
+                request, template_name=template_name, context=context
+            ).content.decode("utf-8")
+            return JsonResponse({"html": rendered_html})
+    return JsonResponse({"error": "Invalid request"}, status=400)
 
 
 def index(request):
-    return render(request, 'index.html')
+    return render(request, "index.html")
 
 
 @csrf_exempt
 def upload_cv(request):
     if request.method == "POST":
-        cv_file = request.FILES.get('cv_file')
+        cv_file = request.FILES.get("cv_file")
         print("[INFO]: CV file uploaded:", cv_file.name)
 
         # Ensure the uploaded file is a PDF
         if not cv_file.name.endswith(".pdf"):
-            return JsonResponse(
-            {"error": "Only PDF files are allowed."}, status=400
-        )
+            return JsonResponse({"error": "Only PDF files are allowed."}, status=400)
 
         # Extract data from the PDF
         reader = PdfReader(cv_file)
 
         extracted_text = " ".join(page.extract_text() for page in reader.pages)
         import time
+
         start_time = time.time()
         extracted_json_string = extract_resume_data(extracted_text)
         end_time = time.time()
@@ -507,32 +504,31 @@ def upload_cv(request):
 
         try:
             extracted_json = json.loads(extracted_json_string)
-            request.session['extracted_json'] = extracted_json
+            request.session["extracted_json"] = extracted_json
         except json.JSONDecodeError as e:
             print("[ERROR]: Failed to decode JSON:", str(e))
             return JsonResponse({"error": "Failed to parse extracted JSON"}, status=500)
-        
+
         return redirect("resume:resume_form")
 
     return redirect("resume:index")
 
 
 def upload_linkedin(request):
-    if request.method == 'POST' and request.FILES.get('linkedin_file'):
-        linkedin_file = request.FILES['linkedin_file']
+    if request.method == "POST" and request.FILES.get("linkedin_file"):
+        linkedin_file = request.FILES["linkedin_file"]
         print("[INFO]: CV file uploaded:", linkedin_file.name)
 
         # Ensure the uploaded file is a PDF
         if not linkedin_file.name.endswith(".pdf"):
-            return JsonResponse(
-            {"error": "Only PDF files are allowed."}, status=400
-        )
+            return JsonResponse({"error": "Only PDF files are allowed."}, status=400)
 
         # Extract data from the PDF
         reader = PdfReader(linkedin_file)
 
         extracted_text = " ".join(page.extract_text() for page in reader.pages)
         import time
+
         start_time = time.time()
         extracted_json_string = extract_linkedin_resume_data(extracted_text)
         end_time = time.time()
@@ -543,11 +539,11 @@ def upload_linkedin(request):
 
         try:
             extracted_json = json.loads(extracted_json_string)
-            request.session['extracted_json'] = extracted_json
+            request.session["extracted_json"] = extracted_json
         except json.JSONDecodeError as e:
             print("[ERROR]: Failed to decode JSON:", str(e))
             return JsonResponse({"error": "Failed to parse extracted JSON"}, status=500)
-        
+
         return redirect("resume:resume_form")
 
     return redirect("resume:index")
