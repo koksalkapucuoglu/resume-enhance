@@ -614,22 +614,55 @@
 
         // Django'dan HTML içeriğini al
         fetch("{% url 'resume:preview-resume-form' %}", {
-            method: "POST",
-            headers: {
-                "X-CSRFToken": csrfToken // Token'ı Header olarak ekle
-            },
-            body: formData
+        method: "POST",
+        headers: {
+            "X-CSRFToken": csrfToken
+        },
+        body: formData
         })
-        .then(response => response.json())
-        .then(data => {
+        .then(async response => {""
+            let data;
+            try {
+                data = await response.json();
+            } catch (e) {
+                // Not JSON, show raw response
+                const text = await response.text();
+                htmlPreview.srcdoc = `
+                    <div style="color:red;padding:2em;">
+                        <h3>Preview Error</h3>
+                        <p>Server returned invalid JSON.</p>
+                        <pre style="white-space:pre-wrap;">${text}</pre>
+                    </div>
+                `;
+                popup.classList.add('show');
+                console.error("Preview Error: Server returned invalid JSON", text);
+                return;
+            }
             if (data.html) {
                 htmlPreview.srcdoc = data.html;
                 popup.classList.add('show');
+            } else if (data.error) {
+                htmlPreview.srcdoc = `
+                    <div style="background:#fff3f3;color:#b71c1c;padding:2em;border-radius:8px;">
+                        <h3 style="color:#b71c1c;">Preview Error</h3>
+                        <p>${data.error}</p>
+                        <pre style="white-space:pre-wrap;background:#f9dede;color:#b71c1c;padding:1em;border-radius:6px;">${JSON.stringify(data.form_errors, null, 2)}</pre>
+                    </div>
+                `;
+                popup.classList.add('show');
+                console.error("Preview Error:", data.error, data.form_errors);
             } else {
-                console.error("Preview Error: Invalid HTML");
+                htmlPreview.srcdoc = `
+                    <div style="color:red;padding:2em;">
+                        <h3>Preview Error</h3>
+                        <p>Invalid response from server.</p>
+                        <pre style="white-space:pre-wrap;">${JSON.stringify(data, null, 2)}</pre>
+                    </div>
+                `;
+                popup.classList.add('show');
+                console.error("Preview Error: Invalid HTML", data);
             }
         })
-        .catch(error => console.error("Preview Error:", error));
     }
 
     window.onclick = function(event) {

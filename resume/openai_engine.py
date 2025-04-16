@@ -179,6 +179,7 @@ def extract_resume_data(user_message: str):
 
     For "user_info" section:
     - if linkendin and github not valid url, leave it empty.
+    - if there linkedin url or github url, urls should be start with https://
     
     Ensure the JSON is well-structured and includes all relevant information. 
     If a section is missing in the input text, leave it empty in the JSON.
@@ -242,6 +243,7 @@ def extract_linkedin_resume_data(user_message: str):
     - Remove page numbers or artifacts (e.g., “Page 1 of 3”) from descriptions.
     - In descriptions, use newlines as element, no bullet.
     - If there is only YYYY, use 01 as MM and result should be YYYY-01.
+    - If there linkedin url or github url, urls should be start with https://
 
     Ensure the JSON output is well-formed, accurate, and complete.
     """
