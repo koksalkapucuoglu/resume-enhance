@@ -214,6 +214,7 @@ class ResumeFormView(TemplateView):
             "experience_formset": experience_formset,
             "project_formset": project_formset,
         }
+        context = get_init_values_for_resume_form()
         extracted_json = request.session.pop("extracted_json", None)
         if extracted_json:
             context = populate_formsets_from_extracted_json(extracted_json)
@@ -297,7 +298,6 @@ class ResumeFormView(TemplateView):
                     context=tex_context,
                     output_path=output_tex,
                 )
-
                 pdf_file_path = TexToPdfConverter(tex_file).render_pdf()
 
                 response = FileResponse(
@@ -471,7 +471,21 @@ def preview_resume_form(request):
                 request, template_name=template_name, context=context
             ).content.decode("utf-8")
             return JsonResponse({"html": rendered_html})
-    return JsonResponse({"error": "Invalid request"}, status=400)
+        
+        errors = {}
+        if user_form.errors:
+            errors["user_form"] = user_form.errors
+        education_errors = [form.errors for form in education_formset if form.errors]
+        if education_errors:
+            errors["education_formset"] = education_errors
+        experience_errors = [form.errors for form in experience_formset if form.errors]
+        if experience_errors:
+            errors["experience_formset"] = experience_errors
+        project_errors = [form.errors for form in project_formset if form.errors]
+        if project_errors:
+            errors["project_formset"] = project_errors
+
+        return JsonResponse({"error": "Invalid request", "form_errors": errors}, status=400)
 
 
 def index(request):
