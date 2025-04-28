@@ -50,30 +50,54 @@ class TexToPdfConverter:
         """Run the pdflatex command to convert .tex to .pdf."""
         command = [
             "pdflatex",
-            "-interaction=batchmode",
+            # "-interaction=batchmode",
+            "-interaction=nonstopmode",  # get more output and dont stop at errors
             "-output-directory", str(self.output_directory),
-            "-quiet",
+            # "-quiet",
             str(self.tex_file_path)
         ]
-
+        logging.info(f"Running command: {' '.join(command)}")
         logging.info(f"Running pdflatex for: {self.tex_file_path}")
-        result = subprocess.run(
-            command,
-            check=True,
-            cwd=self.output_directory,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
+        try:
+            result = subprocess.run(
+                command,
+                # check=True,
+                check=False, # Changed to False to capture errors
+                cwd=self.output_directory,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True, # For readable output
+                errors='replace' # Replace invalid chars instead of failing
+            )
+            
+            logging.info(f"Return code: {result.returncode}")
+            logging.info(f"stdout: {result.stdout}")
+            logging.info(f"stderr: {result.stderr}")
 
-        if result.returncode != 0:
-            raise RuntimeError(
-                f"Failed to render PDF: {result.stderr.decode()}")
+            if result.returncode != 0:
+                # Check for log file
+                log_path = self.tex_file_path.with_suffix(".log")
+                if log_path.exists():
+                    with open(log_path, 'r', errors='replace') as f:
+                        log_content = f.read()
+                        logging.error(f"PDFLaTeX log file content: {log_content}")
+                
+                logging.warning(f"PDFLaTeX completed with warnings/errors (code {result.returncode}), checking if PDF was still created")
+                # raise RuntimeError( f"Failed to render PDF (return code {result.returncode}): {result.stderr}")
+        except Exception as e:
+            logging.exception(f"Exception running pdflatex: {e}")
+            raise
 
     def _check_pdf_creation(self):
         """Ensure the PDF file was successfully created."""
         if not self.pdf_file_path.is_file():
             raise RuntimeError(
                 f"PDF file was not created as expected: {self.pdf_file_path}")
+        else:
+            pdf_size = self.pdf_file_path.stat().st_size
+            logging.info(f"PDF file created: {self.pdf_file_path} (Size: {pdf_size} bytes)")
+            if pdf_size < 100:
+                logging.warning(f"PDF file suspiciously small: {pdf_size} bytes")
 
     def _cleanup(self):
         """Clean up non-PDF files in the output directory."""

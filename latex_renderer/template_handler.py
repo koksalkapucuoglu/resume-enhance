@@ -33,7 +33,19 @@ class JinjaLatexHandler:
     def tex_escape(text: str) -> str:
         """
         Make escape for LaTeX special characters.
+        Also handles common HTML entities and math expressions.
         """
+        if not text:
+            return ""
+            
+        # Handle some HTML entities
+        text = text.replace('&#39;', "'")
+        text = text.replace('&quot;', '"')
+        text = text.replace('&amp;', '&')
+        text = text.replace('&lt;', '<')
+        text = text.replace('&gt;', '>')
+        
+        # Standard LaTeX escape characters
         conv = {
             '&': r'\&',
             '%': r'\%',
@@ -65,7 +77,7 @@ class JinjaLatexHandler:
             return date_string
 
     def render_tex_template(self, template_name: str, context: Dict,
-                      output_path: pathlib.Path) -> pathlib.Path:
+                  output_path: pathlib.Path) -> pathlib.Path:
         """
         Renders the LaTeX template with provided data.
 
@@ -77,11 +89,13 @@ class JinjaLatexHandler:
         Returns:
             pathlib.Path: Path to the rendered .tex file.
         """
-
+        # Recursively escape all string values in the context dictionary
+        processed_context = self._recursive_tex_escape(context)
+        
         # JinjaLatexHandler search the file in template_dir(which given at initialization)
         template = self.env.get_template(template_name)
 
-        rendered_content = template.render(**context)
+        rendered_content = template.render(**processed_context)
 
         # Ensure the output directory exists
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -91,3 +105,17 @@ class JinjaLatexHandler:
             f.write(rendered_content)
 
         return output_path
+    
+    def _recursive_tex_escape(self, data):
+        """
+        Recursively processes a dictionary to escape LaTeX special characters
+        in all string values.
+        """
+        if isinstance(data, str):
+            return self.tex_escape(data)
+        elif isinstance(data, dict):
+            return {key: self._recursive_tex_escape(value) for key, value in data.items()}
+        elif isinstance(data, list):
+            return [self._recursive_tex_escape(item) for item in data]
+        else:
+            return data

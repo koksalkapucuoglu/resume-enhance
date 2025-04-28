@@ -35,10 +35,8 @@ def send_openai_message(user_message:str, meta_prompt:str = None):
 
     except openai.APIError as e:
         return f"OpenAI API returned an API Error: {e}"
-        pass
     except openai.RateLimitError as e:
         return f"OpenAI API request exceeded rate limit: {e}"
-        pass
     except Exception as e:
         return f"Error: {str(e)}"
 
@@ -165,7 +163,8 @@ def extract_resume_data(user_message: str):
 
     For the "experience" section:
     - If a job contains multiple tasks, projects, or responsibilities grouped under a single job title, concatenate all tasks, projects, or responsibilities into a single string and place it in the "description" field.
-    - Ensure that the concatenated string maintains readability, with each task or project separated by a newline or bullet point.
+    - Ensure that the concatenated string maintains readability, with each task or project separated by a newline. 
+    - Don't use bullet point.
     - If the start and end dates are not explicitly mentioned for a task or project, inherit them from the main job entry.
 
     For "education" section:
