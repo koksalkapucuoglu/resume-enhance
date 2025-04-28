@@ -214,7 +214,7 @@ class ResumeFormView(TemplateView):
             "experience_formset": experience_formset,
             "project_formset": project_formset,
         }
-        context = get_init_values_for_resume_form()
+        # context = get_init_values_for_resume_form()
         extracted_json = request.session.pop("extracted_json", None)
         if extracted_json:
             context = populate_formsets_from_extracted_json(extracted_json)
