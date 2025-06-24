@@ -43,7 +43,8 @@
             background-color: #ffe0b2;
         }
         .card.linkedin {
-            background-color: #d1c4e9;
+            background-color: #2d64bc;
+            color: white;
         }
         .card h2 {
             font-size: 1.2rem;
@@ -196,7 +197,7 @@
             <h2>Use LinkedIn</h2>
             <div class="tooltip" onclick="showPopup()">?</div>
             <div class="upload-content">
-                <form id="upload-linkedin-form" action="{% url 'resume:upload_linkedin' %}" method="post" enctype="multipart/form-data">
+                <form id="upload-linkedin-form" action="{% url 'resume:upload_linkedin_cv' %}" method="post" enctype="multipart/form-data">
                     {% csrf_token %}
                     <input type="file" name="linkedin_file" accept="application/pdf" required>
                     <button type="submit">Upload</button>

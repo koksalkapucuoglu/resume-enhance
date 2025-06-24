@@ -1,101 +1,160 @@
 {% load crispy_forms_tags %}
-<script src="https://unpkg.com/htmx.org@2.0.3"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
-
-<div class="page-container">
-    <form method="post">
-    {% csrf_token %}
-
-    <section class="userinfo-section">
-        <h2>Personal Information</h2>
-        <div class="card">
-            {{ user_form|crispy }}
-        </div>
-    </section>
-
-    <section class="education-section">
-        <h2>Education</h2>
-        <div id="education-container">
-            {{ education_formset.management_form }}
-            {% for form in education_formset %}
-                <div class="education-form card">
-                    {{ form|crispy }}
-                    <button type="button" class="btn btn-danger remove-education">Remove</button>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resume Generator & Enhancer</title>
+    <script src="https://unpkg.com/htmx.org@2.0.3"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
+</head>
+<body>
+    <!-- Header -->
+    <header class="app-header">
+        <h1 class="app-title">Resume Generator & Enhancer</h1>
+        <div class="app-actions">
+            <select class="template-selector" id="template-selector">
+                <option value="faangpath-simple">Faangpath Simple</option>
+            </select>
+            <div class="dropdown">
+                <button type="button" class="btn btn-success download-btn" id="downloadButton">
+                    <svg class="download-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                    </svg>
+                    Download
+                </button>
+                <div class="dropdown-menu" id="downloadOptions">
+                    <button type="button" class="dropdown-item" onclick="submitForm('pdf')">Save as PDF</button>
+                    <button type="button" class="dropdown-item" onclick="submitForm('tex')">Save as TEX</button>
                 </div>
-            {% endfor %}
-            <button type="button" id="add-education" class="btn btn-primary">Add Education</button>
+            </div>
         </div>
-    </section>
+    </header>
 
-    <section class="experience-section">
-        <h2>Experience</h2>
-        <div id="experience-container">
-            {{ experience_formset.management_form }}
-            {% for form in experience_formset %}
-                <div class="experience-form card">
-                    {{ form|crispy }}
-                    <div class="card-buttons">
-                            <div class="my-indicator">
-                                <span class="spinner"></span>
-                            </div>
-                            <button type="button"
-                                    class="btn btn-primary enhance-experience"
-                                    hx-post="{% url 'resume:enhance_experience' %}"
-                                    hx-trigger="click"
-                                    hx-vals='{"field_id": "{{ form.description.id_for_label }}"}'
-                                    hx-target="#{{ form.description.id_for_label }}"
-                                    hx-swap="outerHTML"
-                                    hx-indicator=".my-indicator"
-                            >Enhance
-                            </button>
-                            <button type="button"
-                                    class="btn btn-danger remove-experience"
-                            >Remove</button>
+    <div class="page-container">
+        <form method="post" id="resume-form">
+            {% csrf_token %}
+
+            <!-- Form Section Tabs -->
+            <nav class="form-sections">
+                <div class="form-section-tab active" data-section="personal-info">Personal Info</div>
+                <div class="form-section-tab" data-section="experience">Experience</div>
+                <div class="form-section-tab" data-section="education">Education</div>
+                <div class="form-section-tab" data-section="projects">Projects</div>
+            </nav>
+
+            <!-- Personal Info Section -->
+            <section class="section-content active" id="personal-info">
+                <div class="card">
+                    <div class="personal-info-container">
+                        <div class="form-field">
+                            {{ user_form.full_name|as_crispy_field }}
                         </div>
-                </div>
-            {% endfor %}
-            <button type="button" id="add-experience" class="btn btn-primary">Add Experience</button>
-        </div>
-    </section>
-
-    <section class="project-section">
-        <h2>Project & Publications</h2>
-        <div id="project-container">
-            {{ project_formset.management_form }}
-            {% for form in project_formset %}
-                <div class="project-form card">
-                    {{ form|crispy }}
-                    <div class="card-buttons">
-                            <div class="my-indicator">
-                                <span class="spinner"></span>
-                            </div>
-                            <button type="button"
-                                    class="btn btn-primary enhance-project"
-                                    hx-post="{% url 'resume:enhance_project' %}"
-                                    hx-trigger="click"
-                                    hx-vals='{"field_id": "{{ form.description.id_for_label }}"}'
-                                    hx-target="#{{ form.description.id_for_label }}"
-                                    hx-swap="outerHTML"
-                                    hx-indicator=".my-indicator"
-                            >Enhance
-                            </button>
-                            <button type="button"
-                                    class="btn btn-danger remove-project"
-                            >Remove</button>
+                        <div class="form-field">
+                            {{ user_form.email|as_crispy_field }}
                         </div>
+                        <div class="form-field">
+                            {{ user_form.phone|as_crispy_field }}
+                        </div>
+                        <div class="form-field">
+                            {{ user_form.linkedin|as_crispy_field }}
+                        </div>
+                        <div class="form-field">
+                            {{ user_form.github|as_crispy_field }}
+                        </div>
+                        <div class="form-field">
+                            {{ user_form.skills|as_crispy_field }}
+                        </div>
+                    </div>
                 </div>
-            {% endfor %}
-            <button type="button" id="add-project" class="btn btn-primary">Add Project</button>
+            </section>
+
+            <!-- Experience Section -->
+            <section class="section-content" id="experience">
+                <div id="experience-container">
+                    {{ experience_formset.management_form }}
+                    {% for form in experience_formset %}
+                        <div class="experience-form card">
+                            {{ form|crispy }}
+                            <div class="card-buttons">
+                                <div class="my-indicator">
+                                    <span class="spinner"></span>
+                                </div>
+                                <button type="button"
+                                        class="btn btn-primary enhance-experience"
+                                        hx-post="{% url 'resume:enhance_experience' %}"
+                                        hx-trigger="click"
+                                        hx-vals='{"field_id": "{{ form.description.id_for_label }}"}'
+                                        hx-target="#{{ form.description.id_for_label }}"
+                                        hx-swap="outerHTML"
+                                        hx-indicator=".my-indicator"
+                                >Enhance</button>
+                                <button type="button" class="btn btn-danger remove-experience">Remove</button>
+                            </div>
+                        </div>
+                    {% endfor %}
+                    <button type="button" id="add-experience" class="btn btn-primary">Add Experience</button>
+                </div>
+            </section>
+
+            <!-- Education Section -->
+            <section class="section-content" id="education">
+                <div id="education-container">
+                    {{ education_formset.management_form }}
+                    {% for form in education_formset %}
+                        <div class="education-form card">
+                            {{ form|crispy }}
+                            <div class="card-buttons">
+                                <button type="button" class="btn btn-danger remove-education">Remove</button>
+                            </div>
+                        </div>
+                    {% endfor %}
+                    <button type="button" id="add-education" class="btn btn-primary">Add Education</button>
+                </div>
+            </section>
+
+            <!-- Projects Section -->
+            <section class="section-content" id="projects">
+                <div id="project-container">
+                    {{ project_formset.management_form }}
+                    {% for form in project_formset %}
+                        <div class="project-form card">
+                            {{ form|crispy }}
+                            <div class="card-buttons">
+                                <div class="my-indicator">
+                                    <span class="spinner"></span>
+                                </div>
+                                <button type="button"
+                                        class="btn btn-primary enhance-project"
+                                        hx-post="{% url 'resume:enhance_project' %}"
+                                        hx-trigger="click"
+                                        hx-vals='{"field_id": "{{ form.description.id_for_label }}"}'
+                                        hx-target="#{{ form.description.id_for_label }}"
+                                        hx-swap="outerHTML"
+                                        hx-indicator=".my-indicator"
+                                >Enhance</button>
+                                <button type="button" class="btn btn-danger remove-project">Remove</button>
+                            </div>
+                        </div>
+                    {% endfor %}
+                    <button type="button" id="add-project" class="btn btn-primary">Add Project</button>
+                </div>
+            </section>
+            
+            <!-- Action buttons -->
+            <div class="form-action-buttons">
+                <button type="submit" class="btn btn-success">Submit</button>
+                <button type="button" class="btn btn-primary" onclick="openPopup()">Preview</button>
+            </div>
+        </form>
+    </div>
+    
+    <!-- Preview pop-up -->
+    <div class="popup" id="popup">
+        <div class="popup-content">
+            <iframe id="htmlPreview" srcdoc="" frameborder="0"></iframe>
         </div>
-    </section>
-
-    <br><br>
-    <button type="submit" class="btn btn-success">Submit</button>
-    <br><br>
-    <button type="button"  class="btn btn-success" onclick="openPopup()">Preview</button>
-
-</form>
-</div>
+    </div>
 
 <!-- Preview pop-up -->
 <div class="popup" id="popup">
@@ -108,7 +167,9 @@
 <template id="education-form-template">
     <div class="education-form card">
         {{ education_formset.empty_form|crispy }}
-        <button type="button" class="btn btn-danger remove-education">Remove</button>
+        <div class="card-buttons">
+            <button type="button" class="btn btn-danger remove-education">Remove</button>
+        </div>
     </div>
 </template>
 
@@ -167,42 +228,140 @@
     /* General page styling */
     body {
         font-family: 'Arial', sans-serif;
-        background-color: #f4f4f9;
-        color: #333;
+        background-color: #f8fafc;
+        color: #334155;
         line-height: 1.6;
+        margin: 0;
+        padding: 0;
     }
 
+    /* Header styling */
+    .app-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 20px 40px;
+        background-color: #ffffff;
+        border-bottom: 1px solid #e2e8f0;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .app-title {
+        color: #2563eb;
+        font-size: 24px;
+        font-weight: bold;
+        margin: 0;
+    }
+
+    .app-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .template-selector {
+        background-color: #ffffff;
+        color: #374151;
+        border: 1px solid #d1d5db;
+        border-radius: 5px;
+        padding: 10px 15px;
+        font-size: 14px;
+    }
+
+    /* Main content area */
     .page-container {
         max-width: 900px;
         margin: 20px auto;
-        padding: 20px;
-        background: #fff;
-        border-radius: 10px;
-        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        padding: 0 20px;
     }
 
-    h2 {
-        font-size: 1.8rem;
-        color: #444;
-        margin-bottom: 15px;
-        border-bottom: 2px solid #ddd;
-        padding-bottom: 5px;
+    /* Form sections styling */
+    .form-sections {
+        display: flex;
+        margin-bottom: 20px;
+        border-bottom: 1px solid #e2e8f0;
+        overflow-x: auto;
     }
 
+    .form-section-tab {
+        padding: 10px 20px;
+        cursor: pointer;
+        color: #64748b;
+        font-size: 16px;
+        transition: color 0.3s, border-bottom 0.3s;
+        border-bottom: 2px solid transparent;
+    }
+
+    .form-section-tab.active {
+        color: #2563eb;
+        border-bottom: 2px solid #2563eb;
+    }
+
+    /* Form section content */
+    .section-content {
+        display: none;
+        transition: opacity 0.3s ease;
+    }
+
+    .section-content.active {
+        display: block;
+        opacity: 1;
+    }
+
+    /* Card styling */
     .card {
-        border: 1px solid #ddd;
+        border: 1px solid #e2e8f0;
         border-radius: 10px;
         padding: 20px;
         margin-bottom: 20px;
-        background-color: #f9f9f9;
+        background-color: #ffffff;
         transition: box-shadow 0.3s ease, transform 0.2s ease;
     }
 
     .card:hover {
-        box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
-        transform: translateY(-5px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        transform: translateY(-2px);
     }
 
+    /* Form styling */
+    .form-field {
+        margin-bottom: 20px;
+    }
+
+    .field-label {
+        display: block;
+        margin-bottom: 5px;
+        color: #374151;
+        font-size: 14px;
+    }
+    
+    /* Override crispy forms styling to match our design */
+    .form-control {
+        background-color: #ffffff !important;
+        border: 1px solid #d1d5db !important;
+        border-radius: 5px !important;
+        color: #374151 !important;
+        font-size: 16px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+    
+    .form-control:focus {
+        border-color: #2563eb !important;
+        box-shadow: 0 0 5px rgba(37, 99, 235, 0.2) !important;
+    }
+    
+    label {
+        color: #374151 !important;
+        width: 100% !important;
+    }
+    
+    /* Make sure crispy form elements respect their container widths */
+    .personal-info-container .form-group {
+        width: 100%;
+    }
+
+    /* Button styling */
     .btn {
         display: inline-block;
         padding: 10px 20px;
@@ -214,51 +373,97 @@
     }
 
     .btn-primary {
-        background-color: #007bff;
-        color: #fff;
+        background-color: #2563eb;
+        color: #ffffff;
     }
 
     .btn-primary:hover {
-        background-color: #0056b3;
+        background-color: #1d4ed8;
         transform: scale(1.05);
     }
 
     .btn-danger {
-        background-color: #dc3545;
+        background-color: #dc2626;
         color: #fff;
     }
 
     .btn-danger:hover {
-        background-color: #a71d2a;
+        background-color: #b91c1c;
         transform: scale(1.05);
     }
 
     .btn-success {
-        background-color: #28a745;
+        background-color: #059669;
         color: #fff;
     }
 
     .btn-success:hover {
-        background-color: #1e7e34;
+        background-color: #047857;
         transform: scale(1.05);
     }
 
+    .download-btn {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .download-icon {
+        width: 18px;
+        height: 18px;
+    }
+    
+    /* Dropdown menu styling */
+    .dropdown {
+        position: relative;
+        display: inline-block;
+    }
+    
+    .dropdown-menu {
+        display: none;
+        position: absolute;
+        right: 0;
+        top: 100%;
+        min-width: 160px;
+        background-color: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 5px;
+        z-index: 10;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        margin-top: 5px;
+    }
+    
+    .dropdown-menu.show {
+        display: block;
+        animation: fadeIn 0.2s ease;
+    }
+    
+    .dropdown-item {
+        display: block;
+        width: 100%;
+        padding: 10px 15px;
+        text-align: left;
+        background: none;
+        border: none;
+        color: #374151;
+        font-size: 14px;
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+    }
+    
+    .dropdown-item:hover {
+        background-color: #f3f4f6;
+    }
+
+    /* Card buttons */
     .card-buttons {
         display: flex;
         justify-content: flex-end;
         gap: 10px;
+        margin-top: 15px;
     }
 
-    .popup-content {
-        width: 50%;
-        height: 90%; 
-        margin: 0 auto;
-        border-radius: 10px;
-        overflow: hidden;
-        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
-        animation: fadeIn 0.3s ease;
-    }
-
+    /* Preview popup */
     .popup {
         display: none;
         position: fixed;
@@ -266,20 +471,44 @@
         left: 0;
         width: 100%;
         height: 100%;
-        background-color: rgba(0, 0, 0, 0.7);
+        background-color: rgba(0, 0, 0, 0.85);
         justify-content: center;
         align-items: center;
+        z-index: 1000;
     }
 
     .popup.show {
         display: flex;
     }
 
+    .popup-content {
+        width: 90%;
+        max-width: 800px;
+        height: 90%;
+        margin: 0 auto;
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+        animation: fadeIn 0.3s ease;
+        background-color: white;
+        position: relative;
+    }
+
     iframe {
         width: 100%;
-        height: 120%;
+        height: 100%;
         border: none;
-        font-size: 1.2rem;
+    }
+
+    /* A4 aspect ratio for preview */
+    @media (min-width: 768px) {
+        .popup-content {
+            width: 70%;
+            max-width: 600px;
+            height: 85vh;
+            /* A4 aspect ratio approximation */
+            aspect-ratio: 0.707;
+        }
     }
 
     @keyframes fadeIn {
@@ -293,47 +522,64 @@
         }
     }
 
-    /* Form section styling */
-    section {
-        margin-bottom: 30px;
-    }
-
-    .userinfo-section, .education-section, .experience-section, .project-section {
-        padding: 15px;
-        border: 1px solid #ddd;
-        border-radius: 10px;
-        background: #fdfdfd;
-    }
-
-    .userinfo-section h2, .education-section h2, .experience-section h2, .project-section h2 {
-        color: #555;
+    /* Form action buttons */
+    .form-action-buttons {
+        display: flex;
+        gap: 10px;
+        margin-top: 20px;
+        margin-bottom: 40px;
     }
 
     /* Input field styling */
     input, select, textarea {
         width: 100%;
         padding: 10px;
-        margin: 10px 0;
-        border: 1px solid #ccc;
+        background-color: #ffffff;
+        border: 1px solid #d1d5db;
         border-radius: 5px;
-        font-size: 1rem;
+        color: #374151;
+        font-size: 16px;
     }
 
     input:focus, select:focus, textarea:focus {
         outline: none;
-        border-color: #007bff;
-        box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+        border-color: #2563eb;
+        box-shadow: 0 0 5px rgba(37, 99, 235, 0.2);
     }
 
-    /* Smooth transitions for buttons */
-    .btn {
-        transition: all 0.3s ease;
+    /* Checkbox styling */
+    .form-check-input {
+        width: auto !important;
+        margin-right: 10px;
     }
 
-    .btn:hover {
-        transform: scale(1.05);
+    /* For multi-column layouts in personal info */
+    .grid-row {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 20px;
     }
 
+    @media (max-width: 768px) {
+        .grid-row {
+            grid-template-columns: 1fr;
+        }
+    }
+    
+    /* Vertical layout for personal info */
+    .personal-info-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .personal-info-container .form-field {
+        width: 90%;
+        max-width: 90%;
+        margin-bottom: 15px;
+    }
+
+    /* Special styles for forms with current job checkbox */
     [id^="div_id_experience-"][id$="-current_role"] {
         display: flex;
         align-items: center;
@@ -342,13 +588,14 @@
 
     [id^="div_id_experience-"][id$="-current_role"] .form-check-input {
         order: 2; 
-        width: 1rem;
+        width: 1rem !important;
     }
 
     [id^="div_id_experience-"][id$="-current_role"] .form-check-label {
         order: 1; 
     }
 
+    /* Loading indicator */
     .my-indicator {
         display: inline-block;
         width: 24px;
@@ -361,8 +608,8 @@
         display: none;
         width: 24px;
         height: 24px;
-        border: 3px solid #007bff;
-        border-top: 3px solid #e0e0e0;
+        border: 3px solid #2563eb;
+        border-top: 3px solid #e5e7eb;
         border-radius: 50%;
         animation: spin 1s linear infinite;
         position: absolute;
@@ -381,10 +628,117 @@
         opacity: 0.6;
         pointer-events: none;
     }
+    
+    /* Scrollbar styling */
+    ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+    
+    ::-webkit-scrollbar-track {
+        background: #f1f5f9;
+        border-radius: 4px;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 4px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+    }
+    
+    /* Transitions */
+    .form-section-tab, .btn, .card, input, textarea, select {
+        transition: all 0.2s ease-in-out;
+    }
+    
+    /* Form action button positioning */
+    .form-action-buttons {
+        position: sticky;
+        bottom: 0;
+        background: #f8fafc;
+        padding: 15px 0;
+        z-index: 100;
+        border-top: 1px solid #e2e8f0;
+    }
+    
+    /* Date inputs styling */
+    input[type="month"] {
+        height: 38px;
+    }
+    
+    /* Section headers */
+    .section-header {
+        margin-bottom: 15px;
+        padding-bottom: 5px;
+        border-bottom: 1px solid #e2e8f0;
+        color: #374151;
+        font-size: 18px;
+    }
+    
+    /* Responsive adjustments */
+    @media (max-width: 600px) {
+        .app-header {
+            flex-direction: column;
+            padding: 15px;
+        }
+        
+        .app-actions {
+            margin-top: 10px;
+        }
+        
+        .form-sections {
+            justify-content: space-between;
+        }
+        
+        .form-section-tab {
+            padding: 8px 10px;
+            font-size: 14px;
+        }
+    }
 </style>
 
 <script>
-    // Dynamic ability for education form
+    /**
+     * Handles tab navigation between form sections
+     */
+    document.addEventListener('DOMContentLoaded', function() {
+        // Tab navigation
+        const tabs = document.querySelectorAll('.form-section-tab');
+        
+        tabs.forEach(tab => {
+            tab.addEventListener('click', function() {
+                // Remove active class from all tabs and sections
+                document.querySelectorAll('.form-section-tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.section-content').forEach(s => s.classList.remove('active'));
+                
+                // Add active class to clicked tab and corresponding section
+                const sectionId = this.getAttribute('data-section');
+                this.classList.add('active');
+                document.getElementById(sectionId).classList.add('active');
+            });
+        });
+        
+        // Download dropdown functionality
+        const downloadButton = document.getElementById('downloadButton');
+        const downloadOptions = document.getElementById('downloadOptions');
+        
+        downloadButton.addEventListener('click', function(e) {
+            e.stopPropagation();
+            downloadOptions.classList.toggle('show');
+        });
+        
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function() {
+            downloadOptions.classList.remove('show');
+        });
+    });
+
+    /**
+     * Handles dynamic form management for the Education section
+     */
     const EDUCATION_SELECTORS = {
         form: '.education-form',
         container: '#education-container',
@@ -401,38 +755,39 @@
         template: document.querySelector(EDUCATION_SELECTORS.template)
     }
 
-    let educationFormIndex = educationElements.forms.length - 1
-    let educationFormCount = educationElements.forms.length
+    let educationFormIndex = educationElements.forms.length - 1;
+    let educationFormCount = educationElements.forms.length;
 
-    educationElements.addButton.addEventListener('click', addEducationForm)
+    educationElements.addButton.addEventListener('click', addEducationForm);
 
     function addEducationForm(e) {
-        e.preventDefault()
+        e.preventDefault();
         
         try {
-            const template = educationElements.template
-            const newForm = template.content.cloneNode(true)
+            const template = educationElements.template;
+            const newForm = template.content.cloneNode(true);
     
-            educationFormIndex++
-            educationFormCount++
+            educationFormIndex++;
+            educationFormCount++;
             newForm.querySelector('.education-form').innerHTML =
                 newForm.querySelector('.education-form').innerHTML.replace(
                     RegExp('education-__prefix__-', 'g'),
                     `education-${educationFormIndex}-`
-            )
+            );
     
-            educationElements.container.insertBefore(newForm, educationElements.addButton)
-            educationElements.totalForms.setAttribute('value', `${educationFormCount}`)
+            educationElements.container.insertBefore(newForm, educationElements.addButton);
+            educationElements.totalForms.setAttribute('value', `${educationFormCount}`);
 
-            // reload htmx to recognize new form
+            // Reload htmx to recognize new form
             htmx.process(educationElements.container);
-
         } catch (error) {
-            console.error('Error adding education form:', error)
+            console.error('Error adding education form:', error);
         }
     }
 
-    // Dynamic ability for experience form
+    /**
+     * Handles dynamic form management for the Experience section
+     */
     const EXPERIENCE_SELECTORS = {
         form: '.experience-form',
         container: '#experience-container',
@@ -449,38 +804,39 @@
         template: document.querySelector(EXPERIENCE_SELECTORS.template)
     }
 
-    let experienceFormIndex = experienceElements.forms.length - 1
-    let experienceFormCount = experienceElements.forms.length
+    let experienceFormIndex = experienceElements.forms.length - 1;
+    let experienceFormCount = experienceElements.forms.length;
 
-    experienceElements.addButton.addEventListener('click', addExperienceForm)
+    experienceElements.addButton.addEventListener('click', addExperienceForm);
 
     function addExperienceForm(e) {
-        e.preventDefault()
+        e.preventDefault();
         
         try {
-            const template = experienceElements.template
-            const newForm = template.content.cloneNode(true)
+            const template = experienceElements.template;
+            const newForm = template.content.cloneNode(true);
     
-            experienceFormIndex++
-            experienceFormCount++
+            experienceFormIndex++;
+            experienceFormCount++;
             newForm.querySelector('.experience-form').innerHTML =
                 newForm.querySelector('.experience-form').innerHTML.replace(
                     RegExp('experience-__prefix__-', 'g'),
                     `experience-${experienceFormIndex}-`
-            )
+            );
     
-            experienceElements.container.insertBefore(newForm, experienceElements.addButton)
-            experienceElements.totalForms.setAttribute('value', `${experienceFormCount}`)
+            experienceElements.container.insertBefore(newForm, experienceElements.addButton);
+            experienceElements.totalForms.setAttribute('value', `${experienceFormCount}`);
 
-            // reload htmx to recognize new form
+            // Reload htmx to recognize new form
             htmx.process(experienceElements.container);
-
         } catch (error) {
-            console.error('Error adding experience form:', error)
+            console.error('Error adding experience form:', error);
         }
     }
     
-    // Dynamic ability for project form
+    /**
+     * Handles dynamic form management for the Project section
+     */
     const PROJECT_SELECTORS = {
         form: '.project-form',
         container: '#project-container',
@@ -497,130 +853,97 @@
         template: document.querySelector(PROJECT_SELECTORS.template)
     }
 
-    let projectFormIndex = projectElements.forms.length - 1
-    let projectFormCount = projectElements.forms.length
+    let projectFormIndex = projectElements.forms.length - 1;
+    let projectFormCount = projectElements.forms.length;
 
-    projectElements.addButton.addEventListener('click', addProjectForm)
+    projectElements.addButton.addEventListener('click', addProjectForm);
 
     function addProjectForm(e) {
-        e.preventDefault()
+        e.preventDefault();
         
         try {
-            const template = projectElements.template
-            const newForm = template.content.cloneNode(true)
+            const template = projectElements.template;
+            const newForm = template.content.cloneNode(true);
     
-            projectFormIndex++
-            projectFormCount++
+            projectFormIndex++;
+            projectFormCount++;
             newForm.querySelector('.project-form').innerHTML =
                 newForm.querySelector('.project-form').innerHTML.replace(
                     RegExp('project-__prefix__-', 'g'),
                     `project-${projectFormIndex}-`
-            )
+            );
     
-            projectElements.container.insertBefore(newForm, projectElements.addButton)
-            projectElements.totalForms.setAttribute('value', `${projectFormCount}`)
+            projectElements.container.insertBefore(newForm, projectElements.addButton);
+            projectElements.totalForms.setAttribute('value', `${projectFormCount}`);
 
-            // reload htmx to recognize new form
+            // Reload htmx to recognize new form
             htmx.process(projectElements.container);
-
         } catch (error) {
-            console.error('Error adding project form:', error)
+            console.error('Error adding project form:', error);
         }
     }
     
+    /**
+     * Event listener for remove buttons across all form sections
+     */
     document.addEventListener('click', function(e) {
+        // Handle education form removal
         if (e.target && e.target.classList.contains('remove-education')) {
-            e.target.closest('.card').remove()
+            e.target.closest('.card').remove();
             
-            const forms = document.querySelectorAll('.education-form')
-
-            /*
-            TODO
-            Bu bölüm, element için remove dediğimizde, formdaki diğer elementlerin
-            içeriğini beklenmedik şekilde sıfırlıyor.
-            forms.forEach((form, index) => {
-                form.innerHTML = form.innerHTML.replace(
-                    RegExp('education-\\d+-', 'g'),
-                    `education-${index}-`
-                )
-            })
-   
-             */
-
+            const forms = document.querySelectorAll('.education-form');
+            
             // Update total forms count
-            educationElements.totalForms.setAttribute('value', forms.length)
-            educationFormIndex = forms.length - 1
-            educationFormCount = forms.length
+            educationElements.totalForms.setAttribute('value', forms.length);
+            educationFormCount = forms.length;
         }
         
+        // Handle experience form removal
         if (e.target && e.target.classList.contains('remove-experience')) {
-            e.target.closest('.card').remove()
+            e.target.closest('.card').remove();
             
-            const forms = document.querySelectorAll('.experience-form')
-
-            /*
-            TODO
-            Bu bölüm, element için remove dediğimizde, formdaki diğer elementlerin
-            içeriğini beklenmedik şekilde sıfırlıyor.
-            forms.forEach((form, index) => {
-                form.innerHTML = form.innerHTML.replace(
-                    RegExp('experience-\\d+-', 'g'),
-                    `experience-${index}-`
-                )
-            })
-            */
+            const forms = document.querySelectorAll('.experience-form');
 
             // Update total forms count
-            experienceElements.totalForms.setAttribute('value', forms.length)
-            experienceFormIndex = forms.length - 1
-            experienceFormCount = forms.length
+            experienceElements.totalForms.setAttribute('value', forms.length);
+            experienceFormCount = forms.length;
         }
         
+        // Handle project form removal
         if (e.target && e.target.classList.contains('remove-project')) {
-            e.target.closest('.card').remove()
+            e.target.closest('.card').remove();
             
-            const forms = document.querySelectorAll('.project-form')
-            
-            /*
-            TODO
-            Bu bölüm, element için remove dediğimizde, formdaki diğer elementlerin
-            içeriğini beklenmedik şekilde sıfırlıyor.
-            
-            forms.forEach((form, index) => {
-                form.innerHTML = form.innerHTML.replace(
-                    RegExp('project-\\d+-', 'g'),
-                    `project-${index}-`
-                )
-            })
-            */
+            const forms = document.querySelectorAll('.project-form');
             
             // Update total forms count
-            projectElements.totalForms.setAttribute('value', forms.length)
-            projectFormIndex = forms.length - 1
-            projectFormCount = forms.length
+            projectElements.totalForms.setAttribute('value', forms.length);
+            projectFormCount = forms.length;
         }
     });
 
+    /**
+     * Opens the preview popup with generated resume HTML
+     */
     function openPopup() {
         const popup = document.getElementById('popup');
         const htmlPreview = document.getElementById('htmlPreview');
 
-        // Form elemanını seç ve FormData oluştur
+        // Select the form and create FormData
         const form = document.querySelector('form');
         const formData = new FormData(form);
 
-        // CSRF token'ını formdan al
+        // Get CSRF token from the form
         const csrfToken = form.querySelector('[name=csrfmiddlewaretoken]').value;
 
-        // Django'dan HTML içeriğini al
-        fetch("{% url 'resume:preview-resume-form' %}", {
-        method: "POST",
-        headers: {
-            "X-CSRFToken": csrfToken
-        },
-        body: formData
+        // Fetch HTML content from Django
+        fetch("{% url 'resume:preview_resume_form' %}", {
+            method: "POST",
+            headers: {
+                "X-CSRFToken": csrfToken
+            },
+            body: formData
         })
-        .then(async response => {""
+        .then(async response => {
             let data;
             try {
                 data = await response.json();
@@ -638,6 +961,7 @@
                 console.error("Preview Error: Server returned invalid JSON", text);
                 return;
             }
+            
             if (data.html) {
                 htmlPreview.srcdoc = data.html;
                 popup.classList.add('show');
@@ -665,6 +989,9 @@
         })
     }
 
+    /**
+     * Closes the preview popup when clicking outside of it or pressing ESC
+     */
     window.onclick = function(event) {
         const popup = document.getElementById('popup');
         if (event.target == popup) {
@@ -672,24 +999,43 @@
         }
     }
 
-    // Disable Enhance button while htmx request is in progress
-    document.body.addEventListener('htmx:beforeRequest', function(evt) {
-        const trigger = evt.detail.elt;
-        if (trigger && (trigger.classList.contains('enhance-experience') || trigger.classList.contains('enhance-project'))) {
-            trigger.disabled = true;
-            // Optional: add a class for styling if needed
-            trigger.classList.add('htmx-enhance-disabled');
-        }
-    });
-    document.body.addEventListener('htmx:afterRequest', function(evt) {
-        const trigger = evt.detail.elt;
-        if (trigger && (trigger.classList.contains('enhance-experience') || trigger.classList.contains('enhance-project'))) {
-            trigger.disabled = false;
-            trigger.classList.remove('htmx-enhance-disabled');
+    // ESC key to close preview
+    document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') {
+            const popup = document.getElementById('popup');
+            if (popup.classList.contains('show')) {
+                popup.classList.remove('show');
+            }
         }
     });
 
-    // Disable all buttons while any Enhance button is loading (htmx request in progress)
+    /**
+     * Handles form submission for PDF or TEX download
+     * @param {string} format - The format to download ('pdf' or 'tex')
+     */
+    function submitForm(format = 'pdf') {
+        // Add a hidden input for the format
+        const formatInput = document.createElement('input');
+        formatInput.type = 'hidden';
+        formatInput.name = 'export_format';
+        formatInput.value = format;
+        
+        const form = document.getElementById('resume-form');
+        
+        // Remove any existing format input to avoid duplicates
+        const existingFormat = form.querySelector('input[name="export_format"]');
+        if (existingFormat) {
+            form.removeChild(existingFormat);
+        }
+        
+        // Add the new format input and submit
+        form.appendChild(formatInput);
+        form.submit();
+    }
+
+    /**
+     * HTMX request handling - disable buttons during enhancement
+     */
     let enhanceLoadingCount = 0;
 
     document.body.addEventListener('htmx:beforeRequest', function(evt) {
