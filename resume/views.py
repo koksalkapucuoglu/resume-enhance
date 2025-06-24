@@ -15,19 +15,26 @@ from django.views.decorators.csrf import csrf_exempt
 
 from PyPDF2 import PdfReader
 
-from resume.forms import UserInfoForm, EducationForm, ExperienceForm, ProjectForm
+from resume.forms import (
+    UserInfoForm, EducationForm, ExperienceForm, ProjectForm
+)
 from resume.openai_engine import (
     enhance_resume_experience,
     enhance_project_description,
     extract_resume_data,
     extract_linkedin_resume_data,
 )
-from latex_renderer import TexToPdfConverter, latex_handler
+from latex_renderer import (
+    TexToPdfConverter, latex_handler
+)
 
 
 EducationFormSet = formset_factory(EducationForm, extra=0)
 ExperienceFormSet = formset_factory(ExperienceForm, extra=0)
 ProjectFormSet = formset_factory(ProjectForm, extra=0)
+
+def index(request):
+    return render(request, "index.html")
 
 
 def get_init_values_for_resume_form():
@@ -39,6 +46,8 @@ def get_init_values_for_resume_form():
             "full_name": "firstname lastname",
             "email": "firstname.lastname@gmail.com",
             "phone": "+1 123 456 7890",
+            "github": "github.com/yourusername",
+            "linkedin": "linkedin.com/in/yourprofile",
             "skills": "Django, Flask, Fastapi",
         }
     )
@@ -90,21 +99,21 @@ def get_init_values_for_resume_form():
         initial=[
             {
                 "name": "Hiring Search Tool",
-                "description": """Built a tool to search for Hiring Managers and Recruiters by using ReactJS, NodeJS, Firebase
-    and boolean queries. Over 25000 people have used it so far, with 5000+ queries being saved and shared, and search
-    results even better than LinkedIn.""",
+                "description": """Built a tool to search for Hiring Managers and Recruiters by using ReactJS, NodeJS, Firebase 
+                and boolean queries. Over 25000 people have used it so far, with 5000+ queries being saved and shared, and search 
+                results even better than LinkedIn.""",
                 "link": None,
             },
             {
                 "name": "Short Project Title.",
-                "description": """Build a project that does something and had quantified success using A, B, and C. This
-    project’s description spans two lines and also won an award.""",
+                "description": """Build a project that does something and had quantified success using A, B, and C. This 
+                project’s description spans two lines and also won an award.""",
                 "link": None,
             },
             {
                 "name": "Short Project Title.",
-                "description": """Build a project that does something and had quantified success using A, B, and C. This
-    project’s description spans two lines and also won an award.""",
+                "description": """Build a project that does something and had quantified success using A, B, and C. This 
+                project’s description spans two lines and also won an award.""",
                 "link": None,
             },
         ],
@@ -214,10 +223,13 @@ class ResumeFormView(TemplateView):
             "experience_formset": experience_formset,
             "project_formset": project_formset,
         }
-        # context = get_init_values_for_resume_form()
-        extracted_json = request.session.pop("extracted_json", None)
+        # extracted_json = request.session.pop("extracted_json", None)
+        extracted_json = None
         if extracted_json:
             context = populate_formsets_from_extracted_json(extracted_json)
+        else:
+            # Test with initial values
+            context = get_init_values_for_resume_form()
 
         return self.render_to_response(context)
 
@@ -293,20 +305,35 @@ class ResumeFormView(TemplateView):
             }
 
             try:
+                # Get the export format from the request
+                export_format = self.request.POST.get("export_format", "pdf").lower()
+                
+                # Render the TEX template
                 tex_file = latex_handler.render_tex_template(
                     template_name=base_tex_template,
                     context=tex_context,
                     output_path=output_tex,
                 )
-                pdf_file_path = TexToPdfConverter(tex_file).render_pdf()
-
-                response = FileResponse(
-                    open(pdf_file_path, "rb"), content_type="application/pdf"
-                )
-                response["Content-Disposition"] = 'inline; filename="resume.pdf"'
-
-                os.remove(pdf_file_path)
-                return response
+                
+                if export_format == "tex":
+                    # For TEX format, return the TEX file
+                    with open(tex_file, 'rb') as f:
+                        tex_content = f.read()
+                    
+                    response = HttpResponse(tex_content, content_type='application/x-tex')
+                    response['Content-Disposition'] = 'attachment; filename="resume.tex"'
+                    return response
+                else:
+                    # Default: PDF format
+                    pdf_file_path = TexToPdfConverter(tex_file).render_pdf()
+                    
+                    response = FileResponse(
+                        open(pdf_file_path, "rb"), content_type="application/pdf"
+                    )
+                    response["Content-Disposition"] = 'inline; filename="resume.pdf"'
+                    
+                    os.remove(pdf_file_path)
+                    return response
             except Exception as e:
                 messages.error(self.request, f"Failed to render PDF: {str(e)}")
                 return redirect("resume:resume_form")
@@ -488,10 +515,6 @@ def preview_resume_form(request):
         return JsonResponse({"error": "Invalid request", "form_errors": errors}, status=400)
 
 
-def index(request):
-    return render(request, "index.html")
-
-
 @csrf_exempt
 def upload_cv(request):
     if request.method == "POST":
@@ -528,7 +551,7 @@ def upload_cv(request):
     return redirect("resume:index")
 
 
-def upload_linkedin(request):
+def upload_linkedin_cv(request):
     if request.method == "POST" and request.FILES.get("linkedin_file"):
         linkedin_file = request.FILES["linkedin_file"]
         print("[INFO]: CV file uploaded:", linkedin_file.name)
