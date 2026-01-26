@@ -13,8 +13,9 @@
     <header class="app-header">
         <h1 class="app-title">Resume Generator & Enhancer</h1>
         <div class="app-actions">
-            <select class="template-selector" id="template-selector">
+            <select class="template-selector" id="template-selector" name="template_selector">
                 <option value="faangpath-simple">Faangpath Simple</option>
+                <option value="test-template">Test Template</option>
             </select>
             <div class="dropdown">
                 <button type="button" class="btn btn-success download-btn" id="downloadButton">
@@ -24,6 +25,7 @@
                     Download
                 </button>
                 <div class="dropdown-menu" id="downloadOptions">
+                    <button type="button" class="dropdown-item" onclick="testFaangpathTemplate()">Test Faangpath Template</button>
                     <button type="button" class="dropdown-item" onclick="submitForm('pdf')">Save as PDF</button>
                     <button type="button" class="dropdown-item" onclick="submitForm('tex')">Save as TEX</button>
                 </div>
@@ -32,6 +34,11 @@
     </header>
 
     <div class="page-container">
+        {% for message in messages %}
+            <div class="alert alert-error">
+                {{ message }}
+            </div>
+        {% endfor %}
         <form method="post" id="resume-form">
             {% csrf_token %}
 
@@ -149,13 +156,6 @@
         </form>
     </div>
     
-    <!-- Preview pop-up -->
-    <div class="popup" id="popup">
-        <div class="popup-content">
-            <iframe id="htmlPreview" srcdoc="" frameborder="0"></iframe>
-        </div>
-    </div>
-
 <!-- Preview pop-up -->
 <div class="popup" id="popup">
     <div class="popup-content">
@@ -266,6 +266,31 @@
         border-radius: 5px;
         padding: 10px 15px;
         font-size: 14px;
+    }
+
+    /* Template selector container styling */
+    .template-selector-container {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 20px;
+        padding: 15px;
+        background-color: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+    }
+    
+    .template-selector-label {
+        font-weight: 600;
+        color: #374151;
+        margin: 0;
+        white-space: nowrap;
+    }
+    
+    .template-selector-container .template-selector {
+        margin: 0;
+        flex: 1;
+        max-width: 200px;
     }
 
     /* Main content area */
@@ -483,8 +508,8 @@
 
     .popup-content {
         width: 90%;
-        max-width: 800px;
-        height: 90%;
+        max-width: 650px;
+        height: 85vh;
         margin: 0 auto;
         border-radius: 10px;
         overflow: hidden;
@@ -499,15 +524,17 @@
         height: 100%;
         border: none;
     }
-
-    /* A4 aspect ratio for preview */
     @media (min-width: 768px) {
         .popup-content {
-            width: 70%;
-            max-width: 600px;
+            width: 90%;
             height: 85vh;
-            /* A4 aspect ratio approximation */
-            aspect-ratio: 0.707;
+        }
+    }
+    @media (min-width: 1260px) {
+        .popup-content {
+            width: 90%;
+            max-width: 650px;
+            height: 85vh;
         }
     }
 
@@ -649,6 +676,21 @@
         background: #94a3b8;
     }
     
+    /* Alert styling */
+    .alert {
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: 5px;
+        border: 1px solid transparent;
+        font-size: 14px;
+    }
+    
+    .alert-error {
+        background-color: #fef2f2;
+        border-color: #fecaca;
+        color: #b91c1c;
+    }
+    
     /* Transitions */
     .form-section-tab, .btn, .card, input, textarea, select {
         transition: all 0.2s ease-in-out;
@@ -734,6 +776,33 @@
         document.addEventListener('click', function() {
             downloadOptions.classList.remove('show');
         });
+        
+        // Handle regular form submission to include template selector
+        const form = document.getElementById('resume-form');
+        if (form) {
+            form.addEventListener('submit', function(e) {
+                // Get template selector value from header
+                const headerTemplateSelector = document.getElementById('template-selector');
+                const templateSelectorValue = headerTemplateSelector ? headerTemplateSelector.value : 'faangpath-simple';
+                
+                console.log('Form submission - Template selector value:', templateSelectorValue);
+                
+                // Add hidden input for template selector
+                const templateInput = document.createElement('input');
+                templateInput.type = 'hidden';
+                templateInput.name = 'template_selector';
+                templateInput.value = templateSelectorValue;
+                
+                // Remove any existing template input to avoid duplicates
+                const existingTemplate = form.querySelector('input[name="template_selector"]');
+                if (existingTemplate) {
+                    form.removeChild(existingTemplate);
+                }
+                
+                // Add the template input
+                form.appendChild(templateInput);
+            });
+        }
     });
 
     /**
@@ -1014,23 +1083,86 @@
      * @param {string} format - The format to download ('pdf' or 'tex')
      */
     function submitForm(format = 'pdf') {
-        // Add a hidden input for the format
-        const formatInput = document.createElement('input');
-        formatInput.type = 'hidden';
-        formatInput.name = 'export_format';
-        formatInput.value = format;
-        
-        const form = document.getElementById('resume-form');
-        
-        // Remove any existing format input to avoid duplicates
-        const existingFormat = form.querySelector('input[name="export_format"]');
-        if (existingFormat) {
-            form.removeChild(existingFormat);
+        try {
+            const form = document.getElementById('resume-form');
+            
+            if (!form) {
+                console.error('Form not found');
+                alert('Form not found. Please try again.');
+                return;
+            }
+            
+            console.log('Submitting form with format:', format);
+            
+            // Get template selector value from header
+            const headerTemplateSelector = document.getElementById('template-selector');
+            const templateSelectorValue = headerTemplateSelector ? headerTemplateSelector.value : 'faangpath-simple';
+            
+            console.log('Template selector value:', templateSelectorValue);
+            
+            // Add hidden input for template selector
+            const templateInput = document.createElement('input');
+            templateInput.type = 'hidden';
+            templateInput.name = 'template_selector';
+            templateInput.value = templateSelectorValue;
+            
+            // Add hidden input for export format
+            const formatInput = document.createElement('input');
+            formatInput.type = 'hidden';
+            formatInput.name = 'export_format';
+            formatInput.value = format;
+            
+            // Remove any existing inputs to avoid duplicates
+            const existingTemplate = form.querySelector('input[name="template_selector"]');
+            if (existingTemplate) {
+                form.removeChild(existingTemplate);
+            }
+            const existingFormat = form.querySelector('input[name="export_format"]');
+            if (existingFormat) {
+                form.removeChild(existingFormat);
+            }
+            
+            // Add the new inputs and submit
+            form.appendChild(templateInput);
+            form.appendChild(formatInput);
+            
+            form.submit();
+            
+        } catch (error) {
+            console.error('Error submitting form:', error);
+            alert('Error submitting form. Please try again.');
         }
-        
-        // Add the new format input and submit
-        form.appendChild(formatInput);
-        form.submit();
+    }
+
+    /**
+     * Test function to render the faangpath template
+     */
+    function testFaangpathTemplate() {
+        try {
+            const form = document.getElementById('resume-form');
+            
+            if (!form) {
+                console.error('Form not found');
+                alert('Form not found. Please try again.');
+                return;
+            }
+            
+            console.log('Testing faangpath template');
+            
+            // Change form action to test URL
+            const originalAction = form.action;
+            form.action = "{% url 'resume:test_faangpath' %}";
+            
+            // Submit form
+            form.submit();
+            
+            // Restore original action (though this won't execute due to form submission)
+            form.action = originalAction;
+            
+        } catch (error) {
+            console.error('Error testing template:', error);
+            alert('Error testing template. Please try again.');
+        }
     }
 
     /**

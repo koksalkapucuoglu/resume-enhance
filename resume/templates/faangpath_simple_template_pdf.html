@@ -1,0 +1,383 @@
+{% load crispy_forms_tags %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resume - {{ user_data.full_name }}</title>
+</head>
+<body>
+    <div class="pdf-container">
+        <div class="pdf-content">
+            <!-- Header Section -->
+            <header class="resume-header">
+                <div class="header-content">
+                    <h1 class="full-name">{{ user_data.full_name|upper }}</h1>
+                    
+                    <div class="contact-details">
+                        <!-- Email and Phone -->
+                        <div class="contact-row">
+                            <span class="contact-item email">{{ user_data.email }}</span>
+                            {% if user_data.phone %}
+                                <span class="contact-separator">•</span>
+                                <span class="contact-item phone">{{ user_data.phone }}</span>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Social Links -->
+                        {% if user_data.linkedin or user_data.github %}
+                        <div class="contact-row social-row">
+                            {% if user_data.linkedin %}
+                                <span class="contact-item linkedin">{{ user_data.linkedin }}</span>
+                            {% endif %}
+                            {% if user_data.linkedin and user_data.github %}
+                                <span class="contact-separator">•</span>
+                            {% endif %}
+                            {% if user_data.github %}
+                                <span class="contact-item github">{{ user_data.github }}</span>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </header>
+
+            <!-- Education Section -->
+            {% if education_data %}
+            <section class="resume-section">
+                <h2 class="section-header">EDUCATION</h2>
+                <hr class="section-line">
+                {% for edu in education_data %}
+                    <div class="education-item">
+                        <div class="education-line">
+                            <div class="education-left">
+                                <span class="degree-field">{{ edu.degree }} of {{ edu.field_of_study }},</span> 
+                                <span class="institution">{{ edu.school }}</span>
+                            </div>
+                            <span class="education-date">{{ edu.start_date|date:"Y" }} - {{ edu.end_date|date:"Y" }}</span>
+                        </div>
+                    </div>
+                {% endfor %}
+            </section>
+            {% endif %}
+
+            <!-- Skills Section -->
+            {% if user_data.skills %}
+            <section class="resume-section">
+                <h2 class="section-header">SKILLS</h2>
+                <hr class="section-line">
+                <div class="skills-content">
+                    {{ user_data.skills }}
+                </div>
+            </section>
+            {% endif %}
+
+            <!-- Experience Section -->
+            {% if experience_data %}
+            <section class="resume-section">
+                <h2 class="section-header">EXPERIENCE</h2>
+                <hr class="section-line">
+                {% for exp in experience_data %}
+                    <div class="experience-item">
+                        <div class="experience-header">
+                            <div class="experience-left">
+                                <span class="position-title">{{ exp.title }}</span>
+                                <span class="company-name">{{ exp.company }}</span>
+                            </div>
+                            <span class="experience-date">
+                                {{ exp.start_date|date:"M Y" }} - 
+                                {% if exp.current_role %}
+                                    Present
+                                {% else %}
+                                    {{ exp.end_date|date:"M Y" }}
+                                {% endif %}
+                            </span>
+                        </div>
+                        {% if exp.description %}
+                            <ul class="experience-description">
+                            {% for desc in exp.description %}
+                                <li>{{ desc }}</li>
+                            {% endfor %}
+                            </ul>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </section>
+            {% endif %}
+
+            <!-- Projects & Publications Section -->
+            {% if project_data %}
+            <section class="resume-section">
+                <h2 class="section-header">PROJECTS & PUBLICATIONS</h2>
+                <hr class="section-line">
+                {% for project in project_data %}
+                    <div class="project-item">
+                        <div class="project-content">
+                            <span class="project-name">{{ project.name }}.</span>
+                            <span class="project-description">{{ project.description }}</span>
+                            {% if project.link %}
+                                <span class="project-link">{{ project.link }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endfor %}
+            </section>
+            {% endif %}
+
+            <!-- Other sections will be added piece by piece -->
+        </div>
+    </div>
+</body>
+<style>
+@page {
+    size: A4;
+    margin: 0.3in;
+    
+    @top-center {
+        content: "";
+    }
+    
+    @bottom-center {
+        content: "";
+    }
+}
+
+body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 0;
+      font-size:15px;
+}
+
+.pdf-container {
+    background-color: white;
+    overflow: auto;
+}
+
+.pdf-content {
+    padding: 1rem;
+    height: 100vh;
+}
+
+/* Header Section Styles */
+.resume-header {
+    text-align: center;
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.3rem;
+}
+
+.header-content {
+    max-width: 100%;
+}
+
+.full-name {
+    font-size: 24px;
+    font-weight: bold;
+    margin: 0 0 0.3rem 0;
+    letter-spacing: 2px;
+    color: #000;
+    line-height: 1.2;
+}
+
+.contact-details {
+    font-size: 11pt;
+    color: #333;
+    line-height: 1.5;
+}
+
+.contact-row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 0.1rem;
+}
+
+.contact-row:last-child {
+    margin-bottom: 0;
+}
+
+.contact-item {
+    color: #333;
+    text-decoration: none;
+    margin: 0 0.2rem;
+    font-size: 11pt;
+}
+
+.contact-item.email,
+.contact-item.phone {
+    font-weight: normal;
+    color: #000;
+}
+
+.contact-item.linkedin,
+.contact-item.github {
+    color: #0066cc;
+    font-weight: normal;
+}
+
+.contact-separator {
+    margin: 0 0.3rem;
+    color: #333;
+    font-weight: normal;
+}
+
+.social-row {
+    margin-top: 0rem;
+}
+
+/* Page break and print optimization */
+.resume-header {
+    page-break-inside: avoid;
+}
+
+/* Section Styles */
+.resume-section {
+    margin-bottom: 0.8rem;
+}
+
+.section-header {
+    font-size: 11pt;
+    font-weight: bold;
+    margin: 0 0 0.3rem 0;
+    color: #000;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.section-line {
+    border: none;
+    border-top: 1px solid #000;
+    margin: 0 0 0.2rem 0;
+    padding: 0;
+}
+
+/* Education Section */
+.education-item {
+    margin-bottom: 0.2rem;
+}
+
+.education-line {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 11pt;
+    line-height: 1.2;
+}
+
+.education-left {
+    flex: 1;
+    margin-right: 1rem;
+}
+
+.degree-field {
+    font-weight: bold;
+    color: #000;
+    margin-right: 0.3rem;
+}
+
+.institution {
+    font-weight: normal;
+    color: #000;
+}
+
+.education-date {
+    font-weight: normal;
+    color: #000;
+    white-space: nowrap;
+    margin-left: auto;
+    padding-left: 1rem;
+}
+
+/* Skills Section */
+.skills-content {
+    font-size: 11pt;
+    line-height: 1.3;
+    color: #000;
+    text-align: justify;
+}
+
+/* Experience Section */
+.experience-item {
+    margin-bottom: 0.8rem;
+}
+
+.experience-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 0.3rem;
+}
+
+.experience-left {
+    flex: 1;
+    margin-right: 1rem;
+}
+
+.position-title {
+    font-weight: bold;
+    font-size: 11pt;
+    color: #000;
+    display: block;
+    margin-bottom: 0.1rem;
+}
+
+.company-name {
+    font-weight: normal;
+    font-size: 11pt;
+    color: #000;
+    display: block;
+}
+
+.experience-date {
+    font-weight: normal;
+    font-size: 11pt;
+    color: #000;
+    white-space: nowrap;
+}
+
+.experience-description {
+    margin: 0;
+    padding-left: 2rem;
+    list-style-type: disc;
+}
+
+.experience-description li {
+    font-size: 11pt;
+    line-height: 1.3;
+    margin-bottom: 0.2rem;
+    color: #000;
+}
+
+/* Projects & Publications Section */
+.project-item {
+    margin-bottom: 0.5rem;
+}
+
+.project-content {
+    font-size: 11pt;
+    line-height: 1.3;
+    color: #000;
+    text-align: justify;
+}
+
+.project-name {
+    font-weight: bold;
+    color: #000;
+}
+
+.project-description {
+    color: #000;
+    margin-left: 0.2rem;
+}
+
+.project-link {
+    color: #0066cc;
+    text-decoration: none;
+    font-size: 10pt;
+    margin-left: 0.3rem;
+}
+
+</style>
+</html>

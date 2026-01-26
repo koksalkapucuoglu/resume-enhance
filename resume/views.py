@@ -1,4 +1,3 @@
-import os
 import re
 import json
 import secrets
@@ -10,7 +9,7 @@ from django.forms import formset_factory
 from django.shortcuts import redirect, render
 from django.views.generic import TemplateView
 from django.views.decorators.http import require_http_methods
-from django.http import FileResponse, JsonResponse, HttpResponse
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from PyPDF2 import PdfReader
@@ -24,9 +23,8 @@ from resume.openai_engine import (
     extract_resume_data,
     extract_linkedin_resume_data,
 )
-from latex_renderer import (
-    TexToPdfConverter, latex_handler
-)
+from resume.services.pdf_service import ResumePdfService, PdfGenerationError
+from latex_renderer import latex_handler
 
 
 EducationFormSet = formset_factory(EducationForm, extra=0)
@@ -46,8 +44,8 @@ def get_init_values_for_resume_form():
             "full_name": "firstname lastname",
             "email": "firstname.lastname@gmail.com",
             "phone": "+1 123 456 7890",
-            "github": "github.com/yourusername",
-            "linkedin": "linkedin.com/in/yourprofile",
+            "github": "https://github.com/yourusername",
+            "linkedin": "https://linkedin.com/in/yourprofile",
             "skills": "Django, Flask, Fastapi",
         }
     )
@@ -102,7 +100,7 @@ def get_init_values_for_resume_form():
                 "description": """Built a tool to search for Hiring Managers and Recruiters by using ReactJS, NodeJS, Firebase 
                 and boolean queries. Over 25000 people have used it so far, with 5000+ queries being saved and shared, and search 
                 results even better than LinkedIn.""",
-                "link": None,
+                "link": "http://localhost:8000/resume/form",
             },
             {
                 "name": "Short Project Title.",
@@ -205,7 +203,7 @@ class ResumeFormView(TemplateView):
     Handle the display and processing of a resume form, including sections
     for user information, education, experience, and projects.
 
-    If valid form submission,generate a LaTeX-based PDF resume and return it as a downloadable file.
+    If valid form submission,generate a HTML based PDF resume or LaTeX file and return it as a downloadable file.
     """
 
     template_name = "resume_form.html"
@@ -216,15 +214,13 @@ class ResumeFormView(TemplateView):
         project_formset = ProjectFormSet(prefix="project")
         user_form = UserInfoForm()
 
-        # context = get_init_values_for_resume_form()
         context = {
             "user_form": user_form,
             "education_formset": education_formset,
             "experience_formset": experience_formset,
             "project_formset": project_formset,
         }
-        # extracted_json = request.session.pop("extracted_json", None)
-        extracted_json = None
+        extracted_json = request.session.pop("extracted_json", None)
         if extracted_json:
             context = populate_formsets_from_extracted_json(extracted_json)
         else:
@@ -259,10 +255,102 @@ class ResumeFormView(TemplateView):
                 experience_data.append(cleaned_data)
         return experience_data
 
+    
+    def _prepare_resume_context(self, user_form, education_formset, experience_formset, project_formset):
+        """
+        Prepare context data for resume generation.
+        
+        Args:
+            user_form: User information form
+            education_formset: Education formset
+            experience_formset: Experience formset  
+            project_formset: Project formset
+            
+        Returns:
+            dict: Context data for resume generation
+        """
+        user_data = user_form.cleaned_data
+        education_data = [
+            form.cleaned_data for form in education_formset if form.cleaned_data
+        ]
+
+        experience_data = self._split_experience_description(experience_formset)
+        project_data = [
+            form.cleaned_data for form in project_formset if form.cleaned_data
+        ]
+
+        return {
+            "user_data": user_data,
+            "education_data": education_data,
+            "experience_data": experience_data,
+            "project_data": project_data,
+            "generation_date": datetime.now().strftime("%Y-%m-%d"),
+        }
+
+    def _generate_tex_file(self, context):
+        """
+        Generate TEX file using the existing LaTeX handler.
+        
+        Args:
+            context: Resume data context
+            
+        Returns:
+            HttpResponse: TEX file download response
+        """
+        base_tex_template = self.request.POST.get(
+            "base_tex_template", settings.LATEX_SETTINGS["DEFAULT_TEMPLATE"]
+        )
+        output_tex = (
+            settings.LATEX_SETTINGS["TEMP_DIR"]
+            / f"resume_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{secrets.token_hex(4)}.tex"
+        )
+        
+        tex_file = latex_handler.render_tex_template(
+            template_name=base_tex_template,
+            context=context,
+            output_path=output_tex,
+        )
+        
+        with open(tex_file, 'rb') as f:
+            tex_content = f.read()
+        
+        response = HttpResponse(tex_content, content_type='application/x-tex')
+        response['Content-Disposition'] = 'attachment; filename="resume.tex"'
+        return response
+
+    def _generate_pdf_file(self, context):
+        """
+        Generate PDF file using WeasyPrint.
+        
+        Args:
+            context: Resume data context
+            
+        Returns:
+            HttpResponse: PDF file response
+        """
+        try:
+            # Get template selector from request
+            template_selector = self.request.POST.get('template_selector', 'faangpath-simple')
+            
+            resume_pdf_service = ResumePdfService()
+            pdf_bytes = resume_pdf_service.generate_resume_pdf(
+                resume_data=context,
+                template_selector=template_selector,
+                request=self.request
+            )
+            
+            response = HttpResponse(pdf_bytes, content_type="application/pdf")
+            response["Content-Disposition"] = 'inline; filename="resume.pdf"'
+            return response
+            
+        except PdfGenerationError as e:
+            messages.error(self.request, f"Failed to generate PDF: {str(e)}")
+            raise
+
     def post(self, *args, **kwargs):
         """
         Handles the form submission for the resume, processes the data,
-        and generates a LaTeX-based PDF resume.
+        and generates a HTML based PDF resume or LaTeX file.
 
         Returns:
             HttpResponse: The generated PDF file as a response,
@@ -273,78 +361,52 @@ class ResumeFormView(TemplateView):
         experience_formset = ExperienceFormSet(self.request.POST, prefix="experience")
         project_formset = ProjectFormSet(self.request.POST, prefix="project")
 
-        if (
-            user_form.is_valid()
-            and education_formset.is_valid()
-            and experience_formset.is_valid()
-            and project_formset.is_valid()
-        ):
-            user_data = user_form.cleaned_data
-            education_data = [
-                form.cleaned_data for form in education_formset if form.cleaned_data
-            ]
+        # Validate all forms and formsets
+        # If any form is invalid, re-render the form with errors
+        # and do not proceed to PDF generation
+        if not all([
+            user_form.is_valid(),
+            education_formset.is_valid(),
+            experience_formset.is_valid(),
+            project_formset.is_valid()
+        ]):
+            if not user_form.is_valid():
+                messages.error(self.request, "User information section has errors.")
+            if not education_formset.is_valid():
+                messages.error(self.request, "Education section has errors.")
+            if not experience_formset.is_valid():
+                messages.error(self.request, "Experience section has errors.")
+            if not project_formset.is_valid():
+                messages.error(self.request, "Project section has errors.")
 
-            experience_data = self._split_experience_description(experience_formset)
-            project_data = [
-                form.cleaned_data for form in project_formset if form.cleaned_data
-            ]
-
-            base_tex_template = self.request.POST.get(
-                "base_tex_template", settings.LATEX_SETTINGS["DEFAULT_TEMPLATE"]
-            )
-            output_tex = (
-                settings.LATEX_SETTINGS["TEMP_DIR"]
-                / f"resume_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{secrets.token_hex(4)}.tex"
-            )
-            tex_context = {
-                "user_data": user_data,
-                "education_data": education_data,
-                "experience_data": experience_data,
-                "project_data": project_data,
-                "generation_date": datetime.now().strftime("%Y-%m-%d"),
+            context = {
+                "user_form": user_form,
+                "education_formset": education_formset,
+                "experience_formset": experience_formset,
+                "project_formset": project_formset,
             }
+            return self.render_to_response(context)
 
-            try:
-                # Get the export format from the request
-                export_format = self.request.POST.get("export_format", "pdf").lower()
-                
-                # Render the TEX template
-                tex_file = latex_handler.render_tex_template(
-                    template_name=base_tex_template,
-                    context=tex_context,
-                    output_path=output_tex,
-                )
-                
-                if export_format == "tex":
-                    # For TEX format, return the TEX file
-                    with open(tex_file, 'rb') as f:
-                        tex_content = f.read()
-                    
-                    response = HttpResponse(tex_content, content_type='application/x-tex')
-                    response['Content-Disposition'] = 'attachment; filename="resume.tex"'
-                    return response
-                else:
-                    # Default: PDF format
-                    pdf_file_path = TexToPdfConverter(tex_file).render_pdf()
-                    
-                    response = FileResponse(
-                        open(pdf_file_path, "rb"), content_type="application/pdf"
-                    )
-                    response["Content-Disposition"] = 'inline; filename="resume.pdf"'
-                    
-                    os.remove(pdf_file_path)
-                    return response
-            except Exception as e:
-                messages.error(self.request, f"Failed to render PDF: {str(e)}")
-                return redirect("resume:resume_form")
-
-        context = {
-            "user_form": user_form,
-            "education_formset": education_formset,
-            "experience_formset": experience_formset,
-            "project_formset": project_formset,
-        }
-        return self.render_to_response(context)
+        # Prepare resume context
+        context = self._prepare_resume_context(
+            user_form, education_formset, experience_formset, project_formset
+        )
+        
+        # Check if this is a preview request for our new template
+        if self.request.POST.get("action") == "preview_faangpath":
+            return render(self.request, "faangpath_simple_template_pdf.html", context)
+        
+        try:
+            # Determine export format
+            export_format = self.request.POST.get("export_format", "pdf").lower()
+            if export_format == "tex":
+                return self._generate_tex_file(context)
+            else:
+                return self._generate_pdf_file(context)
+            
+        except Exception as e:
+            messages.error(self.request, f"Failed to render PDF: {str(e)}")
+            return redirect("resume:resume_form")
 
 
 def get_field_value(request, prefix, field):
@@ -584,3 +646,61 @@ def upload_linkedin_cv(request):
         return redirect("resume:resume_form")
 
     return redirect("resume:index")
+
+
+def test_faangpath_template(request):
+    """
+    Test view to render the faangpath_simple_template_pdf.html template
+    with sample data for development and testing purposes.
+    """
+    if request.method == "POST":
+        user_form = UserInfoForm(request.POST)
+        education_formset = EducationFormSet(request.POST, prefix="education")
+        experience_formset = ExperienceFormSet(request.POST, prefix="experience")
+        project_formset = ProjectFormSet(request.POST, prefix="project")
+
+        # Validate all forms and formsets
+        if all([
+            user_form.is_valid(),
+            education_formset.is_valid(),
+            experience_formset.is_valid(),
+            project_formset.is_valid()
+        ]):
+            # Prepare context data for template
+            user_data = user_form.cleaned_data
+            education_data = [
+                form.cleaned_data for form in education_formset if form.cleaned_data
+            ]
+            
+            # Split experience descriptions into lists
+            experience_data = []
+            for form in experience_formset:
+                if form.is_valid() and form.cleaned_data:
+                    cleaned_data = form.cleaned_data.copy()
+                    cleaned_data["description"] = list(
+                        filter(
+                            None,
+                            map(str.strip, cleaned_data.get("description", "").split("\n")),
+                        )
+                    )
+                    experience_data.append(cleaned_data)
+            
+            project_data = [
+                form.cleaned_data for form in project_formset if form.cleaned_data
+            ]
+
+            context = {
+                "user_data": user_data,
+                "education_data": education_data,
+                "experience_data": experience_data,
+                "project_data": project_data,
+                "generation_date": datetime.now().strftime("%Y-%m-%d"),
+            }
+            
+            return render(request, "faangpath_simple_template_pdf.html", context)
+        else:
+            messages.error(request, "Please correct the errors in the form.")
+    
+    # If GET request or form validation failed, show the form
+    context = get_init_values_for_resume_form()
+    return render(request, "resume_form.html", context)

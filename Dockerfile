@@ -10,18 +10,11 @@ RUN apt-get update && apt-get install -y \
     musl-dev \
     libpq-dev \
     build-essential \
-    fontconfig \
-    freetype2-demos \
-    zlib1g-dev \
-    perl \
-    texlive-latex-base \
-    texlive-latex-extra \
-    texlive-fonts-recommended \
-    texlive-fonts-extra \
-    texlive-xetex \
-    texlive-science \
-    texlive-pstricks \
-    texlive-latex-recommended \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    libgdk-pixbuf2.0-0 \
+    libffi-dev \
+    shared-mime-info \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
