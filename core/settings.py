@@ -135,12 +135,51 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Logging Configuration
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{levelname} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+    },
+    'loggers': {
+        'resume.services': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'weasyprint': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+}
+
 CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap4"
 
 CRISPY_TEMPLATE_PACK = "bootstrap4"
 
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
 
+# TODO: Convert to template selector map (faangpath-simple: faangpath_simple_template.tex, cls)
 LATEX_SETTINGS = {
     'TEMPLATE_DIR': BASE_DIR / 'latex_renderer' / 'templates',
     'TEMP_DIR': BASE_DIR / 'latex_renderer' / 'templates' / 'temp_latex_files',
@@ -148,6 +187,18 @@ LATEX_SETTINGS = {
     'PDF_TIMEOUT': 30,
 }
 
-TEX_PREVIEW_HTML_MAP = {
-    'faangpath_simple_template.tex':  'faangpath_simple_template_preview.html'
+TEMPLATE_SELECTOR_PREVIEW_MAP = {
+    'faangpath-simple': 'faangpath_simple_template_preview.html'
+}
+
+TEMPLATE_SELECTOR_HTML_MAP = {
+    'faangpath-simple': 'faangpath_simple_template_pdf.html'
+}
+
+# PDF Generation Settings
+PDF_SETTINGS = {
+    'ENGINE': 'weasyprint',
+    'CSS_FILE': BASE_DIR / 'resume' / 'templates' / 'resume_pdf_styles.css',
+    'ENABLE_LOGGING': True,
+    'FONT_CONFIG': True,
 }
