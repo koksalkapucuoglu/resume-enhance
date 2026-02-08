@@ -7,7 +7,8 @@ openai==1.55.3
 python-dotenv==1.0.1
 Jinja2==3.1.4
 PyPDF2==3.0.1
-WeasyPrint==60.1
+WeasyPrint>=62.0
+pydyf>=0.11.0
 gunicorn
 dj-database-url
 whitenoise

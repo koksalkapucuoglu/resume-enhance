@@ -24,8 +24,7 @@ class HtmlToPdfConverter:
     """
     
     def __init__(self):
-        """Initialize the converter with font configuration."""
-        self.font_config = FontConfiguration()
+        """Initialize the converter."""
         self._setup_logging()
     
     def _setup_logging(self) -> None:
@@ -50,17 +49,22 @@ class HtmlToPdfConverter:
             self.logger.info("Starting HTML to PDF conversion")
             
             # Create HTML document
-            html_doc = HTML(string=html_content)
+            html_doc = HTML(
+                string=html_content, 
+                base_url=str(settings.BASE_DIR)
+            )
             
             # Apply CSS if provided
             stylesheets = []
             if css_content:
-                stylesheets.append(CSS(string=css_content))
+                stylesheets.append(CSS(
+                    string=css_content, 
+                    base_url=str(settings.BASE_DIR)
+                ))
             
             # Generate PDF
             pdf_bytes = html_doc.write_pdf(
-                stylesheets=stylesheets,
-                font_config=self.font_config
+                stylesheets=stylesheets
             )
             
             self.logger.info(f"PDF generated successfully, size: {len(pdf_bytes)} bytes")
