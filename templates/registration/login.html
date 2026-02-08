@@ -1,0 +1,548 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Giriş Yap - ResuStack</title>
+    <meta name="description" content="ResuStack hesabınıza giriş yapın. AI destekli CV oluşturma platformu."/>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+    
+    <style>
+        /* CSS Variables */
+        :root {
+            --primary-color: #2563eb;
+            --primary-hover: #1d4ed8;
+            --primary-light: rgba(37, 99, 235, 0.1);
+            --bg-light: #f1f5f9;
+            --bg-dark: #0f172a;
+            --text-primary: #0f172a;
+            --text-secondary: #475569;
+            --text-muted: #94a3b8;
+            --border-color: #e2e8f0;
+            --card-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.1);
+            --input-focus-ring: 0 0 0 3px rgba(37, 99, 235, 0.15);
+        }
+        
+        /* Reset & Base */
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-light);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            color: var(--text-primary);
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+        }
+        
+        /* Main Container */
+        .main-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+        
+        /* Logo Section */
+        .logo-section {
+            position: absolute;
+            top: 40px;
+            left: 40px;
+            z-index: 10;
+        }
+        
+        @media (max-width: 640px) {
+            .logo-section {
+                position: relative;
+                top: auto;
+                left: auto;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                margin-bottom: 24px;
+                width: 100%;
+            }
+        }
+        
+        .logo-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .logo-img {
+            width: auto;
+            height: 32px;
+            object-fit: contain;
+        }
+        
+        .brand-name {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: -0.5px;
+        }
+        
+        /* Card */
+        .auth-card {
+            width: 100%;
+            max-width: 440px;
+            background: white;
+            border-radius: 16px;
+            box-shadow: var(--card-shadow);
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+        
+        .card-header {
+            padding: 40px 40px 24px;
+            text-align: center;
+        }
+        
+        .card-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+            letter-spacing: -0.5px;
+        }
+        
+        .card-subtitle {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        
+        .card-body {
+            padding: 0 40px 40px;
+        }
+        
+        /* Alert */
+        .alert {
+            padding: 12px 16px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .alert-error {
+            background-color: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+        }
+        
+        .alert-warning {
+            background-color: #fffbeb;
+            border: 1px solid #fde68a;
+            color: #d97706;
+        }
+        
+        .alert-icon {
+            width: 20px;
+            height: 20px;
+            flex-shrink: 0;
+        }
+        
+        /* Form */
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 6px;
+        }
+        
+        .label-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        
+        .forgot-link {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--primary-color);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        
+        .forgot-link:hover {
+            color: var(--primary-hover);
+        }
+        
+        .form-input {
+            width: 100%;
+            height: 44px;
+            padding: 0 16px;
+            font-size: 14px;
+            font-family: inherit;
+            color: var(--text-primary);
+            background-color: white;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+        
+        .form-input::placeholder {
+            color: var(--text-muted);
+        }
+        
+        .form-input:focus {
+            border-color: var(--primary-color);
+            box-shadow: var(--input-focus-ring);
+        }
+        
+        .input-wrapper {
+            position: relative;
+        }
+        
+        .toggle-password {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px;
+            color: var(--text-muted);
+            transition: color 0.2s;
+        }
+        
+        .toggle-password:hover {
+            color: var(--text-secondary);
+        }
+        
+        .toggle-password svg {
+            width: 20px;
+            height: 20px;
+        }
+        
+        /* Checkbox */
+        .checkbox-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 24px;
+        }
+        
+        .checkbox-input {
+            width: 16px;
+            height: 16px;
+            border-radius: 4px;
+            border: 2px solid var(--border-color);
+            cursor: pointer;
+            accent-color: var(--primary-color);
+        }
+        
+        .checkbox-label {
+            font-size: 14px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        /* Button */
+        .btn-primary {
+            width: 100%;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 14px;
+            font-weight: 700;
+            font-family: inherit;
+            color: white;
+            background-color: var(--primary-color);
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            letter-spacing: 0.3px;
+        }
+        
+        .btn-primary:hover {
+            background-color: var(--primary-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+        }
+        
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+        
+        .btn-primary:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        /* Card Footer */
+        .card-footer {
+            padding: 20px 40px;
+            background-color: #f8fafc;
+            border-top: 1px solid var(--border-color);
+            text-align: center;
+        }
+        
+        .card-footer p {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        
+        .card-footer a {
+            color: var(--primary-color);
+            font-weight: 700;
+            text-decoration: none;
+            margin-left: 4px;
+            transition: color 0.2s;
+        }
+        
+        .card-footer a:hover {
+            text-decoration: underline;
+        }
+        
+        /* Footer Links */
+        .footer-links {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            margin-top: 32px;
+        }
+        
+        .footer-link {
+            font-size: 12px;
+            color: var(--text-muted);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        
+        .footer-link:hover {
+            color: var(--text-secondary);
+        }
+        
+        /* Copyright */
+        .copyright {
+            padding: 24px;
+            text-align: center;
+        }
+        
+        .copyright p {
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-weight: 500;
+        }
+        
+        /* Responsive */
+        @media (max-width: 480px) {
+            .main-container {
+                padding: 16px;
+            }
+            
+            .card-header,
+            .card-body,
+            .card-footer {
+                padding-left: 24px;
+                padding-right: 24px;
+            }
+            
+            .card-header {
+                padding-top: 32px;
+            }
+            
+            .card-body {
+                padding-bottom: 32px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main class="main-container">
+        <!-- Logo & Brand -->
+        <div class="logo-section">
+            <div class="logo-container">
+                <img src="{% static 'img/resustack_logo.png' %}" alt="ResuStack Logo" class="logo-img"/>
+                <span class="brand-name">ResuStack</span>
+            </div>
+        </div>
+        
+        <!-- Auth Card -->
+        <div class="auth-card">
+            <!-- Card Header -->
+            <div class="card-header">
+                <h1 class="card-title">Welcome Back</h1>
+                <p class="card-subtitle">Enter your credentials to access your account.</p>
+            </div>
+            
+            <!-- Card Body -->
+            <div class="card-body">
+                <!-- Error Messages -->
+                {% if form.errors %}
+                <div class="alert alert-error">
+                    <svg class="alert-icon" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                    </svg>
+                    <span>Invalid username or password.</span>
+                </div>
+                {% endif %}
+                
+                {% if next %}
+                    {% if user.is_authenticated %}
+                    <div class="alert alert-warning">
+                        <svg class="alert-icon" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                        </svg>
+                        <span>You don't have permission to access this page.</span>
+                    </div>
+                    {% endif %}
+                {% endif %}
+                
+                <form method="post" action="{% url 'login' %}" id="login-form">
+                    {% csrf_token %}
+                    
+                    <!-- Username Field -->
+                    <div class="form-group">
+                        <label for="id_username" class="form-label">Username</label>
+                        <input 
+                            type="text" 
+                            name="username"
+                            id="id_username"
+                            class="form-input"
+                            placeholder="johndoe"
+                            required
+                            autofocus
+                        />
+                    </div>
+                    
+                    <!-- Password Field -->
+                    <div class="form-group">
+                        <div class="label-row">
+                            <label for="id_password" class="form-label">Password</label>
+                            <a href="{% url 'password_reset' %}" class="forgot-link">Forgot Password?</a>
+                        </div>
+                        <div class="input-wrapper">
+                            <input 
+                                type="password" 
+                                name="password"
+                                id="id_password"
+                                class="form-input"
+                                style="padding-right: 44px;"
+                                placeholder="••••••••"
+                                required
+                            />
+                            <button type="button" class="toggle-password" id="toggle-password" aria-label="Show password">
+                                <svg id="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Remember Me -->
+                    <div class="checkbox-wrapper">
+                        <input type="checkbox" id="remember" name="remember" class="checkbox-input"/>
+                        <label for="remember" class="checkbox-label">Remember this device</label>
+                    </div>
+                    
+                    <!-- Hidden next URL -->
+                    <input type="hidden" name="next" value="{{ next }}"/>
+                    
+                    <!-- Submit Button -->
+                    <button type="submit" class="btn-primary" id="login-button">
+                        <span id="button-text">Sign In</span>
+                        <span id="button-loader" class="spinner hidden"></span>
+                    </button>
+                </form>
+            </div>
+            
+            <!-- Card Footer -->
+            <div class="card-footer">
+                <p>
+                    New to ResuStack?
+                    <a href="{% url 'signup' %}">Create Account</a>
+                </p>
+            </div>
+        </div>
+    </main>
+    
+    <!-- Copyright Footer -->
+    <footer class="copyright">
+        <p>© 2026 ResuStack AI Technologies</p>
+    </footer>
+    
+    <script>
+        // Password visibility toggle
+        const togglePassword = document.getElementById('toggle-password');
+        const passwordInput = document.getElementById('id_password');
+        const eyeIcon = document.getElementById('eye-icon');
+        
+        togglePassword.addEventListener('click', function() {
+            const isPassword = passwordInput.getAttribute('type') === 'password';
+            passwordInput.setAttribute('type', isPassword ? 'text' : 'password');
+            
+            // Update icon
+            if (isPassword) {
+                eyeIcon.innerHTML = '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>';
+            } else {
+                eyeIcon.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>';
+            }
+        });
+        
+        // Form submit loading state
+        const form = document.getElementById('login-form');
+        const button = document.getElementById('login-button');
+        const buttonText = document.getElementById('button-text');
+        const buttonLoader = document.getElementById('button-loader');
+        
+        form.addEventListener('submit', function() {
+            button.disabled = true;
+            buttonText.textContent = 'Giriş yapılıyor...';
+            buttonLoader.classList.remove('hidden');
+        });
+    </script>
+</body>
+</html>

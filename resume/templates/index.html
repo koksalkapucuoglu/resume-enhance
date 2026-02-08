@@ -1,250 +1,306 @@
+{% load static %}
 <!DOCTYPE html>
-<html lang="en">
+<html class="light" lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Resume Index</title>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>ResuStack - Build Your Professional Resume with AI</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#2563eb",
+                        "primary-hover": "#1d4ed8",
+                        "background-light": "#f1f5f9",
+                        "background-dark": "#0f172a",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "sans": ["Inter", "sans-serif"]
+                    },
+                },
+            },
+        }
+    </script>
     <style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
         body {
-            font-family: Arial, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            background-color: #f4f4f9;
+            font-family: 'Inter', sans-serif;
+            scroll-behavior: smooth;
         }
-        .container {
-            display: flex;
-            gap: 20px;
+        .hero-gradient {
+            background: radial-gradient(circle at 50% 50%, rgba(37, 99, 235, 0.05) 0%, rgba(255, 255, 255, 0) 100%);
         }
-        .card {
-            width: 200px;
-            height: 150px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background-color: #ffffff;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-            position: relative;
-            overflow: hidden;
+        .animate-float {
+            animation: float 6s ease-in-out infinite;
         }
-        .card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 6px 10px rgba(0, 0, 0, 0.15);
-        }
-        .card.manual {
-            background-color: #e0f7fa;
-        }
-        .card.upload {
-            background-color: #ffe0b2;
-        }
-        .card.linkedin {
-            background-color: #2d64bc;
-            color: white;
-        }
-        .card h2 {
-            font-size: 1.2rem;
-            font-weight: normal;
-            margin: 0;
-        }
-        .card .upload-content {
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 90%;
-            height: auto;
-            background-color: rgba(255, 255, 255, 0.9);
-            z-index: 1;
-            text-align: center;
-        }
-        .card.upload:hover .upload-content,
-        .card.linkedin:hover .upload-content {
-            display: flex;
-        }
-        .upload-content input[type="file"] {
-            margin-bottom: 10px;
-            width: 100%;
-        }
-        .upload-content button {
-            background-color: #007bff;
-            color: white;
-            border: none;
-            padding: 5px 10px;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        .upload-content button:hover {
-            background-color: #0056b3;
-        }
-        .tooltip {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background-color: #333;
-            color: #fff;
-            padding: 5px 10px;
-            border-radius: 5px;
-            font-size: 0.8rem;
-            cursor: pointer;
-            z-index: 2;
-        }
-        .tooltip:hover {
-            background-color: #555;
-        }
-        .popup {
-            display: none;
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 300px;
-            background-color: #fff;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            padding: 20px;
-            z-index: 3;
-        }
-        .popup h3 {
-            margin-top: 0;
-        }
-        .popup button {
-            background-color: #007bff;
-            color: white;
-            border: none;
-            padding: 5px 10px;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        .popup button:hover {
-            background-color: #0056b3;
-        }
-        .popup-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-            z-index: 2;
-        }
-        .upload-spinner {
-            display: none;
-            width: 24px;
-            height: 24px;
-            border: 3px solid #007bff;
-            border-top: 3px solid #e0e0e0;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-left: 10px;
-            vertical-align: middle;
-        }
-        .upload-spinner.active {
-            display: inline-block;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg);}
-            100% { transform: rotate(360deg);}
-        }
-        .global-loading-overlay {
-            display: none;
-            position: fixed;
-            z-index: 9999;
-            top: 0; left: 0; right: 0; bottom: 0;
-            width: 100vw;
-            height: 100vh;
-            background: rgba(100, 100, 100, 0.4);
-            justify-content: center;
-            align-items: center;
-        }
-        .global-spinner {
-            width: 60px;
-            height: 60px;
-            border: 6px solid #007bff;
-            border-top: 6px solid #e0e0e0;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            background: white;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+            100% { transform: translateY(0px); }
         }
     </style>
 </head>
-<body>
-    <div class="container">
-        <div class="card manual" onclick="window.location.href='/resume/form/'">Manual</div>
-        <div class="card upload">
-            <h2>Upload CV</h2>
-            <div class="upload-content">
-                <form id="upload-cv-form" action="{% url 'resume:upload_cv' %}" method="post" enctype="multipart/form-data">
-                    {% csrf_token %}
-                    <input type="file" name="cv_file" accept="application/pdf" required>
-                    <button type="submit">Upload</button>
-                    <span class="upload-spinner"></span>
-                </form>
-                <p id="uploaded-file-name" style="margin-top: 10px; color: green; display: none;">File uploaded: <span id="file-name"></span></p>
+<body class="bg-white text-slate-900 font-display selection:bg-primary/20">
+
+    <!-- Navbar -->
+    <nav class="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-100">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-20 items-center">
+                <div class="flex items-center gap-3">
+                    <img src="{% static 'img/resustack_logo.png' %}" alt="ResuStack Logo" class="h-9 w-auto object-contain"/>
+                    <span class="text-2xl font-black tracking-tight text-slate-900">ResuStack</span>
+                </div>
+                <div class="hidden md:flex items-center gap-8">
+                    <a href="#features" class="text-sm font-semibold text-slate-600 hover:text-primary transition-colors">Features</a>
+                    <a href="#how-it-works" class="text-sm font-semibold text-slate-600 hover:text-primary transition-colors">How it Works</a>
+                    {% if user.is_authenticated %}
+                        <a href="{% url 'resume:dashboard' %}" class="px-6 py-2.5 bg-primary text-white rounded-full font-bold text-sm hover:bg-primary-hover shadow-lg shadow-primary/25 transition-all">Go to Dashboard</a>
+                    {% else %}
+                        <a href="{% url 'login' %}" class="text-sm font-semibold text-slate-600 hover:text-primary transition-colors">Login</a>
+                        <a href="{% url 'signup' %}" class="px-6 py-2.5 bg-primary text-white rounded-full font-bold text-sm hover:bg-primary-hover shadow-lg shadow-primary/25 transition-all">Get Started Free</a>
+                    {% endif %}
+                </div>
+                <!-- Mobile menu button -->
+                <div class="md:hidden">
+                    <button class="p-2 text-slate-600">
+                        <span class="material-symbols-outlined">menu</span>
+                    </button>
+                </div>
             </div>
         </div>
-        <div class="card linkedin">
-            <h2>Use LinkedIn</h2>
-            <div class="tooltip" onclick="showPopup()">?</div>
-            <div class="upload-content">
-                <form id="upload-linkedin-form" action="{% url 'resume:upload_linkedin_cv' %}" method="post" enctype="multipart/form-data">
-                    {% csrf_token %}
-                    <input type="file" name="linkedin_file" accept="application/pdf" required>
-                    <button type="submit">Upload</button>
-                    <span class="upload-spinner"></span>
-                </form>
-                <p id="linkedin-uploaded-file-name" style="margin-top: 10px; color: green; display: none;">File uploaded: <span id="linkedin-file-name"></span></p>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="relative pt-32 pb-20 md:pt-48 md:pb-32 overflow-hidden hero-gradient">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
+            <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/5 text-primary text-xs font-bold tracking-widest uppercase mb-6 border border-primary/10">
+                <span class="relative flex h-2 w-2">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                </span>
+                Powered by OpenAI GPT-4
+            </div>
+            <h1 class="text-5xl md:text-7xl font-black text-slate-900 tracking-tight leading-[1.1] mb-8">
+                Build a resume that <br/>
+                <span class="text-transparent bg-clip-text bg-gradient-to-r from-primary to-blue-400">lands you the job.</span>
+            </h1>
+            <p class="text-slate-500 text-lg md:text-xl max-w-2xl mx-auto mb-10 leading-relaxed font-medium">
+                The AI-powered resume builder that helps you create professional, ATS-optimized resumes in minutes. Import from LinkedIn, upload a PDF, or start from scratch.
+            </p>
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-20">
+                <a href="{% url 'signup' %}" class="w-full sm:w-auto px-10 py-4 bg-primary text-white rounded-full font-bold text-lg hover:bg-primary-hover shadow-xl shadow-primary/30 transform hover:-translate-y-1 transition-all">
+                    Build My Resume Now
+                </a>
+                <a href="#how-it-works" class="w-full sm:w-auto px-10 py-4 bg-white text-slate-900 border-2 border-slate-100 rounded-full font-bold text-lg hover:border-primary hover:text-primary transition-all">
+                    How it Works
+                </a>
+            </div>
+
+            <!-- Preview Image -->
+            <div class="relative max-w-5xl mx-auto">
+                <div class="absolute -inset-1 bg-gradient-to-r from-primary/20 to-blue-400/20 rounded-[2.5rem] blur-2xl opacity-50"></div>
+                <div class="relative bg-white p-2 rounded-[2.5rem] border border-slate-200 shadow-2xl">
+                    <img src="/static/screenshots/Screenshot 2026-02-06 at 00.20.25.png" alt="ResuStack Dashboard" class="rounded-[2rem] w-full shadow-inner"/>
+                </div>
+                <!-- Small floaters -->
+                <div class="hidden lg:block absolute -left-12 top-1/4 animate-float">
+                    <div class="bg-white p-4 rounded-2xl shadow-xl border border-slate-100 flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center">
+                            <span class="material-symbols-outlined">check_circle</span>
+                        </div>
+                        <div class="text-left">
+                            <p class="text-sm font-bold text-slate-900">ATS Optimized</p>
+                            <p class="text-[10px] text-slate-500">Score: 98/100</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="hidden lg:block absolute -right-12 bottom-1/4 animate-float" style="animation-delay: 1s;">
+                    <div class="bg-white p-4 rounded-2xl shadow-xl border border-slate-100 flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-blue-100 text-primary flex items-center justify-center">
+                            <span class="material-symbols-outlined">auto_awesome</span>
+                        </div>
+                        <div class="text-left">
+                            <p class="text-sm font-bold text-slate-900">AI Enhanced</p>
+                            <p class="text-[10px] text-slate-500">Skills generated</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
-    </div>
-    <!-- Global loading overlay -->
-    <div class="global-loading-overlay" id="global-loading-overlay">
-        <div class="global-spinner"></div>
-    </div>
-    <div class="popup-overlay" id="popup-overlay" onclick="hidePopup()"></div>
-    <div class="popup" id="popup">
-        <h3>How to Download LinkedIn Profile</h3>
-        <p>1. Go to your LinkedIn profile.</p>
-        <p>2. Click on the "More" button and select "Save to PDF."</p>
-        <p>3. Upload the downloaded PDF here.</p>
-        <button onclick="hidePopup()">Close</button>
-    </div>
-    <script>
-        function showPopup() {
-            document.getElementById('popup').style.display = 'block';
-            document.getElementById('popup-overlay').style.display = 'block';
-        }
-        function hidePopup() {
-            document.getElementById('popup').style.display = 'none';
-            document.getElementById('popup-overlay').style.display = 'none';
-        }
+    </section>
 
-        // Remove disabling of buttons/inputs, just show overlay after a short delay
-        function showGlobalLoading() {
-            setTimeout(function() {
-                document.getElementById('global-loading-overlay').style.display = 'flex';
-            }, 100); // 100ms delay to allow form submission to proceed
-        }
-        function hideGlobalLoading() {
-            document.getElementById('global-loading-overlay').style.display = 'none';
-        }
+    <!-- Partners / Trust -->
+    <section class="py-12 border-y border-slate-50 bg-slate-50/30">
+        <div class="max-w-7xl mx-auto px-4 text-center">
+            <p class="text-slate-400 text-sm font-bold uppercase tracking-widest mb-8">Trusted by candidates at</p>
+            <div class="flex flex-wrap justify-center items-center gap-12 grayscale opacity-40">
+                <span class="text-2xl font-black italic">Google</span>
+                <span class="text-2xl font-black italic">Amazon</span>
+                <span class="text-2xl font-black italic">Meta</span>
+                <span class="text-2xl font-black italic">Microsoft</span>
+                <span class="text-2xl font-black italic">Netflix</span>
+            </div>
+        </div>
+    </section>
 
-        document.getElementById('upload-cv-form').addEventListener('submit', function(e) {
-            showGlobalLoading();
-        });
-        document.getElementById('upload-linkedin-form').addEventListener('submit', function(e) {
-            showGlobalLoading();
-        });
-    </script>
+    <!-- Features Section -->
+    <section id="features" class="py-24 md:py-32">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-20">
+                <h2 class="text-3xl md:text-5xl font-black text-slate-900 mb-6">Everything you need to <br/><span class="text-primary">stand out.</span></h2>
+                <p class="text-slate-500 text-lg max-w-2xl mx-auto font-medium">Simple yet powerful tools designed to get you hired faster.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <!-- AI Content Generation -->
+                <div class="p-8 rounded-3xl bg-white border border-slate-100 hover:border-primary/20 hover:shadow-2xl transition-all group">
+                    <div class="w-14 h-14 rounded-2xl bg-primary/5 text-primary flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                        <span class="material-symbols-outlined text-3xl">auto_awesome</span>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-900 mb-4">AI-Powered Content</h3>
+                    <p class="text-slate-500 leading-relaxed">Let our AI write and polish your professional experience. Stand out with impactful bullet points tailored to your role.</p>
+                </div>
+
+                <!-- PDF & LinkedIn Import -->
+                <div class="p-8 rounded-3xl bg-white border border-slate-100 hover:border-primary/20 hover:shadow-2xl transition-all group">
+                    <div class="w-14 h-14 rounded-2xl bg-primary/5 text-primary flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                        <span class="material-symbols-outlined text-3xl">cloud_upload</span>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-900 mb-4">Smart Import</h3>
+                    <p class="text-slate-500 leading-relaxed">Import your existing resume or LinkedIn profile in seconds. We'll automatically extract and organize your data.</p>
+                </div>
+
+                <!-- ATS-Optimized Templates -->
+                <div class="p-8 rounded-3xl bg-white border border-slate-100 hover:border-primary/20 hover:shadow-2xl transition-all group">
+                    <div class="w-14 h-14 rounded-2xl bg-primary/5 text-primary flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                        <span class="material-symbols-outlined text-3xl">description</span>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-900 mb-4">ATS Compatibility</h3>
+                    <p class="text-slate-500 leading-relaxed">Our templates are designed to pass Applicant Tracking Systems (ATS) with flying colors, ensuring humans actually see your resume.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How it Works Section -->
+    <section id="how-it-works" class="py-24 md:py-32 bg-background-light/50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
+                <div class="relative">
+                    <div class="absolute -inset-4 bg-primary/10 rounded-[2.5rem] blur-xl"></div>
+                    <img src="/static/screenshots/Screenshot 2026-02-06 at 00.23.12.png" alt="How it works" class="relative rounded-3xl shadow-2xl border border-white"/>
+                </div>
+                <div>
+                    <h2 class="text-3xl md:text-5xl font-black text-slate-900 mb-12">How it Works</h2>
+                    <div class="space-y-12">
+                        <!-- Step 1 -->
+                        <div class="flex gap-6">
+                            <div class="flex-shrink-0 w-12 h-12 rounded-full bg-primary text-white font-black flex items-center justify-center shadow-lg shadow-primary/30">1</div>
+                            <div>
+                                <h4 class="text-xl font-bold text-slate-900 mb-2">Choose Your Starting Point</h4>
+                                <p class="text-slate-500">Upload a PDF, sync from LinkedIn, or start from a blank slate. Our AI handles the initial heavy lifting.</p>
+                            </div>
+                        </div>
+                        <!-- Step 2 -->
+                        <div class="flex gap-6">
+                            <div class="flex-shrink-0 w-12 h-12 rounded-full bg-primary text-white font-black flex items-center justify-center shadow-lg shadow-primary/30">2</div>
+                            <div>
+                                <h4 class="text-xl font-bold text-slate-900 mb-2">Enhance with AI</h4>
+                                <p class="text-slate-500">Use our editor to tweak your details. One-click AI enhancement for experience descriptions and skill extraction.</p>
+                            </div>
+                        </div>
+                        <!-- Step 3 -->
+                        <div class="flex gap-6">
+                            <div class="flex-shrink-0 w-12 h-12 rounded-full bg-primary text-white font-black flex items-center justify-center shadow-lg shadow-primary/30">3</div>
+                            <div>
+                                <h4 class="text-xl font-bold text-slate-900 mb-2">Download & Apply</h4>
+                                <p class="text-slate-500">Export your resume as a professional PDF. Ready to be sent to recruiters or uploaded to application portals.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="py-24 md:py-32">
+        <div class="max-w-5xl mx-auto px-4">
+            <div class="relative rounded-[3rem] bg-slate-900 p-12 md:p-20 text-center overflow-hidden">
+                <div class="absolute top-0 right-0 w-64 h-64 bg-primary/20 rounded-full blur-[100px] -mr-32 -mt-32"></div>
+                <div class="absolute bottom-0 left-0 w-64 h-64 bg-blue-500/10 rounded-full blur-[100px] -ml-32 -mb-32"></div>
+                
+                <h2 class="text-3xl md:text-5xl font-black text-white mb-8 relative z-10">Stop wasting time on <br/>manual formatting.</h2>
+                <p class="text-slate-400 text-lg md:text-xl mb-12 max-w-2xl mx-auto relative z-10 font-medium">Join thousands of job seekers who use ResuStack to fast-track their careers.</p>
+                <div class="flex flex-col sm:flex-row items-center justify-center gap-4 relative z-10">
+                    <a href="{% url 'signup' %}" class="w-full sm:w-auto px-10 py-4 bg-primary text-white rounded-full font-bold text-lg hover:bg-primary-hover shadow-xl shadow-primary/30 transform hover:-translate-y-1 transition-all">
+                        Create My Account
+                    </a>
+                    <p class="text-slate-500 text-sm font-bold">No credit card required. Free build.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Unified Footer -->
+    <footer class="bg-white border-t border-slate-100 pt-20 pb-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col md:flex-row justify-between items-start gap-12 mb-20">
+                <div class="max-w-xs">
+                    <div class="flex items-center gap-3 mb-6">
+                        <img src="{% static 'img/resustack_logo.png' %}" alt="ResuStack Logo" class="h-8 w-auto object-contain"/>
+                        <span class="text-xl font-black tracking-tight text-slate-900">ResuStack</span>
+                    </div>
+                    <p class="text-slate-500 text-sm leading-relaxed font-medium">
+                        Empowering job seekers with state-of-the-art AI technology to build professional resumes that actually work.
+                    </p>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-12">
+                    <div>
+                        <h5 class="text-slate-900 font-bold mb-6">Product</h5>
+                        <ul class="space-y-4">
+                            <li><a href="#features" class="text-slate-500 text-sm hover:text-primary transition-colors">Features</a></li>
+                            <li><a href="#how-it-works" class="text-slate-500 text-sm hover:text-primary transition-colors">How it Works</a></li>
+                            <li><a href="{% url 'signup' %}" class="text-slate-500 text-sm hover:text-primary transition-colors">Pricing</a></li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h5 class="text-slate-900 font-bold mb-6">Support</h5>
+                        <ul class="space-y-4">
+                            <li><a href="mailto:koksalkapucuoglu@gmail.com" class="text-slate-500 text-sm hover:text-primary transition-colors">Contact Us</a></li>
+                            <li><a href="#" class="text-slate-500 text-sm hover:text-primary transition-colors">Knowledge Base</a></li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h5 class="text-slate-900 font-bold mb-6">Legal</h5>
+                        <ul class="space-y-4">
+                            <li><a href="#" class="text-slate-500 text-sm hover:text-primary transition-colors">Terms of Service</a></li>
+                            <li><a href="#" class="text-slate-500 text-sm hover:text-primary transition-colors">Privacy Policy</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="pt-10 border-t border-slate-50 flex flex-col sm:flex-row justify-between items-center gap-6">
+                <p class="text-slate-400 text-xs font-bold uppercase tracking-widest">© 2026 ResuStack. All rights reserved.</p>
+                <div class="flex items-center gap-6">
+                    <a href="#" class="text-slate-400 hover:text-primary transition-colors">
+                        <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M24 4.557c-.883.392-1.832.656-2.828.775 1.017-.609 1.798-1.574 2.165-2.724-.951.564-2.005.974-3.127 1.195-.897-.957-2.178-1.555-3.594-1.555-3.179 0-5.515 2.966-4.797 6.045-4.091-.205-7.719-2.165-10.148-5.144-1.29 2.213-.669 5.108 1.523 6.574-.806-.026-1.566-.247-2.229-.616-.054 2.281 1.581 4.415 3.949 4.89-.693.188-1.452.232-2.224.084.626 1.956 2.444 3.379 4.6 3.419-2.07 1.623-4.678 2.348-7.29 2.04 2.179 1.397 4.768 2.212 7.548 2.212 9.142 0 14.307-7.721 13.995-14.646.962-.695 1.797-1.562 2.457-2.549z"/></svg>
+                    </a>
+                    <a href="#" class="text-slate-400 hover:text-primary transition-colors">
+                        <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44 1.44-.645 1.44-1.44-.644-1.44-1.44-1.44z"/></svg>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
 </body>
 </html>

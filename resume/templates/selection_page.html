@@ -1,0 +1,289 @@
+{% load static %}
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Create Resume - ResuStack</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet"/>
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#2563eb",
+                        "primary-hover": "#1d4ed8",
+                        "background-light": "#f1f5f9",
+                        "background-dark": "#0f172a",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "sans": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.375rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "2xl": "1rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+    <style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        /* Hidden file input */
+        .file-input-hidden {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+        
+        /* Global Loading Overlay */
+        .global-loading-overlay {
+            display: none;
+            position: fixed;
+            z-index: 9999;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(4px);
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .global-loading-overlay.active {
+            display: flex;
+        }
+        .global-spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top-color: #2563eb;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-background-light min-h-screen flex flex-col font-display">
+    
+    <!-- Header (Same as Dashboard) -->
+    <header class="flex items-center justify-between whitespace-nowrap border-b border-slate-200 bg-white px-4 md:px-10 lg:px-20 py-4 z-10 sticky top-0">
+        <a href="{% url 'resume:dashboard' %}" class="flex items-center gap-3">
+            <img src="{% static 'img/resustack_logo.png' %}" alt="ResuStack Logo" class="h-8 w-auto object-contain"/>
+            <h2 class="text-slate-900 text-2xl font-bold tracking-tight">ResuStack</h2>
+        </a>
+        
+        <div class="flex flex-1 justify-end gap-8">
+            <nav class="hidden md:flex items-center gap-6">
+                <a class="text-slate-500 text-sm font-medium hover:text-primary transition-colors" href="{% url 'resume:dashboard' %}">Dashboard</a>
+                <a class="text-slate-500 text-sm font-medium hover:text-primary transition-colors" href="mailto:koksalkapucuoglu@gmail.com">Help</a>
+            </nav>
+            
+            <div class="flex items-center gap-4">
+                <a href="{% url 'profile' %}" class="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold border border-slate-300 hover:bg-primary hover:text-white hover:border-primary transition-all" title="Profile">
+                    {{ user.username|slice:":1"|upper }}
+                </a>
+                <a href="{% url 'logout' %}" class="flex items-center gap-1 text-slate-500 text-sm font-medium hover:text-red-500 transition-colors">
+                    <span class="material-symbols-outlined text-lg">logout</span>
+                    <span class="hidden sm:inline">Logout</span>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col items-center justify-center px-6 py-12 md:py-24">
+        <div class="max-w-[1080px] w-full flex flex-col items-center">
+            
+            <!-- Page Title -->
+            <div class="flex flex-col items-center text-center gap-4 mb-16 px-4">
+                <h1 class="text-slate-900 text-4xl md:text-5xl font-black tracking-tight leading-tight">
+                    Create your professional resume
+                </h1>
+                <p class="text-slate-500 text-lg md:text-xl font-normal max-w-2xl leading-relaxed">
+                    Choose your preferred method to get started. We use AI to help you build a winning resume in minutes.
+                </p>
+            </div>
+
+            <!-- Cards Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 w-full">
+                
+                <!-- Card 1: Start from Scratch -->
+                <a href="{% url 'resume:resume_form' %}" class="group relative flex flex-col items-center text-center gap-8 p-10 rounded-2xl border-2 border-slate-200 bg-white hover:border-primary hover:shadow-2xl hover:-translate-y-1 transition-all duration-300">
+                    <div class="flex items-center justify-center size-16 rounded-2xl bg-primary/10 text-primary group-hover:scale-110 transition-transform">
+                        <span class="material-symbols-outlined text-4xl">edit_note</span>
+                    </div>
+                    <div class="flex flex-col gap-3">
+                        <h2 class="text-slate-900 text-xl font-bold">Start from Scratch</h2>
+                        <p class="text-slate-500 text-sm leading-relaxed">
+                            Guided step-by-step editor for building your perfect profile from the ground up.
+                        </p>
+                    </div>
+                    <div class="flex items-center text-primary font-semibold text-sm gap-2 mt-4">
+                        Get started <span class="material-symbols-outlined text-lg">arrow_forward</span>
+                    </div>
+                </a>
+
+                <!-- Card 2: Import PDF -->
+                <div class="group relative flex flex-col items-center text-center gap-8 p-10 rounded-2xl border-2 border-slate-200 bg-white hover:border-primary hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 cursor-pointer" id="upload-pdf-card" onclick="document.getElementById('cv-file-input').click()">
+                    <div class="flex items-center justify-center size-16 rounded-2xl bg-primary/10 text-primary group-hover:scale-110 transition-transform">
+                        <span class="material-symbols-outlined text-4xl">picture_as_pdf</span>
+                    </div>
+                    <div class="flex flex-col gap-3">
+                        <h2 class="text-slate-900 text-xl font-bold">Import PDF</h2>
+                        <p class="text-slate-500 text-sm leading-relaxed">
+                            Upload your current resume. Our AI will automatically extract and structure your information.
+                        </p>
+                    </div>
+                    <div class="flex items-center text-primary font-semibold text-sm gap-2 mt-4">
+                        Upload PDF <span class="material-symbols-outlined text-lg">upload_file</span>
+                    </div>
+                    
+                    <!-- Hidden Form -->
+                    <form id="upload-cv-form" action="{% url 'resume:upload_cv' %}" method="post" enctype="multipart/form-data" class="hidden">
+                        {% csrf_token %}
+                        <input type="file" id="cv-file-input" name="cv_file" accept="application/pdf" required>
+                    </form>
+                </div>
+
+                <!-- Card 3: Import LinkedIn -->
+                <div class="group relative flex flex-col items-center text-center gap-8 p-10 rounded-2xl border-2 border-slate-200 bg-white hover:border-primary hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 cursor-pointer" id="upload-linkedin-card" onclick="document.getElementById('linkedin-file-input').click()">
+                    <div class="flex items-center justify-center size-16 rounded-2xl bg-primary/10 text-primary group-hover:scale-110 transition-transform">
+                        <span class="material-symbols-outlined text-4xl">share_reviews</span>
+                    </div>
+                    <div class="flex flex-col gap-3">
+                        <h2 class="text-slate-900 text-xl font-bold">Import LinkedIn</h2>
+                        <p class="text-slate-500 text-sm leading-relaxed">
+                            Export your LinkedIn profile as PDF and upload it to sync your latest work history.
+                        </p>
+                    </div>
+                    <div class="flex items-center text-primary font-semibold text-sm gap-2 mt-4">
+                        Upload Profile <span class="material-symbols-outlined text-lg">link</span>
+                    </div>
+                    
+                    <!-- Hidden Form -->
+                    <form id="upload-linkedin-form" action="{% url 'resume:upload_linkedin_cv' %}" method="post" enctype="multipart/form-data" class="hidden">
+                        {% csrf_token %}
+                        <input type="file" id="linkedin-file-input" name="linkedin_file" accept="application/pdf" required>
+                    </form>
+                    
+                    <!-- Info Tooltip -->
+                    <button type="button" onclick="event.stopPropagation(); showLinkedInHelp();" class="absolute top-4 right-4 w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center text-sm font-bold transition-colors">
+                        ?
+                    </button>
+                </div>
+            </div>
+
+            <!-- Back to Dashboard Link -->
+            <div class="flex flex-col items-center gap-8 mt-16">
+                <a class="flex items-center gap-2 text-slate-500 hover:text-slate-900 transition-colors text-sm font-semibold" href="{% url 'resume:dashboard' %}">
+                    <span class="material-symbols-outlined text-xl">chevron_left</span>
+                    Back to Dashboard
+                </a>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="mt-auto border-t border-slate-200 bg-white py-8 px-4 md:px-10 lg:px-20">
+        <div class="flex flex-col md:flex-row items-center justify-between gap-4 max-w-[1200px] mx-auto w-full">
+            <div class="flex items-center gap-2">
+                <img src="{% static 'img/resustack_logo.png' %}" alt="Logo" class="w-4 h-4 object-contain grayscale opacity-50"/>
+                <span class="text-sm font-bold tracking-tight text-slate-400">ResuStack</span>
+            </div>
+            <p class="text-slate-400 text-xs font-medium">© 2026 ResuStack. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- Global Loading Overlay -->
+    <div class="global-loading-overlay" id="global-loading-overlay">
+        <div class="global-spinner"></div>
+        <p class="text-white text-sm font-medium">Processing your resume...</p>
+    </div>
+
+    <!-- LinkedIn Help Modal -->
+    <div id="linkedin-help-modal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onclick="hideLinkedInHelp()"></div>
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
+            <h3 class="text-xl font-bold text-slate-900 mb-4">How to Export LinkedIn Profile</h3>
+            <ol class="text-slate-600 text-sm space-y-3 mb-6">
+                <li class="flex gap-3">
+                    <span class="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">1</span>
+                    Go to your LinkedIn profile page.
+                </li>
+                <li class="flex gap-3">
+                    <span class="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">2</span>
+                    Click on "More" button below your profile photo.
+                </li>
+                <li class="flex gap-3">
+                    <span class="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">3</span>
+                    Select "Save to PDF" from the dropdown menu.
+                </li>
+                <li class="flex gap-3">
+                    <span class="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">4</span>
+                    Upload the downloaded PDF here.
+                </li>
+            </ol>
+            <button onclick="hideLinkedInHelp()" class="w-full py-2.5 bg-primary text-white rounded-lg font-bold hover:bg-primary-hover transition-colors">
+                Got it
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // File input change handlers - auto submit
+        document.getElementById('cv-file-input').addEventListener('change', function() {
+            if (this.files.length > 0) {
+                showGlobalLoading();
+                document.getElementById('upload-cv-form').submit();
+            }
+        });
+
+        document.getElementById('linkedin-file-input').addEventListener('change', function() {
+            if (this.files.length > 0) {
+                showGlobalLoading();
+                document.getElementById('upload-linkedin-form').submit();
+            }
+        });
+
+        // Global loading
+        function showGlobalLoading() {
+            document.getElementById('global-loading-overlay').classList.add('active');
+        }
+
+        function hideGlobalLoading() {
+            document.getElementById('global-loading-overlay').classList.remove('active');
+        }
+
+        // LinkedIn help modal
+        function showLinkedInHelp() {
+            document.getElementById('linkedin-help-modal').classList.remove('hidden');
+        }
+
+        function hideLinkedInHelp() {
+            document.getElementById('linkedin-help-modal').classList.add('hidden');
+        }
+    </script>
+</body>
+</html>

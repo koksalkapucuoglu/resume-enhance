@@ -1,1196 +1,822 @@
+{% load static %}
 {% load crispy_forms_tags %}
 <!DOCTYPE html>
-<html lang="en">
+<html class="light" lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Resume Generator & Enhancer</title>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Resume Editor - ResuStack</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    
+    <!-- HTMX -->
     <script src="https://unpkg.com/htmx.org@2.0.3"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
+    
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#2563eb",
+                        "primary-hover": "#1d4ed8",
+                        "background-light": "#f1f5f9",
+                        "background-dark": "#0f172a",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"],
+                        "sans": ["Inter", "sans-serif"]
+                    },
+                },
+            },
+        }
+    </script>
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        
+        /* Form Styling - Override crispy forms */
+        .form-control {
+            width: 100% !important;
+            padding: 10px 14px !important;
+            font-size: 14px !important;
+            border: 1px solid #e2e8f0 !important;
+            border-radius: 8px !important;
+            background-color: #fff !important;
+            color: #1e293b !important;
+            transition: all 0.2s ease !important;
+        }
+        
+        .form-control:focus {
+            border-color: #2563eb !important;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1) !important;
+            outline: none !important;
+        }
+        
+        label {
+            font-size: 14px !important;
+            font-weight: 500 !important;
+            color: #374151 !important;
+            margin-bottom: 6px !important;
+            display: block !important;
+        }
+        
+        .form-group { margin-bottom: 16px; }
+        
+        .form-check-input {
+            width: 18px !important;
+            height: 18px !important;
+            margin-right: 8px;
+            accent-color: #2563eb;
+        }
+        
+        /* Checkbox container - inline styling */
+        .form-check {
+            display: flex !important;
+            align-items: center !important;
+            gap: 8px;
+        }
+        
+        .form-check label {
+            display: inline !important;
+            margin-bottom: 0 !important;
+        }
+        
+        textarea.form-control {
+            min-height: 120px !important;
+            resize: vertical;
+        }
+        
+        /* Loading spinner */
+        .my-indicator { display: inline-flex; width: 20px; height: 20px; }
+        .my-indicator .spinner {
+            display: none;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #e2e8f0;
+            border-top-color: #2563eb;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        .my-indicator.htmx-request .spinner { display: block; }
+        
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        /* Button disabled state */
+        .htmx-enhance-disabled { opacity: 0.6; pointer-events: none; }
+        
+        /* Preview Modal */
+        .preview-modal-dialog {
+            width: 210mm;
+            max-width: 95%;
+            height: 90vh;
+            max-height: 297mm;
+        }
+        
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
 </head>
-<body>
-    <!-- Header -->
-    <header class="app-header">
-        <h1 class="app-title">Resume Generator & Enhancer</h1>
-        <div class="app-actions">
-            <select class="template-selector" id="template-selector" name="template_selector">
-                <option value="faangpath-simple">Faangpath Simple</option>
-                <option value="test-template">Test Template</option>
-            </select>
-            <div class="dropdown">
-                <button type="button" class="btn btn-success download-btn" id="downloadButton">
-                    <svg class="download-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-                    </svg>
-                    Download
+
+<body class="bg-background-light min-h-screen flex flex-col font-display">
+    <!-- Header (Same as Dashboard) -->
+    <header class="flex items-center justify-between whitespace-nowrap border-b border-slate-200 bg-white px-4 md:px-10 lg:px-20 py-4 z-50 sticky top-0 shadow-sm">
+        <a href="{% url 'resume:dashboard' %}" class="flex items-center gap-3">
+            <img src="{% static 'img/resustack_logo.png' %}" alt="ResuStack Logo" class="h-8 w-auto object-contain"/>
+            <h2 class="text-slate-900 text-2xl font-bold tracking-tight">ResuStack</h2>
+        </a>
+        
+        <div class="flex flex-1 justify-end gap-4 md:gap-8">
+            <nav class="hidden md:flex items-center gap-6">
+                <a class="text-slate-500 text-sm font-medium hover:text-primary transition-colors" href="{% url 'resume:dashboard' %}">Dashboard</a>
+                <a class="text-slate-500 text-sm font-medium hover:text-primary transition-colors" href="mailto:koksalkapucuoglu@gmail.com">Help</a>
+            </nav>
+            
+            <!-- Action Buttons -->
+            <div class="flex items-center gap-3">
+                <!-- Unsaved Indicator -->
+                <span id="unsavedIndicator" class="hidden text-amber-600 text-sm font-medium flex items-center gap-1">
+                    <span class="material-symbols-outlined text-base">edit</span>
+                    Unsaved changes
+                </span>
+                
+                <!-- Save Button -->
+                <button type="button" 
+                        id="saveButton"
+                        onclick="saveChanges()"
+                        class="hidden sm:flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-all shadow-md shadow-green-600/20">
+                    <span class="material-symbols-outlined text-lg">save</span>
+                    Save
                 </button>
-                <div class="dropdown-menu" id="downloadOptions">
-                    <button type="button" class="dropdown-item" onclick="testFaangpathTemplate()">Test Faangpath Template</button>
-                    <button type="button" class="dropdown-item" onclick="submitForm('pdf')">Save as PDF</button>
-                    <button type="button" class="dropdown-item" onclick="submitForm('tex')">Save as TEX</button>
+                
+                <!-- Preview Button -->
+                <button type="button" 
+                        class="hidden sm:flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-slate-300 transition-all"
+                        hx-post="{% url 'resume:preview_resume_form' %}"
+                        hx-include="#resume-form"
+                        hx-trigger="click"
+                        hx-swap="none"
+                        hx-on::after-request="if(event.detail.successful) { 
+                            const iframe = document.getElementById('preview-iframe');
+                            iframe.srcdoc = event.detail.xhr.responseText;
+                            document.getElementById('preview-modal').classList.remove('hidden');
+                        }">
+                    <span class="material-symbols-outlined text-lg">visibility</span>
+                    Preview
+                </button>
+                
+                <!-- Download Button -->
+                <button type="button" 
+                        id="downloadButton" 
+                        onclick="submitForm('pdf', false, true)"
+                        class="flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-primary rounded-lg hover:bg-primary-hover transition-all shadow-md shadow-primary/20">
+                    <span class="material-symbols-outlined text-lg">download</span>
+                    Download PDF
+                </button>
+                
+                <!-- User Avatar & Logout -->
+                {% if user.is_authenticated %}
+                <div class="flex items-center gap-3 ml-2">
+                    <a href="{% url 'profile' %}" class="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold border border-slate-300 hover:bg-primary hover:text-white hover:border-primary transition-all" title="Profile">
+                        {{ user.username|slice:":1"|upper }}
+                    </a>
+                    <a href="{% url 'logout' %}" class="flex items-center gap-1 text-slate-500 text-sm font-medium hover:text-red-500 transition-colors">
+                        <span class="material-symbols-outlined text-lg">logout</span>
+                    </a>
                 </div>
+                {% endif %}
             </div>
         </div>
     </header>
 
-    <div class="page-container">
-        {% for message in messages %}
-            <div class="alert alert-error">
-                {{ message }}
+    <!-- Hidden Template Selector (MVP - single template) -->
+    <input type="hidden" id="template-selector" name="template_selector" value="faangpath-simple">
+
+    <!-- Main Content -->
+    <main class="flex-1 px-4 md:px-10 lg:px-20 py-8">
+        <div class="max-w-4xl mx-auto">
+            
+            <!-- Page Title -->
+            <div class="mb-8">
+                <h1 class="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Resume Editor</h1>
+                <p class="text-slate-500 text-sm mt-1">Fill in your details and let AI enhance your resume</p>
             </div>
-        {% endfor %}
-        <form method="post" id="resume-form">
-            {% csrf_token %}
+            
+            <!-- Messages -->
+            {% if messages %}
+            <div class="mb-6 space-y-3">
+                {% for message in messages %}
+                <div class="p-4 rounded-xl text-sm flex items-center gap-3 {% if message.tags == 'success' %}bg-green-50 border border-green-200 text-green-700{% elif message.tags == 'error' %}bg-red-50 border border-red-200 text-red-700{% elif message.tags == 'warning' %}bg-yellow-50 border border-yellow-200 text-yellow-700{% else %}bg-blue-50 border border-blue-200 text-blue-700{% endif %}">
+                    <span class="material-symbols-outlined">
+                        {% if message.tags == 'success' %}check_circle{% elif message.tags == 'error' %}error{% elif message.tags == 'warning' %}warning{% else %}info{% endif %}
+                    </span>
+                    {{ message }}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            
+            <!-- Resume Form -->
+            <form method="post" id="resume-form" {% if resume_id %}action="{% url 'resume:resume_form_edit' pk=resume_id %}"{% endif %}>
+                {% csrf_token %}
 
-            <!-- Form Section Tabs -->
-            <nav class="form-sections">
-                <div class="form-section-tab active" data-section="personal-info">Personal Info</div>
-                <div class="form-section-tab" data-section="experience">Experience</div>
-                <div class="form-section-tab" data-section="education">Education</div>
-                <div class="form-section-tab" data-section="projects">Projects</div>
-            </nav>
+                <!-- Tab Navigation -->
+                <nav class="flex gap-1 mb-6 bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
+                    <button type="button" class="form-section-tab active flex-1 min-w-[100px] px-4 py-2.5 text-sm font-medium rounded-lg transition-all" data-section="personal-info">
+                        <span class="material-symbols-outlined text-lg align-middle mr-1">person</span>
+                        Personal
+                    </button>
+                    <button type="button" class="form-section-tab flex-1 min-w-[100px] px-4 py-2.5 text-sm font-medium rounded-lg transition-all" data-section="experience">
+                        <span class="material-symbols-outlined text-lg align-middle mr-1">work</span>
+                        Experience
+                    </button>
+                    <button type="button" class="form-section-tab flex-1 min-w-[100px] px-4 py-2.5 text-sm font-medium rounded-lg transition-all" data-section="education">
+                        <span class="material-symbols-outlined text-lg align-middle mr-1">school</span>
+                        Education
+                    </button>
+                    <button type="button" class="form-section-tab flex-1 min-w-[100px] px-4 py-2.5 text-sm font-medium rounded-lg transition-all" data-section="projects">
+                        <span class="material-symbols-outlined text-lg align-middle mr-1">code</span>
+                        Projects
+                    </button>
+                </nav>
 
-            <!-- Personal Info Section -->
-            <section class="section-content active" id="personal-info">
-                <div class="card">
-                    <div class="personal-info-container">
-                        <div class="form-field">
-                            {{ user_form.full_name|as_crispy_field }}
-                        </div>
-                        <div class="form-field">
-                            {{ user_form.email|as_crispy_field }}
-                        </div>
-                        <div class="form-field">
-                            {{ user_form.phone|as_crispy_field }}
-                        </div>
-                        <div class="form-field">
-                            {{ user_form.linkedin|as_crispy_field }}
-                        </div>
-                        <div class="form-field">
-                            {{ user_form.github|as_crispy_field }}
-                        </div>
-                        <div class="form-field">
-                            {{ user_form.skills|as_crispy_field }}
+                <!-- Personal Info Section -->
+                <section class="section-content active" id="personal-info">
+                    <div class="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 shadow-sm">
+                        <h2 class="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
+                            <span class="material-symbols-outlined text-primary">badge</span>
+                            Personal Information
+                        </h2>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                            <div>{{ user_form.full_name|as_crispy_field }}</div>
+                            <div>{{ user_form.email|as_crispy_field }}</div>
+                            <div>{{ user_form.phone|as_crispy_field }}</div>
+                            <div>{{ user_form.linkedin|as_crispy_field }}</div>
+                            <div>{{ user_form.github|as_crispy_field }}</div>
+                            <div class="md:col-span-2">{{ user_form.skills|as_crispy_field }}</div>
                         </div>
                     </div>
-                </div>
-            </section>
+                </section>
 
-            <!-- Experience Section -->
-            <section class="section-content" id="experience">
-                <div id="experience-container">
-                    {{ experience_formset.management_form }}
-                    {% for form in experience_formset %}
-                        <div class="experience-form card">
+                <!-- Experience Section -->
+                <section class="section-content" id="experience">
+                    <div id="experience-container" class="space-y-4">
+                        {{ experience_formset.management_form }}
+                        {% for form in experience_formset %}
+                        <div class="experience-form bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+                            <div class="flex items-center justify-between mb-4">
+                                <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                                    <span class="material-symbols-outlined text-primary">work_history</span>
+                                    Experience {{ forloop.counter }}
+                                </h3>
+                            </div>
                             {{ form|crispy }}
-                            <div class="card-buttons">
+                            <div class="flex items-center justify-end gap-3 mt-4 pt-4 border-t border-slate-100">
                                 <div class="my-indicator">
                                     <span class="spinner"></span>
                                 </div>
-                                <button type="button"
-                                        class="btn btn-primary enhance-experience"
-                                        hx-post="{% url 'resume:enhance_experience' %}"
-                                        hx-trigger="click"
-                                        hx-vals='{"field_id": "{{ form.description.id_for_label }}"}'
-                                        hx-target="#{{ form.description.id_for_label }}"
-                                        hx-swap="outerHTML"
-                                        hx-indicator=".my-indicator"
-                                >Enhance</button>
-                                <button type="button" class="btn btn-danger remove-experience">Remove</button>
+                                <button type="button" class="enhance-experience flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-violet-500 to-purple-600 rounded-lg hover:opacity-90 transition-all shadow-md"
+                                    hx-post="{% url 'resume:enhance_experience' %}" 
+                                    hx-trigger="click"
+                                    hx-vals='{"field_id": "{{ form.description.id_for_label }}"}'
+                                    hx-target="#{{ form.description.id_for_label }}" 
+                                    hx-swap="outerHTML"
+                                    hx-indicator=".my-indicator">
+                                    <span class="material-symbols-outlined text-lg">auto_awesome</span>
+                                    AI Enhance
+                                </button>
+                                <button type="button" class="remove-experience flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-all">
+                                    <span class="material-symbols-outlined text-lg">delete</span>
+                                    Remove
+                                </button>
                             </div>
                         </div>
-                    {% endfor %}
-                    <button type="button" id="add-experience" class="btn btn-primary">Add Experience</button>
-                </div>
-            </section>
+                        {% endfor %}
+                        <button type="button" id="add-experience" class="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-medium hover:border-primary hover:text-primary hover:bg-primary/5 transition-all flex items-center justify-center gap-2">
+                            <span class="material-symbols-outlined">add</span>
+                            Add Experience
+                        </button>
+                    </div>
+                </section>
 
-            <!-- Education Section -->
-            <section class="section-content" id="education">
-                <div id="education-container">
-                    {{ education_formset.management_form }}
-                    {% for form in education_formset %}
-                        <div class="education-form card">
+                <!-- Education Section -->
+                <section class="section-content" id="education">
+                    <div id="education-container" class="space-y-4">
+                        {{ education_formset.management_form }}
+                        {% for form in education_formset %}
+                        <div class="education-form bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+                            <div class="flex items-center justify-between mb-4">
+                                <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                                    <span class="material-symbols-outlined text-primary">school</span>
+                                    Education {{ forloop.counter }}
+                                </h3>
+                            </div>
                             {{ form|crispy }}
-                            <div class="card-buttons">
-                                <button type="button" class="btn btn-danger remove-education">Remove</button>
+                            <div class="flex items-center justify-end gap-3 mt-4 pt-4 border-t border-slate-100">
+                                <button type="button" class="remove-education flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-all">
+                                    <span class="material-symbols-outlined text-lg">delete</span>
+                                    Remove
+                                </button>
                             </div>
                         </div>
-                    {% endfor %}
-                    <button type="button" id="add-education" class="btn btn-primary">Add Education</button>
-                </div>
-            </section>
+                        {% endfor %}
+                        <button type="button" id="add-education" class="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-medium hover:border-primary hover:text-primary hover:bg-primary/5 transition-all flex items-center justify-center gap-2">
+                            <span class="material-symbols-outlined">add</span>
+                            Add Education
+                        </button>
+                    </div>
+                </section>
 
-            <!-- Projects Section -->
-            <section class="section-content" id="projects">
-                <div id="project-container">
-                    {{ project_formset.management_form }}
-                    {% for form in project_formset %}
-                        <div class="project-form card">
+                <!-- Projects Section -->
+                <section class="section-content" id="projects">
+                    <div id="project-container" class="space-y-4">
+                        {{ project_formset.management_form }}
+                        {% for form in project_formset %}
+                        <div class="project-form bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+                            <div class="flex items-center justify-between mb-4">
+                                <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                                    <span class="material-symbols-outlined text-primary">code</span>
+                                    Project {{ forloop.counter }}
+                                </h3>
+                            </div>
                             {{ form|crispy }}
-                            <div class="card-buttons">
+                            <div class="flex items-center justify-end gap-3 mt-4 pt-4 border-t border-slate-100">
                                 <div class="my-indicator">
                                     <span class="spinner"></span>
                                 </div>
-                                <button type="button"
-                                        class="btn btn-primary enhance-project"
-                                        hx-post="{% url 'resume:enhance_project' %}"
-                                        hx-trigger="click"
-                                        hx-vals='{"field_id": "{{ form.description.id_for_label }}"}'
-                                        hx-target="#{{ form.description.id_for_label }}"
-                                        hx-swap="outerHTML"
-                                        hx-indicator=".my-indicator"
-                                >Enhance</button>
-                                <button type="button" class="btn btn-danger remove-project">Remove</button>
+                                <button type="button" class="enhance-project flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-violet-500 to-purple-600 rounded-lg hover:opacity-90 transition-all shadow-md"
+                                    hx-post="{% url 'resume:enhance_project' %}" 
+                                    hx-trigger="click"
+                                    hx-vals='{"field_id": "{{ form.description.id_for_label }}"}'
+                                    hx-target="#{{ form.description.id_for_label }}" 
+                                    hx-swap="outerHTML"
+                                    hx-indicator=".my-indicator">
+                                    <span class="material-symbols-outlined text-lg">auto_awesome</span>
+                                    AI Enhance
+                                </button>
+                                <button type="button" class="remove-project flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-all">
+                                    <span class="material-symbols-outlined text-lg">delete</span>
+                                    Remove
+                                </button>
                             </div>
                         </div>
-                    {% endfor %}
-                    <button type="button" id="add-project" class="btn btn-primary">Add Project</button>
-                </div>
-            </section>
-            
-            <!-- Action buttons -->
-            <div class="form-action-buttons">
-                <button type="submit" class="btn btn-success">Submit</button>
-                <button type="button" class="btn btn-primary" onclick="openPopup()">Preview</button>
+                        {% endfor %}
+                        <button type="button" id="add-project" class="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-medium hover:border-primary hover:text-primary hover:bg-primary/5 transition-all flex items-center justify-center gap-2">
+                            <span class="material-symbols-outlined">add</span>
+                            Add Project
+                        </button>
+                    </div>
+                </section>
+            </form>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="mt-auto border-t border-slate-200 bg-white py-8 px-4 md:px-10 lg:px-20">
+        <div class="flex flex-col md:flex-row items-center justify-between gap-4 max-w-[1200px] mx-auto w-full">
+            <div class="flex items-center gap-2">
+                <img src="{% static 'img/resustack_logo.png' %}" alt="Logo" class="w-4 h-4 object-contain grayscale opacity-50"/>
+                <span class="text-sm font-bold tracking-tight text-slate-400">ResuStack</span>
             </div>
-        </form>
-    </div>
-    
-<!-- Preview pop-up -->
-<div class="popup" id="popup">
-    <div class="popup-content">
-        <iframe id="htmlPreview" srcdoc="" frameborder="0"></iframe>
-    </div>
-</div>
+            <p class="text-slate-400 text-xs font-medium">© 2026 ResuStack. All rights reserved.</p>
+        </div>
+    </footer>
 
-<!-- Education form template -->
-<template id="education-form-template">
-    <div class="education-form card">
-        {{ education_formset.empty_form|crispy }}
-        <div class="card-buttons">
-            <button type="button" class="btn btn-danger remove-education">Remove</button>
+    <!-- Preview Modal -->
+    <div id="preview-modal" class="hidden fixed inset-0 z-[9999]" style="animation: fadeIn 0.2s ease;">
+        <div class="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" onclick="document.getElementById('preview-modal').classList.add('hidden')"></div>
+        <div class="preview-modal-dialog relative mx-auto my-[5vh] bg-white rounded-xl shadow-2xl flex flex-col" style="animation: slideUp 0.3s ease;">
+            <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+                <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary">description</span>
+                    Resume Preview
+                </h3>
+                <button type="button" onclick="document.getElementById('preview-modal').classList.add('hidden')" class="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <div class="flex-1 overflow-hidden bg-slate-100">
+                <iframe id="preview-iframe" frameborder="0" class="w-full h-full border-none"></iframe>
+            </div>
         </div>
     </div>
-</template>
 
-<!-- Experience form template -->
-<template id="experience-form-template">
-    <div class="experience-form card">
-        {{ experience_formset.empty_form|crispy }}
-        <div class="card-buttons">
-            <div class="my-indicator">
-                <span class="spinner"></span>
+    <!-- Form Templates for Dynamic Addition -->
+    <template id="education-form-template">
+        <div class="education-form bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary">school</span>
+                    Education
+                </h3>
             </div>
-            <button type="button"
-                    class="btn btn-primary enhance-experience"
-                    hx-post="{% url 'resume:enhance_experience' %}"
+            {{ education_formset.empty_form|crispy }}
+            <div class="flex items-center justify-end gap-3 mt-4 pt-4 border-t border-slate-100">
+                <button type="button" class="remove-education flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-all">
+                    <span class="material-symbols-outlined text-lg">delete</span>
+                    Remove
+                </button>
+            </div>
+        </div>
+    </template>
+
+    <template id="experience-form-template">
+        <div class="experience-form bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary">work_history</span>
+                    Experience
+                </h3>
+            </div>
+            {{ experience_formset.empty_form|crispy }}
+            <div class="flex items-center justify-end gap-3 mt-4 pt-4 border-t border-slate-100">
+                <div class="my-indicator">
+                    <span class="spinner"></span>
+                </div>
+                <button type="button" class="enhance-experience flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-violet-500 to-purple-600 rounded-lg hover:opacity-90 transition-all shadow-md"
+                    hx-post="{% url 'resume:enhance_experience' %}" 
                     hx-trigger="click"
                     hx-vals='{"field_id": "{{ experience_formset.empty_form.description.id_for_label }}"}'
-                    hx-target="#{{ experience_formset.empty_form.description.id_for_label }}"
+                    hx-target="#{{ experience_formset.empty_form.description.id_for_label }}" 
                     hx-swap="outerHTML"
-                    hx-indicator=".my-indicator"
-            >Enhance
-            </button>
-            <button type="button"
-                    class="btn btn-danger remove-experience"
-            >Remove</button>
-        </div>
-    </div>
-</template>
-
-
-<!-- Project form template -->
-<template id="project-form-template">
-    <div class="project-form card">
-        {{ project_formset.empty_form|crispy }}
-        <div class="card-buttons">
-            <div class="my-indicator">
-                <span class="spinner"></span>
+                    hx-indicator=".my-indicator">
+                    <span class="material-symbols-outlined text-lg">auto_awesome</span>
+                    AI Enhance
+                </button>
+                <button type="button" class="remove-experience flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-all">
+                    <span class="material-symbols-outlined text-lg">delete</span>
+                    Remove
+                </button>
             </div>
-            <button type="button"
-                    class="btn btn-primary enhance-project"
-                    hx-post="{% url 'resume:enhance_project' %}"
+        </div>
+    </template>
+
+    <template id="project-form-template">
+        <div class="project-form bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary">code</span>
+                    Project
+                </h3>
+            </div>
+            {{ project_formset.empty_form|crispy }}
+            <div class="flex items-center justify-end gap-3 mt-4 pt-4 border-t border-slate-100">
+                <div class="my-indicator">
+                    <span class="spinner"></span>
+                </div>
+                <button type="button" class="enhance-project flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-violet-500 to-purple-600 rounded-lg hover:opacity-90 transition-all shadow-md"
+                    hx-post="{% url 'resume:enhance_project' %}" 
                     hx-trigger="click"
                     hx-vals='{"field_id": "{{ project_formset.empty_form.description.id_for_label }}"}'
-                    hx-target="#{{ project_formset.empty_form.description.id_for_label }}"
+                    hx-target="#{{ project_formset.empty_form.description.id_for_label }}" 
                     hx-swap="outerHTML"
-                    hx-indicator=".my-indicator"
-            >Enhance
-            </button>
-            <button type="button"
-                    class="btn btn-danger remove-project"
-            >Remove</button>
+                    hx-indicator=".my-indicator">
+                    <span class="material-symbols-outlined text-lg">auto_awesome</span>
+                    AI Enhance
+                </button>
+                <button type="button" class="remove-project flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-all">
+                    <span class="material-symbols-outlined text-lg">delete</span>
+                    Remove
+                </button>
+            </div>
         </div>
-    </div>
-</template>
+    </template>
 
-<style>
-    /* General page styling */
-    body {
-        font-family: 'Arial', sans-serif;
-        background-color: #f8fafc;
-        color: #334155;
-        line-height: 1.6;
-        margin: 0;
-        padding: 0;
-    }
-
-    /* Header styling */
-    .app-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 20px 40px;
-        background-color: #ffffff;
-        border-bottom: 1px solid #e2e8f0;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    }
-
-    .app-title {
-        color: #2563eb;
-        font-size: 24px;
-        font-weight: bold;
-        margin: 0;
-    }
-
-    .app-actions {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-
-    .template-selector {
-        background-color: #ffffff;
-        color: #374151;
-        border: 1px solid #d1d5db;
-        border-radius: 5px;
-        padding: 10px 15px;
-        font-size: 14px;
-    }
-
-    /* Template selector container styling */
-    .template-selector-container {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin-bottom: 20px;
-        padding: 15px;
-        background-color: #ffffff;
-        border: 1px solid #e2e8f0;
-        border-radius: 10px;
-    }
-    
-    .template-selector-label {
-        font-weight: 600;
-        color: #374151;
-        margin: 0;
-        white-space: nowrap;
-    }
-    
-    .template-selector-container .template-selector {
-        margin: 0;
-        flex: 1;
-        max-width: 200px;
-    }
-
-    /* Main content area */
-    .page-container {
-        max-width: 900px;
-        margin: 20px auto;
-        padding: 0 20px;
-    }
-
-    /* Form sections styling */
-    .form-sections {
-        display: flex;
-        margin-bottom: 20px;
-        border-bottom: 1px solid #e2e8f0;
-        overflow-x: auto;
-    }
-
-    .form-section-tab {
-        padding: 10px 20px;
-        cursor: pointer;
-        color: #64748b;
-        font-size: 16px;
-        transition: color 0.3s, border-bottom 0.3s;
-        border-bottom: 2px solid transparent;
-    }
-
-    .form-section-tab.active {
-        color: #2563eb;
-        border-bottom: 2px solid #2563eb;
-    }
-
-    /* Form section content */
-    .section-content {
-        display: none;
-        transition: opacity 0.3s ease;
-    }
-
-    .section-content.active {
-        display: block;
-        opacity: 1;
-    }
-
-    /* Card styling */
-    .card {
-        border: 1px solid #e2e8f0;
-        border-radius: 10px;
-        padding: 20px;
-        margin-bottom: 20px;
-        background-color: #ffffff;
-        transition: box-shadow 0.3s ease, transform 0.2s ease;
-    }
-
-    .card:hover {
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-        transform: translateY(-2px);
-    }
-
-    /* Form styling */
-    .form-field {
-        margin-bottom: 20px;
-    }
-
-    .field-label {
-        display: block;
-        margin-bottom: 5px;
-        color: #374151;
-        font-size: 14px;
-    }
-    
-    /* Override crispy forms styling to match our design */
-    .form-control {
-        background-color: #ffffff !important;
-        border: 1px solid #d1d5db !important;
-        border-radius: 5px !important;
-        color: #374151 !important;
-        font-size: 16px !important;
-        width: 100% !important;
-        box-sizing: border-box !important;
-    }
-    
-    .form-control:focus {
-        border-color: #2563eb !important;
-        box-shadow: 0 0 5px rgba(37, 99, 235, 0.2) !important;
-    }
-    
-    label {
-        color: #374151 !important;
-        width: 100% !important;
-    }
-    
-    /* Make sure crispy form elements respect their container widths */
-    .personal-info-container .form-group {
-        width: 100%;
-    }
-
-    /* Button styling */
-    .btn {
-        display: inline-block;
-        padding: 10px 20px;
-        font-size: 1rem;
-        border-radius: 5px;
-        border: none;
-        cursor: pointer;
-        transition: background-color 0.3s ease, transform 0.2s ease;
-    }
-
-    .btn-primary {
-        background-color: #2563eb;
-        color: #ffffff;
-    }
-
-    .btn-primary:hover {
-        background-color: #1d4ed8;
-        transform: scale(1.05);
-    }
-
-    .btn-danger {
-        background-color: #dc2626;
-        color: #fff;
-    }
-
-    .btn-danger:hover {
-        background-color: #b91c1c;
-        transform: scale(1.05);
-    }
-
-    .btn-success {
-        background-color: #059669;
-        color: #fff;
-    }
-
-    .btn-success:hover {
-        background-color: #047857;
-        transform: scale(1.05);
-    }
-
-    .download-btn {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-
-    .download-icon {
-        width: 18px;
-        height: 18px;
-    }
-    
-    /* Dropdown menu styling */
-    .dropdown {
-        position: relative;
-        display: inline-block;
-    }
-    
-    .dropdown-menu {
-        display: none;
-        position: absolute;
-        right: 0;
-        top: 100%;
-        min-width: 160px;
-        background-color: #ffffff;
-        border: 1px solid #e2e8f0;
-        border-radius: 5px;
-        z-index: 10;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        margin-top: 5px;
-    }
-    
-    .dropdown-menu.show {
-        display: block;
-        animation: fadeIn 0.2s ease;
-    }
-    
-    .dropdown-item {
-        display: block;
-        width: 100%;
-        padding: 10px 15px;
-        text-align: left;
-        background: none;
-        border: none;
-        color: #374151;
-        font-size: 14px;
-        cursor: pointer;
-        transition: background-color 0.2s ease;
-    }
-    
-    .dropdown-item:hover {
-        background-color: #f3f4f6;
-    }
-
-    /* Card buttons */
-    .card-buttons {
-        display: flex;
-        justify-content: flex-end;
-        gap: 10px;
-        margin-top: 15px;
-    }
-
-    /* Preview popup */
-    .popup {
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background-color: rgba(0, 0, 0, 0.85);
-        justify-content: center;
-        align-items: center;
-        z-index: 1000;
-    }
-
-    .popup.show {
-        display: flex;
-    }
-
-    .popup-content {
-        width: 90%;
-        max-width: 650px;
-        height: 85vh;
-        margin: 0 auto;
-        border-radius: 10px;
-        overflow: hidden;
-        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
-        animation: fadeIn 0.3s ease;
-        background-color: white;
-        position: relative;
-    }
-
-    iframe {
-        width: 100%;
-        height: 100%;
-        border: none;
-    }
-    @media (min-width: 768px) {
-        .popup-content {
-            width: 90%;
-            height: 85vh;
-        }
-    }
-    @media (min-width: 1260px) {
-        .popup-content {
-            width: 90%;
-            max-width: 650px;
-            height: 85vh;
-        }
-    }
-
-    @keyframes fadeIn {
-        from {
-            opacity: 0;
-            transform: scale(0.9);
-        }
-        to {
-            opacity: 1;
-            transform: scale(1);
-        }
-    }
-
-    /* Form action buttons */
-    .form-action-buttons {
-        display: flex;
-        gap: 10px;
-        margin-top: 20px;
-        margin-bottom: 40px;
-    }
-
-    /* Input field styling */
-    input, select, textarea {
-        width: 100%;
-        padding: 10px;
-        background-color: #ffffff;
-        border: 1px solid #d1d5db;
-        border-radius: 5px;
-        color: #374151;
-        font-size: 16px;
-    }
-
-    input:focus, select:focus, textarea:focus {
-        outline: none;
-        border-color: #2563eb;
-        box-shadow: 0 0 5px rgba(37, 99, 235, 0.2);
-    }
-
-    /* Checkbox styling */
-    .form-check-input {
-        width: auto !important;
-        margin-right: 10px;
-    }
-
-    /* For multi-column layouts in personal info */
-    .grid-row {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 20px;
-    }
-
-    @media (max-width: 768px) {
-        .grid-row {
-            grid-template-columns: 1fr;
-        }
-    }
-    
-    /* Vertical layout for personal info */
-    .personal-info-container {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-    }
-    
-    .personal-info-container .form-field {
-        width: 90%;
-        max-width: 90%;
-        margin-bottom: 15px;
-    }
-
-    /* Special styles for forms with current job checkbox */
-    [id^="div_id_experience-"][id$="-current_role"] {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-
-    [id^="div_id_experience-"][id$="-current_role"] .form-check-input {
-        order: 2; 
-        width: 1rem !important;
-    }
-
-    [id^="div_id_experience-"][id$="-current_role"] .form-check-label {
-        order: 1; 
-    }
-
-    /* Loading indicator */
-    .my-indicator {
-        display: inline-block;
-        width: 24px;
-        height: 24px;
-        vertical-align: middle;
-        margin-right: 8px;
-        position: relative;
-    }
-    .my-indicator .spinner {
-        display: none;
-        width: 24px;
-        height: 24px;
-        border: 3px solid #2563eb;
-        border-top: 3px solid #e5e7eb;
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-        position: absolute;
-        top: 0; left: 0;
-    }
-    .my-indicator.htmx-request .spinner {
-        display: inline-block;
-    }
-    @keyframes spin {
-        0% { transform: rotate(0deg);}
-        100% { transform: rotate(360deg);}
-    }
-
-    .htmx-enhance-disabled,
-    .btn[disabled] {
-        opacity: 0.6;
-        pointer-events: none;
-    }
-    
-    /* Scrollbar styling */
-    ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-    }
-    
-    ::-webkit-scrollbar-track {
-        background: #f1f5f9;
-        border-radius: 4px;
-    }
-    
-    ::-webkit-scrollbar-thumb {
-        background: #cbd5e1;
-        border-radius: 4px;
-    }
-    
-    ::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8;
-    }
-    
-    /* Alert styling */
-    .alert {
-        padding: 15px;
-        margin-bottom: 20px;
-        border-radius: 5px;
-        border: 1px solid transparent;
-        font-size: 14px;
-    }
-    
-    .alert-error {
-        background-color: #fef2f2;
-        border-color: #fecaca;
-        color: #b91c1c;
-    }
-    
-    /* Transitions */
-    .form-section-tab, .btn, .card, input, textarea, select {
-        transition: all 0.2s ease-in-out;
-    }
-    
-    /* Form action button positioning */
-    .form-action-buttons {
-        position: sticky;
-        bottom: 0;
-        background: #f8fafc;
-        padding: 15px 0;
-        z-index: 100;
-        border-top: 1px solid #e2e8f0;
-    }
-    
-    /* Date inputs styling */
-    input[type="month"] {
-        height: 38px;
-    }
-    
-    /* Section headers */
-    .section-header {
-        margin-bottom: 15px;
-        padding-bottom: 5px;
-        border-bottom: 1px solid #e2e8f0;
-        color: #374151;
-        font-size: 18px;
-    }
-    
-    /* Responsive adjustments */
-    @media (max-width: 600px) {
-        .app-header {
-            flex-direction: column;
-            padding: 15px;
-        }
-        
-        .app-actions {
-            margin-top: 10px;
-        }
-        
-        .form-sections {
-            justify-content: space-between;
-        }
-        
-        .form-section-tab {
-            padding: 8px 10px;
-            font-size: 14px;
-        }
-    }
-</style>
-
-<script>
-    /**
-     * Handles tab navigation between form sections
-     */
-    document.addEventListener('DOMContentLoaded', function() {
-        // Tab navigation
-        const tabs = document.querySelectorAll('.form-section-tab');
-        
-        tabs.forEach(tab => {
-            tab.addEventListener('click', function() {
-                // Remove active class from all tabs and sections
-                document.querySelectorAll('.form-section-tab').forEach(t => t.classList.remove('active'));
-                document.querySelectorAll('.section-content').forEach(s => s.classList.remove('active'));
-                
-                // Add active class to clicked tab and corresponding section
-                const sectionId = this.getAttribute('data-section');
-                this.classList.add('active');
-                document.getElementById(sectionId).classList.add('active');
+    <script>
+        // Tab Navigation
+        document.addEventListener('DOMContentLoaded', function() {
+            const tabs = document.querySelectorAll('.form-section-tab');
+            
+            tabs.forEach(tab => {
+                tab.addEventListener('click', function() {
+                    // Remove active from all tabs and sections
+                    document.querySelectorAll('.form-section-tab').forEach(t => {
+                        t.classList.remove('active', 'bg-primary', 'text-white');
+                        t.classList.add('text-slate-500', 'hover:bg-slate-100');
+                    });
+                    document.querySelectorAll('.section-content').forEach(s => s.classList.remove('active'));
+                    
+                    // Add active to clicked tab
+                    this.classList.add('active', 'bg-primary', 'text-white');
+                    this.classList.remove('text-slate-500', 'hover:bg-slate-100');
+                    
+                    // Show corresponding section
+                    const sectionId = this.getAttribute('data-section');
+                    document.getElementById(sectionId).classList.add('active');
+                });
             });
+            
+            // Set initial active tab styling
+            const activeTab = document.querySelector('.form-section-tab.active');
+            if (activeTab) {
+                activeTab.classList.add('bg-primary', 'text-white');
+                activeTab.classList.remove('text-slate-500');
+            }
         });
-        
-        // Download dropdown functionality
-        const downloadButton = document.getElementById('downloadButton');
-        const downloadOptions = document.getElementById('downloadOptions');
-        
-        downloadButton.addEventListener('click', function(e) {
-            e.stopPropagation();
-            downloadOptions.classList.toggle('show');
-        });
-        
-        // Close dropdown when clicking outside
-        document.addEventListener('click', function() {
-            downloadOptions.classList.remove('show');
-        });
-        
-        // Handle regular form submission to include template selector
-        const form = document.getElementById('resume-form');
-        if (form) {
-            form.addEventListener('submit', function(e) {
-                // Get template selector value from header
-                const headerTemplateSelector = document.getElementById('template-selector');
-                const templateSelectorValue = headerTemplateSelector ? headerTemplateSelector.value : 'faangpath-simple';
-                
-                console.log('Form submission - Template selector value:', templateSelectorValue);
-                
-                // Add hidden input for template selector
-                const templateInput = document.createElement('input');
-                templateInput.type = 'hidden';
-                templateInput.name = 'template_selector';
-                templateInput.value = templateSelectorValue;
-                
-                // Remove any existing template input to avoid duplicates
-                const existingTemplate = form.querySelector('input[name="template_selector"]');
-                if (existingTemplate) {
-                    form.removeChild(existingTemplate);
-                }
-                
-                // Add the template input
-                form.appendChild(templateInput);
-            });
-        }
-    });
 
-    /**
-     * Handles dynamic form management for the Education section
-     */
-    const EDUCATION_SELECTORS = {
-        form: '.education-form',
-        container: '#education-container',
-        addButton: '#add-education',
-        totalForms: '#id_education-TOTAL_FORMS',
-        template: '#education-form-template'
-    }
+        // Section content visibility
+        const style = document.createElement('style');
+        style.textContent = `
+            .section-content { display: none; }
+            .section-content.active { display: block; }
+        `;
+        document.head.appendChild(style);
 
-    const educationElements = {
-        forms: document.querySelectorAll(EDUCATION_SELECTORS.form),
-        container: document.querySelector(EDUCATION_SELECTORS.container),
-        addButton: document.querySelector(EDUCATION_SELECTORS.addButton),
-        totalForms: document.querySelector(EDUCATION_SELECTORS.totalForms),
-        template: document.querySelector(EDUCATION_SELECTORS.template)
-    }
+        // Education Form Management
+        const educationContainer = document.querySelector('#education-container');
+        const educationTotalForms = document.querySelector('#id_education-TOTAL_FORMS');
+        const educationTemplate = document.querySelector('#education-form-template');
+        let educationFormCount = document.querySelectorAll('.education-form').length;
+        let educationFormIndex = educationFormCount - 1;
 
-    let educationFormIndex = educationElements.forms.length - 1;
-    let educationFormCount = educationElements.forms.length;
-
-    educationElements.addButton.addEventListener('click', addEducationForm);
-
-    function addEducationForm(e) {
-        e.preventDefault();
-        
-        try {
-            const template = educationElements.template;
-            const newForm = template.content.cloneNode(true);
-    
+        document.querySelector('#add-education').addEventListener('click', function(e) {
+            e.preventDefault();
+            const newForm = educationTemplate.content.cloneNode(true);
             educationFormIndex++;
             educationFormCount++;
-            newForm.querySelector('.education-form').innerHTML =
+            
+            newForm.querySelector('.education-form').innerHTML = 
                 newForm.querySelector('.education-form').innerHTML.replace(
-                    RegExp('education-__prefix__-', 'g'),
+                    /education-__prefix__-/g,
                     `education-${educationFormIndex}-`
-            );
-    
-            educationElements.container.insertBefore(newForm, educationElements.addButton);
-            educationElements.totalForms.setAttribute('value', `${educationFormCount}`);
+                );
+            
+            educationContainer.insertBefore(newForm, this);
+            educationTotalForms.setAttribute('value', educationFormCount);
+            htmx.process(educationContainer);
+        });
 
-            // Reload htmx to recognize new form
-            htmx.process(educationElements.container);
-        } catch (error) {
-            console.error('Error adding education form:', error);
-        }
-    }
+        // Experience Form Management
+        const experienceContainer = document.querySelector('#experience-container');
+        const experienceTotalForms = document.querySelector('#id_experience-TOTAL_FORMS');
+        const experienceTemplate = document.querySelector('#experience-form-template');
+        let experienceFormCount = document.querySelectorAll('.experience-form').length;
+        let experienceFormIndex = experienceFormCount - 1;
 
-    /**
-     * Handles dynamic form management for the Experience section
-     */
-    const EXPERIENCE_SELECTORS = {
-        form: '.experience-form',
-        container: '#experience-container',
-        addButton: '#add-experience',
-        totalForms: '#id_experience-TOTAL_FORMS',
-        template: '#experience-form-template'
-    }
-
-    const experienceElements = {
-        forms: document.querySelectorAll(EXPERIENCE_SELECTORS.form),
-        container: document.querySelector(EXPERIENCE_SELECTORS.container),
-        addButton: document.querySelector(EXPERIENCE_SELECTORS.addButton),
-        totalForms: document.querySelector(EXPERIENCE_SELECTORS.totalForms),
-        template: document.querySelector(EXPERIENCE_SELECTORS.template)
-    }
-
-    let experienceFormIndex = experienceElements.forms.length - 1;
-    let experienceFormCount = experienceElements.forms.length;
-
-    experienceElements.addButton.addEventListener('click', addExperienceForm);
-
-    function addExperienceForm(e) {
-        e.preventDefault();
-        
-        try {
-            const template = experienceElements.template;
-            const newForm = template.content.cloneNode(true);
-    
+        document.querySelector('#add-experience').addEventListener('click', function(e) {
+            e.preventDefault();
+            const newForm = experienceTemplate.content.cloneNode(true);
             experienceFormIndex++;
             experienceFormCount++;
-            newForm.querySelector('.experience-form').innerHTML =
+            
+            newForm.querySelector('.experience-form').innerHTML = 
                 newForm.querySelector('.experience-form').innerHTML.replace(
-                    RegExp('experience-__prefix__-', 'g'),
+                    /experience-__prefix__-/g,
                     `experience-${experienceFormIndex}-`
-            );
-    
-            experienceElements.container.insertBefore(newForm, experienceElements.addButton);
-            experienceElements.totalForms.setAttribute('value', `${experienceFormCount}`);
+                );
+            
+            experienceContainer.insertBefore(newForm, this);
+            experienceTotalForms.setAttribute('value', experienceFormCount);
+            htmx.process(experienceContainer);
+        });
 
-            // Reload htmx to recognize new form
-            htmx.process(experienceElements.container);
-        } catch (error) {
-            console.error('Error adding experience form:', error);
-        }
-    }
-    
-    /**
-     * Handles dynamic form management for the Project section
-     */
-    const PROJECT_SELECTORS = {
-        form: '.project-form',
-        container: '#project-container',
-        addButton: '#add-project',
-        totalForms: '#id_project-TOTAL_FORMS',
-        template: '#project-form-template'
-    }
+        // Project Form Management
+        const projectContainer = document.querySelector('#project-container');
+        const projectTotalForms = document.querySelector('#id_project-TOTAL_FORMS');
+        const projectTemplate = document.querySelector('#project-form-template');
+        let projectFormCount = document.querySelectorAll('.project-form').length;
+        let projectFormIndex = projectFormCount - 1;
 
-    const projectElements = {
-        forms: document.querySelectorAll(PROJECT_SELECTORS.form),
-        container: document.querySelector(PROJECT_SELECTORS.container),
-        addButton: document.querySelector(PROJECT_SELECTORS.addButton),
-        totalForms: document.querySelector(PROJECT_SELECTORS.totalForms),
-        template: document.querySelector(PROJECT_SELECTORS.template)
-    }
-
-    let projectFormIndex = projectElements.forms.length - 1;
-    let projectFormCount = projectElements.forms.length;
-
-    projectElements.addButton.addEventListener('click', addProjectForm);
-
-    function addProjectForm(e) {
-        e.preventDefault();
-        
-        try {
-            const template = projectElements.template;
-            const newForm = template.content.cloneNode(true);
-    
+        document.querySelector('#add-project').addEventListener('click', function(e) {
+            e.preventDefault();
+            const newForm = projectTemplate.content.cloneNode(true);
             projectFormIndex++;
             projectFormCount++;
-            newForm.querySelector('.project-form').innerHTML =
+            
+            newForm.querySelector('.project-form').innerHTML = 
                 newForm.querySelector('.project-form').innerHTML.replace(
-                    RegExp('project-__prefix__-', 'g'),
+                    /project-__prefix__-/g,
                     `project-${projectFormIndex}-`
-            );
-    
-            projectElements.container.insertBefore(newForm, projectElements.addButton);
-            projectElements.totalForms.setAttribute('value', `${projectFormCount}`);
-
-            // Reload htmx to recognize new form
-            htmx.process(projectElements.container);
-        } catch (error) {
-            console.error('Error adding project form:', error);
-        }
-    }
-    
-    /**
-     * Event listener for remove buttons across all form sections
-     */
-    document.addEventListener('click', function(e) {
-        // Handle education form removal
-        if (e.target && e.target.classList.contains('remove-education')) {
-            e.target.closest('.card').remove();
+                );
             
-            const forms = document.querySelectorAll('.education-form');
-            
-            // Update total forms count
-            educationElements.totalForms.setAttribute('value', forms.length);
-            educationFormCount = forms.length;
-        }
-        
-        // Handle experience form removal
-        if (e.target && e.target.classList.contains('remove-experience')) {
-            e.target.closest('.card').remove();
-            
-            const forms = document.querySelectorAll('.experience-form');
+            projectContainer.insertBefore(newForm, this);
+            projectTotalForms.setAttribute('value', projectFormCount);
+            htmx.process(projectContainer);
+        });
 
-            // Update total forms count
-            experienceElements.totalForms.setAttribute('value', forms.length);
-            experienceFormCount = forms.length;
-        }
-        
-        // Handle project form removal
-        if (e.target && e.target.classList.contains('remove-project')) {
-            e.target.closest('.card').remove();
-            
-            const forms = document.querySelectorAll('.project-form');
-            
-            // Update total forms count
-            projectElements.totalForms.setAttribute('value', forms.length);
-            projectFormCount = forms.length;
-        }
-    });
-
-    /**
-     * Opens the preview popup with generated resume HTML
-     */
-    function openPopup() {
-        const popup = document.getElementById('popup');
-        const htmlPreview = document.getElementById('htmlPreview');
-
-        // Select the form and create FormData
-        const form = document.querySelector('form');
-        const formData = new FormData(form);
-
-        // Get CSRF token from the form
-        const csrfToken = form.querySelector('[name=csrfmiddlewaretoken]').value;
-
-        // Fetch HTML content from Django
-        fetch("{% url 'resume:preview_resume_form' %}", {
-            method: "POST",
-            headers: {
-                "X-CSRFToken": csrfToken
-            },
-            body: formData
-        })
-        .then(async response => {
-            let data;
-            try {
-                data = await response.json();
-            } catch (e) {
-                // Not JSON, show raw response
-                const text = await response.text();
-                htmlPreview.srcdoc = `
-                    <div style="color:red;padding:2em;">
-                        <h3>Preview Error</h3>
-                        <p>Server returned invalid JSON.</p>
-                        <pre style="white-space:pre-wrap;">${text}</pre>
-                    </div>
-                `;
-                popup.classList.add('show');
-                console.error("Preview Error: Server returned invalid JSON", text);
-                return;
+        // Remove Form Handlers
+        document.addEventListener('click', function(e) {
+            if (e.target.closest('.remove-education')) {
+                e.target.closest('.education-form').remove();
+                educationFormCount = document.querySelectorAll('.education-form').length;
+                educationTotalForms.setAttribute('value', educationFormCount);
             }
-            
-            if (data.html) {
-                htmlPreview.srcdoc = data.html;
-                popup.classList.add('show');
-            } else if (data.error) {
-                htmlPreview.srcdoc = `
-                    <div style="background:#fff3f3;color:#b71c1c;padding:2em;border-radius:8px;">
-                        <h3 style="color:#b71c1c;">Preview Error</h3>
-                        <p>${data.error}</p>
-                        <pre style="white-space:pre-wrap;background:#f9dede;color:#b71c1c;padding:1em;border-radius:6px;">${JSON.stringify(data.form_errors, null, 2)}</pre>
-                    </div>
-                `;
-                popup.classList.add('show');
-                console.error("Preview Error:", data.error, data.form_errors);
-            } else {
-                htmlPreview.srcdoc = `
-                    <div style="color:red;padding:2em;">
-                        <h3>Preview Error</h3>
-                        <p>Invalid response from server.</p>
-                        <pre style="white-space:pre-wrap;">${JSON.stringify(data, null, 2)}</pre>
-                    </div>
-                `;
-                popup.classList.add('show');
-                console.error("Preview Error: Invalid HTML", data);
+            if (e.target.closest('.remove-experience')) {
+                e.target.closest('.experience-form').remove();
+                experienceFormCount = document.querySelectorAll('.experience-form').length;
+                experienceTotalForms.setAttribute('value', experienceFormCount);
             }
-        })
-    }
-
-    /**
-     * Closes the preview popup when clicking outside of it or pressing ESC
-     */
-    window.onclick = function(event) {
-        const popup = document.getElementById('popup');
-        if (event.target == popup) {
-            popup.classList.remove('show');
-        }
-    }
-
-    // ESC key to close preview
-    document.addEventListener('keydown', function(event) {
-        if (event.key === 'Escape') {
-            const popup = document.getElementById('popup');
-            if (popup.classList.contains('show')) {
-                popup.classList.remove('show');
+            if (e.target.closest('.remove-project')) {
+                e.target.closest('.project-form').remove();
+                projectFormCount = document.querySelectorAll('.project-form').length;
+                projectTotalForms.setAttribute('value', projectFormCount);
             }
-        }
-    });
+        });
 
-    /**
-     * Handles form submission for PDF or TEX download
-     * @param {string} format - The format to download ('pdf' or 'tex')
-     */
-    function submitForm(format = 'pdf') {
-        try {
+        // ESC to close preview
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                document.getElementById('preview-modal').classList.add('hidden');
+            }
+        });
+
+        // Form Submission
+        function submitForm(format = 'pdf', preview = false, openInNewTab = false) {
             const form = document.getElementById('resume-form');
-            
-            if (!form) {
-                console.error('Form not found');
-                alert('Form not found. Please try again.');
-                return;
+            if (!form) return;
+
+            const templateSelector = document.getElementById('template-selector');
+            const templateValue = templateSelector ? templateSelector.value : 'faangpath-simple';
+
+            // Add hidden inputs
+            let templateInput = form.querySelector('input[name="template_selector"]');
+            if (!templateInput) {
+                templateInput = document.createElement('input');
+                templateInput.type = 'hidden';
+                templateInput.name = 'template_selector';
+                form.appendChild(templateInput);
             }
-            
-            console.log('Submitting form with format:', format);
-            
-            // Get template selector value from header
-            const headerTemplateSelector = document.getElementById('template-selector');
-            const templateSelectorValue = headerTemplateSelector ? headerTemplateSelector.value : 'faangpath-simple';
-            
-            console.log('Template selector value:', templateSelectorValue);
-            
-            // Add hidden input for template selector
-            const templateInput = document.createElement('input');
-            templateInput.type = 'hidden';
-            templateInput.name = 'template_selector';
-            templateInput.value = templateSelectorValue;
-            
-            // Add hidden input for export format
-            const formatInput = document.createElement('input');
-            formatInput.type = 'hidden';
-            formatInput.name = 'export_format';
+            templateInput.value = templateValue;
+
+            let formatInput = form.querySelector('input[name="export_format"]');
+            if (!formatInput) {
+                formatInput = document.createElement('input');
+                formatInput.type = 'hidden';
+                formatInput.name = 'export_format';
+                form.appendChild(formatInput);
+            }
             formatInput.value = format;
-            
-            // Remove any existing inputs to avoid duplicates
-            const existingTemplate = form.querySelector('input[name="template_selector"]');
-            if (existingTemplate) {
-                form.removeChild(existingTemplate);
+
+            if (preview || openInNewTab) {
+                const originalTarget = form.target;
+                form.target = '_blank';
+                form.submit();
+                setTimeout(() => { form.target = originalTarget || '_self'; }, 100);
+            } else {
+                form.submit();
             }
-            const existingFormat = form.querySelector('input[name="export_format"]');
-            if (existingFormat) {
-                form.removeChild(existingFormat);
-            }
-            
-            // Add the new inputs and submit
-            form.appendChild(templateInput);
-            form.appendChild(formatInput);
-            
-            form.submit();
-            
-        } catch (error) {
-            console.error('Error submitting form:', error);
-            alert('Error submitting form. Please try again.');
         }
-    }
 
-    /**
-     * Test function to render the faangpath template
-     */
-    function testFaangpathTemplate() {
-        try {
-            const form = document.getElementById('resume-form');
-            
-            if (!form) {
-                console.error('Form not found');
-                alert('Form not found. Please try again.');
-                return;
-            }
-            
-            console.log('Testing faangpath template');
-            
-            // Change form action to test URL
-            const originalAction = form.action;
-            form.action = "{% url 'resume:test_faangpath' %}";
-            
-            // Submit form
-            form.submit();
-            
-            // Restore original action (though this won't execute due to form submission)
-            form.action = originalAction;
-            
-        } catch (error) {
-            console.error('Error testing template:', error);
-            alert('Error testing template. Please try again.');
-        }
-    }
+        // HTMX button disable during enhancement
+        let enhanceLoadingCount = 0;
 
-    /**
-     * HTMX request handling - disable buttons during enhancement
-     */
-    let enhanceLoadingCount = 0;
-
-    document.body.addEventListener('htmx:beforeRequest', function(evt) {
-        const trigger = evt.detail.elt;
-        if (trigger && (trigger.classList.contains('enhance-experience') || trigger.classList.contains('enhance-project'))) {
-            enhanceLoadingCount++;
-            document.querySelectorAll('button').forEach(btn => {
-                btn.disabled = true;
-                btn.classList.add('htmx-enhance-disabled');
-            });
-        }
-    });
-
-    document.body.addEventListener('htmx:afterRequest', function(evt) {
-        const trigger = evt.detail.elt;
-        if (trigger && (trigger.classList.contains('enhance-experience') || trigger.classList.contains('enhance-project'))) {
-            enhanceLoadingCount = Math.max(0, enhanceLoadingCount - 1);
-            if (enhanceLoadingCount === 0) {
+        document.body.addEventListener('htmx:beforeRequest', function(evt) {
+            const trigger = evt.detail.elt;
+            if (trigger && (trigger.classList.contains('enhance-experience') || trigger.classList.contains('enhance-project'))) {
+                enhanceLoadingCount++;
                 document.querySelectorAll('button').forEach(btn => {
-                    btn.disabled = false;
-                    btn.classList.remove('htmx-enhance-disabled');
+                    btn.disabled = true;
+                    btn.classList.add('htmx-enhance-disabled');
                 });
             }
+        });
+
+        document.body.addEventListener('htmx:afterRequest', function(evt) {
+            const trigger = evt.detail.elt;
+            if (trigger && (trigger.classList.contains('enhance-experience') || trigger.classList.contains('enhance-project'))) {
+                enhanceLoadingCount = Math.max(0, enhanceLoadingCount - 1);
+                if (enhanceLoadingCount === 0) {
+                    document.querySelectorAll('button').forEach(btn => {
+                        btn.disabled = false;
+                        btn.classList.remove('htmx-enhance-disabled');
+                    });
+                }
+                // Mark as changed after AI enhancement
+                markAsChanged();
+            }
+        });
+
+        // ============================================
+        // UNSAVED CHANGES TRACKING
+        // ============================================
+        let hasUnsavedChanges = false;
+        let isSaving = false;
+        let initialFormState = '';
+
+        // Capture initial form state on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(() => {
+                initialFormState = getFormState();
+            }, 500);
+        });
+
+        function getFormState() {
+            const form = document.getElementById('resume-form');
+            if (!form) return '';
+            return new FormData(form).toString();
         }
-    });
-</script>
+
+        function markAsChanged() {
+            if (!hasUnsavedChanges) {
+                hasUnsavedChanges = true;
+                document.getElementById('unsavedIndicator').classList.remove('hidden');
+                document.getElementById('unsavedIndicator').classList.add('flex');
+            }
+        }
+
+        function markAsSaved() {
+            hasUnsavedChanges = false;
+            document.getElementById('unsavedIndicator').classList.add('hidden');
+            document.getElementById('unsavedIndicator').classList.remove('flex');
+        }
+
+        // Track form changes
+        document.addEventListener('input', function(e) {
+            if (e.target.closest('#resume-form')) {
+                markAsChanged();
+            }
+        });
+
+        // Track select changes
+        document.addEventListener('change', function(e) {
+            if (e.target.closest('#resume-form')) {
+                markAsChanged();
+            }
+        });
+
+        // Save Changes function
+        function saveChanges() {
+            if (isSaving) return;
+            
+            const form = document.getElementById('resume-form');
+            if (!form) return;
+
+            isSaving = true;
+            const saveBtn = document.getElementById('saveButton');
+            const originalHtml = saveBtn.innerHTML;
+            saveBtn.innerHTML = '<span class="material-symbols-outlined text-lg animate-spin">sync</span> Saving...';
+            saveBtn.disabled = true;
+
+            // Add save action indicator
+            let actionInput = form.querySelector('input[name="form_action"]');
+            if (!actionInput) {
+                actionInput = document.createElement('input');
+                actionInput.type = 'hidden';
+                actionInput.name = 'form_action';
+                form.appendChild(actionInput);
+            }
+            actionInput.value = 'save_only';
+
+            // Submit via fetch to stay on page
+            const formData = new FormData(form);
+            
+            // Use getAttribute to get the actual action URL, not the named input
+            const formAction = form.getAttribute('action') || window.location.href;
+            
+            fetch(formAction, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => {
+                if (response.ok) {
+                    markAsSaved();
+                    saveBtn.innerHTML = '<span class="material-symbols-outlined text-lg">check</span> Saved!';
+                    setTimeout(() => {
+                        saveBtn.innerHTML = originalHtml;
+                    }, 2000);
+                } else {
+                    throw new Error('Save failed');
+                }
+            })
+            .catch(error => {
+                console.error('Save error:', error);
+                saveBtn.innerHTML = '<span class="material-symbols-outlined text-lg">error</span> Error';
+                setTimeout(() => {
+                    saveBtn.innerHTML = originalHtml;
+                }, 2000);
+            })
+            .finally(() => {
+                isSaving = false;
+                saveBtn.disabled = false;
+                actionInput.value = '';
+            });
+        }
+
+        // Warn before leaving with unsaved changes
+        window.addEventListener('beforeunload', function(e) {
+            if (hasUnsavedChanges) {
+                e.preventDefault();
+                e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+                return e.returnValue;
+            }
+        });
+
+        // Don't warn if submitting form normally (download)
+        document.getElementById('resume-form')?.addEventListener('submit', function() {
+            hasUnsavedChanges = false;
+        });
+    </script>
+</body>
+</html>

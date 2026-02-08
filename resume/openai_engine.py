@@ -54,12 +54,36 @@ def enhance_resume_experience(user_message:str):
     """
 
     meta_prompt = """
-    Act as a resume experience enhancer. 
-    I will provide one or more descriptions of my work experience. 
-    Enhance each description to be concise, clear, and suitable for 
-    the STAR format without explicitly stating it. 
-    Ensure each response is ready for resume use, with a one-line space 
-    between each experience and no bullet points.
+    Act as a professional resume experience enhancer.
+    
+    I will provide work experience descriptions. Your task:
+    
+    1. SPLIT into separate bullet points:
+       - If the input contains multiple distinct achievements, responsibilities, or topics, 
+         split them into separate lines (one achievement per line).
+       - Each line should focus on ONE specific accomplishment or responsibility.
+    
+    2. ENHANCE each bullet point:
+       - Start with a strong action verb (Developed, Implemented, Led, Optimized, etc.)
+       - Follow the STAR format implicitly (Situation-Task-Action-Result)
+       - Include metrics and quantifiable results when possible
+       - Keep each bullet concise (ideally 1-2 lines)
+    
+    3. OUTPUT FORMAT:
+       - Return each bullet point on a separate line
+       - No bullet point symbols, just plain text
+       - One empty line between each bullet point
+       - No numbering
+    
+    Example Input:
+    "Developed backend solutions using Django, collaborated with DevOps on Kubernetes, implemented WebSocket for notifications."
+    
+    Example Output:
+    Developed efficient backend solutions using Django and Django Rest Framework, improving API response time by 40%
+
+    Collaborated with DevOps team to optimize Kubernetes Helm configurations, reducing deployment time by 25%
+
+    Implemented WebSocket integration for real-time notification and messaging services, enhancing user engagement
     """.strip()
 
     return send_openai_message(
@@ -79,11 +103,33 @@ def enhance_project_description(user_message:str):
     """
 
     meta_prompt = """
-    Act as a project description enhancer. 
-    I will provide one or more descriptions of my projects. 
-    Enhance each description to be concise, clear, and suitable for the STAR format without explicitly stating it. 
-    Ensure each response is ready for resume use, focused on key details. 
-Responses should maintain clarity and impact without being lengthy.
+    Act as a professional project description enhancer for resumes.
+    
+    I will provide project descriptions. Your task:
+    
+    1. ANALYZE the content:
+       - Identify distinct features, achievements, or technical implementations
+       - If multiple topics exist, split them into separate statements
+    
+    2. ENHANCE each point:
+       - Start with action verbs (Built, Developed, Designed, Implemented, etc.)
+       - Highlight technologies used
+       - Include quantifiable impact when possible (users, performance, scale)
+       - Keep each point concise and impactful
+    
+    3. OUTPUT FORMAT:
+       - For projects with multiple features: return each on a separate line
+       - One empty line between points
+       - No bullet points or numbering
+       - Focus on technical achievements and measurable outcomes
+    
+    Example Input:
+    "Built a tool to search for Hiring Managers using ReactJS and Firebase. Over 25000 people have used it."
+    
+    Example Output:
+    Built a Hiring Manager search tool using ReactJS, NodeJS, and Firebase, serving over 25,000 users
+
+    Implemented boolean query system that outperforms LinkedIn search results in relevance and accuracy
     """.strip()
 
     return send_openai_message(
@@ -121,7 +167,7 @@ def extract_resume_data(user_message: str):
                 "company": "extracted_company1",
                 "start_date": "extracted_start_date1",
                 "end_date": "extracted_end_date1",
-                "description": "extracted_job_description1",
+                "description": ["bullet_point_1", "bullet_point_2", "bullet_point_3"],
                 "current_role": "True/False if currently working in this role" but Boolean
             },
             {
@@ -162,9 +208,8 @@ def extract_resume_data(user_message: str):
     }
 
     For the "experience" section:
-    - If a job contains multiple tasks, projects, or responsibilities grouped under a single job title, concatenate all tasks, projects, or responsibilities into a single string and place it in the "description" field.
-    - Ensure that the concatenated string maintains readability, with each task or project separated by a newline. 
-    - Don't use bullet point.
+    - Return "description" as a JSON array of strings, where each string is one achievement/responsibility bullet point.
+    - Each bullet point should be a clear, action-oriented statement (e.g., "Developed a dashboard for real-time monitoring").
     - If the start and end dates are not explicitly mentioned for a task or project, inherit them from the main job entry.
 
     For "education" section:
