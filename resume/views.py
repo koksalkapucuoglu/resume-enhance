@@ -736,7 +736,7 @@ def upload_cv(request):
         start_time = datetime.now()
         extracted_json_string = extract_resume_data(extracted_text)
         print(f"OpenAI API response time: {datetime.now() - start_time}")
-        print(f"[DEBUG] Raw OpenAI Response: {extracted_json_string}")
+        # print(f"[DEBUG] Raw OpenAI Response: {extracted_json_string}")
 
         # Check for API Errors
         if extracted_json_string.startswith("OpenAI API") or extracted_json_string.startswith("Error:"):
@@ -785,7 +785,7 @@ def upload_linkedin_cv(request):
         start_time = datetime.now()
         extracted_json_string = extract_linkedin_resume_data(extracted_text)
         print(f"OpenAI API response time: {datetime.now() - start_time}")
-        print(f"[DEBUG] Raw OpenAI Response: {extracted_json_string}")
+        # print(f"[DEBUG] Raw OpenAI Response: {extracted_json_string}")
 
         # Check for API Errors
         if extracted_json_string.startswith("OpenAI API") or extracted_json_string.startswith("Error:"):

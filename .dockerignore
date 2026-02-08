@@ -1,0 +1,17 @@
+__pycache__
+*.py[cod]
+*$py.class
+.git
+.gitignore
+.env
+.env_copy
+.DS_Store
+venv/
+.venv/
+env/
+static/staticfiles/
+screenshots/
+*.md
+Dockerfile*
+docker-compose.yml
+Makefile

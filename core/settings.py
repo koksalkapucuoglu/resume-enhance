@@ -139,7 +139,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Authentication
 LOGIN_URL = '/accounts/login/'  # Custom login page
-LOGIN_REDIRECT_URL = '/resume/dashboard/'  # Redirect to dashboard after login
+LOGIN_REDIRECT_URL = '/dashboard/'  # Redirect to dashboard after login
 LOGOUT_REDIRECT_URL = '/accounts/login/'  # Redirect to login after logout
 
 # Email Configuration
