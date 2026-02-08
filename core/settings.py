@@ -36,6 +36,17 @@ DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
 
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
 
+CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', 'https://*.seenode.app,https://*.seenode.com').split(',')
+
+if not DEBUG:
+    # Tell Django to trust the X-Forwarded-Proto header that comes from the proxy
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    # Force SSL redirect
+    SECURE_SSL_REDIRECT = True
+    # Mark cookies as secure
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
 
 # Application definition
 
