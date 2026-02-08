@@ -1,0 +1,545 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Sign Up - ResuStack</title>
+    <meta name="description" content="Create your ResuStack account. AI-powered resume builder."/>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+    
+    <style>
+        /* CSS Variables */
+        :root {
+            --primary-color: #2563eb;
+            --primary-hover: #1d4ed8;
+            --primary-light: rgba(37, 99, 235, 0.1);
+            --bg-light: #f1f5f9;
+            --bg-dark: #0f172a;
+            --text-primary: #0f172a;
+            --text-secondary: #475569;
+            --text-muted: #94a3b8;
+            --border-color: #e2e8f0;
+            --card-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.1);
+            --input-focus-ring: 0 0 0 3px rgba(37, 99, 235, 0.15);
+        }
+        
+        /* Reset & Base */
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--bg-light);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            color: var(--text-primary);
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+        }
+        
+        /* Main Container */
+        .main-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+        
+        /* Logo Section */
+        .logo-section {
+            position: absolute;
+            top: 40px;
+            left: 40px;
+            z-index: 10;
+        }
+        
+        @media (max-width: 640px) {
+            .logo-section {
+                position: relative;
+                top: auto;
+                left: auto;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                margin-bottom: 24px;
+                width: 100%;
+            }
+        }
+        
+        .logo-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .logo-img {
+            width: auto;
+            height: 32px;
+            object-fit: contain;
+        }
+        
+        .brand-name {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: -0.5px;
+        }
+        
+        /* Card */
+        .auth-card {
+            width: 100%;
+            max-width: 440px;
+            background: white;
+            border-radius: 16px;
+            box-shadow: var(--card-shadow);
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+        
+        .card-header {
+            padding: 40px 40px 24px;
+            text-align: center;
+        }
+        
+        .card-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+            letter-spacing: -0.5px;
+        }
+        
+        .card-subtitle {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        
+        .card-body {
+            padding: 0 40px 40px;
+        }
+        
+        /* Alert */
+        .alert {
+            padding: 12px 16px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .alert-error {
+            background-color: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+        }
+        
+        .alert-icon {
+            width: 20px;
+            height: 20px;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+        
+        .error-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+        
+        .error-list li {
+            margin-bottom: 4px;
+        }
+        
+        .error-list li:last-child {
+            margin-bottom: 0;
+        }
+        
+        /* Form */
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 6px;
+        }
+        
+        .form-input {
+            width: 100%;
+            height: 44px;
+            padding: 0 16px;
+            font-size: 14px;
+            font-family: inherit;
+            color: var(--text-primary);
+            background-color: white;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+        
+        .form-input::placeholder {
+            color: var(--text-muted);
+        }
+        
+        .form-input:focus {
+            border-color: var(--primary-color);
+            box-shadow: var(--input-focus-ring);
+        }
+        
+        .form-input.error {
+            border-color: #dc2626;
+        }
+        
+        .form-hint {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 6px;
+        }
+        
+        .field-error {
+            font-size: 12px;
+            color: #dc2626;
+            margin-top: 6px;
+        }
+        
+        .input-wrapper {
+            position: relative;
+        }
+        
+        .toggle-password {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px;
+            color: var(--text-muted);
+            transition: color 0.2s;
+        }
+        
+        .toggle-password:hover {
+            color: var(--text-secondary);
+        }
+        
+        .toggle-password svg {
+            width: 20px;
+            height: 20px;
+        }
+        
+        /* Button */
+        .btn-primary {
+            width: 100%;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 14px;
+            font-weight: 700;
+            font-family: inherit;
+            color: white;
+            background-color: var(--primary-color);
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            letter-spacing: 0.3px;
+        }
+        
+        .btn-primary:hover {
+            background-color: var(--primary-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+        }
+        
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+        
+        .btn-primary:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        /* Card Footer */
+        .card-footer {
+            padding: 20px 40px;
+            background-color: #f8fafc;
+            border-top: 1px solid var(--border-color);
+            text-align: center;
+        }
+        
+        .card-footer p {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        
+        .card-footer a {
+            color: var(--primary-color);
+            font-weight: 700;
+            text-decoration: none;
+            margin-left: 4px;
+            transition: color 0.2s;
+        }
+        
+        .card-footer a:hover {
+            text-decoration: underline;
+        }
+        
+        /* Copyright */
+        .copyright {
+            padding: 24px;
+            text-align: center;
+        }
+        
+        .copyright p {
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-weight: 500;
+        }
+        
+        /* Responsive */
+        @media (max-width: 480px) {
+            .main-container {
+                padding: 16px;
+            }
+            
+            .card-header,
+            .card-body,
+            .card-footer {
+                padding-left: 24px;
+                padding-right: 24px;
+            }
+            
+            .card-header {
+                padding-top: 32px;
+            }
+            
+            .card-body {
+                padding-bottom: 32px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main class="main-container">
+        <!-- Logo & Brand -->
+        <div class="logo-section">
+            <div class="logo-container">
+                <img src="{% static 'img/resustack_logo.png' %}" alt="ResuStack Logo" class="logo-img"/>
+                <span class="brand-name">ResuStack</span>
+            </div>
+        </div>
+        
+        <!-- Auth Card -->
+        <div class="auth-card">
+            <!-- Card Header -->
+            <div class="card-header">
+                <h1 class="card-title">Create Account</h1>
+                <p class="card-subtitle">Sign up to start building your professional resume.</p>
+            </div>
+            
+            <!-- Card Body -->
+            <div class="card-body">
+                <!-- Error Messages -->
+                {% if form.errors %}
+                <div class="alert alert-error">
+                    <svg class="alert-icon" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                    </svg>
+                    <ul class="error-list">
+                        {% for field in form %}
+                            {% for error in field.errors %}
+                                <li>{{ error }}</li>
+                            {% endfor %}
+                        {% endfor %}
+                        {% for error in form.non_field_errors %}
+                            <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+                
+                <form method="post" action="{% url 'signup' %}" id="signup-form">
+                    {% csrf_token %}
+                    
+                    <!-- Username Field -->
+                    <div class="form-group">
+                        <label for="id_username" class="form-label">Username</label>
+                        <input 
+                            type="text" 
+                            name="username"
+                            id="id_username"
+                            class="form-input {% if form.username.errors %}error{% endif %}"
+                            placeholder="johndoe"
+                            value="{{ form.username.value|default:'' }}"
+                            required
+                            autofocus
+                        />
+                        <p class="form-hint">150 characters or fewer. Letters, digits and @/./+/-/_ only.</p>
+                    </div>
+                    
+                    <!-- Email Field -->
+                    <div class="form-group">
+                        <label for="id_email" class="form-label">Email Address</label>
+                        <input 
+                            type="email" 
+                            name="email"
+                            id="id_email"
+                            class="form-input {% if form.email.errors %}error{% endif %}"
+                            placeholder="you@example.com"
+                            value="{{ form.email.value|default:'' }}"
+                            required
+                        />
+                        <p class="form-hint">Used for password recovery and notifications.</p>
+                    </div>
+                    
+                    <!-- Password Field -->
+                    <div class="form-group">
+                        <label for="id_password1" class="form-label">Password</label>
+                        <div class="input-wrapper">
+                            <input 
+                                type="password" 
+                                name="password1"
+                                id="id_password1"
+                                class="form-input {% if form.password1.errors %}error{% endif %}"
+                                style="padding-right: 44px;"
+                                placeholder="••••••••"
+                                required
+                            />
+                            <button type="button" class="toggle-password" id="toggle-password1" aria-label="Show password">
+                                <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                </svg>
+                            </button>
+                        </div>
+                        <p class="form-hint">At least 8 characters. Can't be too common or all numeric.</p>
+                    </div>
+                    
+                    <!-- Confirm Password Field -->
+                    <div class="form-group">
+                        <label for="id_password2" class="form-label">Confirm Password</label>
+                        <div class="input-wrapper">
+                            <input 
+                                type="password" 
+                                name="password2"
+                                id="id_password2"
+                                class="form-input {% if form.password2.errors %}error{% endif %}"
+                                style="padding-right: 44px;"
+                                placeholder="••••••••"
+                                required
+                            />
+                            <button type="button" class="toggle-password" id="toggle-password2" aria-label="Show password">
+                                <svg class="eye-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                </svg>
+                            </button>
+                        </div>
+                        <p class="form-hint">Enter the same password as before, for verification.</p>
+                    </div>
+                    
+                    <!-- Submit Button -->
+                    <button type="submit" class="btn-primary" id="signup-button">
+                        <span id="button-text">Create Account</span>
+                        <span id="button-loader" class="spinner hidden"></span>
+                    </button>
+                </form>
+            </div>
+            
+            <!-- Card Footer -->
+            <div class="card-footer">
+                <p>
+                    Already have an account?
+                    <a href="{% url 'login' %}">Sign In</a>
+                </p>
+            </div>
+        </div>
+    </main>
+    
+    <!-- Copyright Footer -->
+    <footer class="copyright">
+        <p>© 2026 ResuStack AI Technologies</p>
+    </footer>
+    
+    <script>
+        // Password visibility toggle
+        function setupPasswordToggle(toggleId, inputId) {
+            const toggle = document.getElementById(toggleId);
+            const input = document.getElementById(inputId);
+            
+            if (toggle && input) {
+                toggle.addEventListener('click', function() {
+                    const type = input.getAttribute('type') === 'password' ? 'text' : 'password';
+                    input.setAttribute('type', type);
+                    
+                    // Toggle icon
+                    const svg = this.querySelector('svg');
+                    if (type === 'text') {
+                        svg.innerHTML = '<path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>';
+                    } else {
+                        svg.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>';
+                    }
+                });
+            }
+        }
+        
+        setupPasswordToggle('toggle-password1', 'id_password1');
+        setupPasswordToggle('toggle-password2', 'id_password2');
+        
+        // Form submission loading
+        const form = document.getElementById('signup-form');
+        const button = document.getElementById('signup-button');
+        const buttonText = document.getElementById('button-text');
+        const buttonLoader = document.getElementById('button-loader');
+        
+        form.addEventListener('submit', function() {
+            button.disabled = true;
+            buttonText.classList.add('hidden');
+            buttonLoader.classList.remove('hidden');
+        });
+    </script>
+</body>
+</html>

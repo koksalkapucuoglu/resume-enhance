@@ -11,6 +11,9 @@ from django.views.generic import TemplateView
 from django.views.decorators.http import require_http_methods
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.contrib.auth.decorators import login_required
+from datetime import date, datetime
+
 
 from PyPDF2 import PdfReader
 
@@ -24,16 +27,85 @@ from resume.openai_engine import (
     extract_linkedin_resume_data,
 )
 from resume.services.pdf_service import ResumePdfService, PdfGenerationError
+from resume.services.pdf_service import ResumePdfService, PdfGenerationError
 from latex_renderer import latex_handler
+from resume.models import Resume
+
 
 
 EducationFormSet = formset_factory(EducationForm, extra=0)
 ExperienceFormSet = formset_factory(ExperienceForm, extra=0)
 ProjectFormSet = formset_factory(ProjectForm, extra=0)
 
-def index(request):
+from django.views.generic import ListView
+from django.contrib.auth.mixins import LoginRequiredMixin
+
+
+def landing_page(request):
+    """Landing page for anonymous and logged-in users."""
+    if request.user.is_authenticated:
+        return redirect('resume:dashboard')
     return render(request, "index.html")
 
+@login_required
+def selection_page(request):
+    """Resume creation method selection page."""
+    return render(request, "selection_page.html")
+
+
+class DashboardView(LoginRequiredMixin, ListView):
+    model = Resume
+    template_name = "resume/dashboard.html"
+    context_object_name = "resumes"
+    ordering = ["-updated_at"]
+
+    def get_queryset(self):
+        return Resume.objects.filter(user=self.request.user).order_by("-updated_at")
+
+
+@login_required
+@require_http_methods(["POST"])
+def duplicate_resume(request, pk):
+    """
+    Duplicates an existing resume for the current user.
+    Creates a new resume with the same content but a new title.
+    """
+    try:
+        original_resume = Resume.objects.get(pk=pk, user=request.user)
+        
+        # Create a copy with modified title
+        new_resume = Resume.objects.create(
+            user=request.user,
+            title=f"{original_resume.title} (Copy)",
+            content=original_resume.content.copy()  # Deep copy the JSON content
+        )
+        
+        messages.success(request, f"Resume duplicated successfully!")
+        return redirect("resume:resume_form_edit", pk=new_resume.pk)
+        
+    except Resume.DoesNotExist:
+        messages.error(request, "Resume not found.")
+        return redirect("resume:dashboard")
+
+
+@login_required
+@require_http_methods(["POST"])
+def delete_resume(request, pk):
+    """
+    Deletes a resume for the current user.
+    Only allows deletion of resumes owned by the requesting user.
+    """
+    try:
+        resume = Resume.objects.get(pk=pk, user=request.user)
+        resume_name = resume.display_name
+        resume.delete()
+        
+        messages.success(request, f"'{resume_name}' has been deleted successfully.")
+        return redirect("resume:dashboard")
+        
+    except Resume.DoesNotExist:
+        messages.error(request, "Resume not found or you don't have permission to delete it.")
+        return redirect("resume:dashboard")
 
 def get_init_values_for_resume_form():
     """
@@ -55,15 +127,15 @@ def get_init_values_for_resume_form():
                 "school": "Stanford University",
                 "degree": "Master",
                 "field_of_study": "Computer Science",
-                "start_date": "2024-01",
-                "end_date": "2024-12",
+                "start_year": 2024,
+                "end_year": 2025,
             },
             {
                 "school": "Stanford University",
                 "degree": "Bachelor",
                 "field_of_study": "Computer Science",
-                "start_date": "2023-01",
-                "end_date": "2023-12",
+                "start_year": 2020,
+                "end_year": 2024,
             },
         ],
         prefix="education",
@@ -151,30 +223,49 @@ def populate_formsets_from_extracted_json(extracted_json):
     )
 
     # Education Formset
+    def extract_year(date_value):
+        """Extract year from various date formats (2020, '2020', '2020-05', etc.)"""
+        if not date_value:
+            return None
+        if isinstance(date_value, int):
+            return date_value
+        if isinstance(date_value, str):
+            # Handle formats like "2020-05", "2020", etc.
+            year_str = date_value.split('-')[0] if '-' in date_value else date_value
+            try:
+                return int(year_str)
+            except (ValueError, TypeError):
+                return None
+        return None
+    
     education_initial = [
         {
             "school": edu.get("school", ""),
             "degree": edu.get("degree", ""),
             "field_of_study": edu.get("field_of_study", ""),
-            "start_date": edu.get("start_date", ""),
-            "end_date": edu.get("end_date", ""),
+            "start_year": extract_year(edu.get("start_date") or edu.get("start_year")),
+            "end_year": extract_year(edu.get("end_date") or edu.get("end_year")),
         }
         for edu in extracted_json.get("education", [])
     ]
     education_formset = EducationFormSet(initial=education_initial, prefix="education")
 
     # Experience Formset
-    experience_initial = [
-        {
+    experience_initial = []
+    for exp in extracted_json.get("experience", []):
+        # Convert description array to newline-separated string for textarea
+        desc = exp.get("description", "")
+        if isinstance(desc, list):
+            desc = "\n\n".join(desc)  # Double newline for visual spacing
+        
+        experience_initial.append({
             "title": exp.get("title", ""),
             "company": exp.get("company", ""),
             "start_date": exp.get("start_date", ""),
             "end_date": exp.get("end_date", ""),
             "current_role": exp.get("current_role", False),
-            "description": exp.get("description", ""),
-        }
-        for exp in extracted_json.get("experience", [])
-    ]
+            "description": desc,
+        })
     experience_formset = ExperienceFormSet(
         initial=experience_initial, prefix="experience"
     )
@@ -197,34 +288,42 @@ def populate_formsets_from_extracted_json(extracted_json):
         "project_formset": project_formset,
     }
 
+def clean_data_for_json(data):
+    """
+    Recursively converts date/datetime objects to strings for JSON serialization.
+    """
+    if isinstance(data, dict):
+        return {k: clean_data_for_json(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [clean_data_for_json(v) for v in data]
+    elif isinstance(data, (date, datetime)):
+        return data.strftime("%Y-%m")
+    return data
+
 
 class ResumeFormView(TemplateView):
     """
-    Handle the display and processing of a resume form, including sections
-    for user information, education, experience, and projects.
-
-    If valid form submission,generate a HTML based PDF resume or LaTeX file and return it as a downloadable file.
+    Handle the display and processing of a resume form.
+    Source: Database (Resume model)
     """
-
     template_name = "resume_form.html"
 
-    def get(self, request, *args, **kwargs):
-        education_formset = EducationFormSet(prefix="education")
-        experience_formset = ExperienceFormSet(prefix="experience")
-        project_formset = ProjectFormSet(prefix="project")
-        user_form = UserInfoForm()
+    def get_object(self):
+        return Resume.objects.get(pk=self.kwargs.get("pk")) if self.kwargs.get("pk") else None
 
-        context = {
-            "user_form": user_form,
-            "education_formset": education_formset,
-            "experience_formset": experience_formset,
-            "project_formset": project_formset,
-        }
-        extracted_json = request.session.pop("extracted_json", None)
-        if extracted_json:
-            context = populate_formsets_from_extracted_json(extracted_json)
+    def get(self, request, *args, **kwargs):
+        resume = self.get_object()
+        
+        # If accessing form directly without PK, show empty form or redirect? 
+        # For now, let's keep it empty or load from session if we want backward compatibility, 
+        # but the plan is to drop session. Let's assume new flow always has PK.
+        # If no PK, show init values.
+        
+        if resume:
+            context = populate_formsets_from_extracted_json(resume.content)
+            context["resume_id"] = resume.pk
         else:
-            # Test with initial values
+            # Fallback for "Create New" flow without upload
             context = get_init_values_for_resume_form()
 
         return self.render_to_response(context)
@@ -245,7 +344,7 @@ class ResumeFormView(TemplateView):
         experience_data = list()
         for form in formset:
             if form.is_valid():
-                cleaned_data = form.cleaned_data
+                cleaned_data = form.cleaned_data.copy()
                 cleaned_data["description"] = list(
                     filter(
                         None,
@@ -387,6 +486,34 @@ class ResumeFormView(TemplateView):
             }
             return self.render_to_response(context)
 
+        if self.kwargs.get("pk"):
+            try:
+                resume = Resume.objects.get(pk=self.kwargs.get("pk"))
+                # Update resume content with clean data from forms
+                # We need to reconstruct the content JSON structure
+                updated_content = {
+                    "user_info": clean_data_for_json({
+                        "full_name": user_form.cleaned_data.get("full_name"),
+                        "email": user_form.cleaned_data.get("email"),
+                        "phone": user_form.cleaned_data.get("phone"),
+                        "github": user_form.cleaned_data.get("github"),
+                        "linkedin": user_form.cleaned_data.get("linkedin"),
+                        "skills": [s.strip() for s in user_form.cleaned_data.get("skills", "").split(",")],
+                    }),
+                    "education": clean_data_for_json([f.cleaned_data for f in education_formset if f.cleaned_data]),
+                    "experience": clean_data_for_json(self._split_experience_description(experience_formset)),
+                    "projects_and_publications": clean_data_for_json([f.cleaned_data for f in project_formset if f.cleaned_data]),
+                }
+                resume.content = updated_content
+                resume.save()
+            except Resume.DoesNotExist:
+                # Should not happen typically
+                pass
+
+        # Check if this is a save-only request (AJAX)
+        if self.request.POST.get("form_action") == "save_only":
+            return JsonResponse({"status": "saved", "message": "Resume saved successfully"})
+
         # Prepare resume context
         context = self._prepare_resume_context(
             user_form, education_formset, experience_formset, project_formset
@@ -406,7 +533,19 @@ class ResumeFormView(TemplateView):
             
         except Exception as e:
             messages.error(self.request, f"Failed to render PDF: {str(e)}")
-            return redirect("resume:resume_form")
+            # If error, stay on the same page. If we have PK, we should probably redirect or just render.
+            # Ideally redirect to avoid resubmission issues, but we need errors.
+            # Render is fine for now.
+            # Re-populate context for error page
+            context = {
+                "user_form": user_form,
+                "education_formset": education_formset,
+                "experience_formset": experience_formset,
+                "project_formset": project_formset,
+            }
+            if self.kwargs.get("pk"):
+                 context["resume_id"] = self.kwargs.get("pk")
+            return self.render_to_response(context)
 
 
 def get_field_value(request, prefix, field):
@@ -452,6 +591,13 @@ def enhance_field(request, prefix, field, enhance_function):
     form_index, field_value = get_field_value(request, prefix=prefix, field=field)
     if form_index and field_value:
         enhanced_text = enhance_function(field_value)
+        
+        # Format with double newlines for better readability
+        # If GPT returns single-newline separated bullets, convert to double
+        if enhanced_text and '\n' in enhanced_text:
+            lines = [line.strip() for line in enhanced_text.split('\n') if line.strip()]
+            enhanced_text = '\n\n'.join(lines)
+        
         description_html = f"""
         <textarea name="{prefix}-{form_index}-{field}" cols="40" rows="10" 
         class="textarea form-control" id="id_{prefix}-{form_index}-{field}">{enhanced_text}</textarea>
@@ -510,7 +656,7 @@ def preview_resume_form(request):
         experience_data = list()
         for form in formset:
             if form.is_valid():
-                cleaned_data = form.cleaned_data
+                cleaned_data = form.cleaned_data.copy()
                 cleaned_data["description"] = list(
                     filter(
                         None,
@@ -548,18 +694,14 @@ def preview_resume_form(request):
                 "project_data": project_data,
                 "generation_date": datetime.now().strftime("%Y-%m-%d"),
             }
-            template_name = settings.TEX_PREVIEW_HTML_MAP.get(
-                settings.LATEX_SETTINGS["DEFAULT_TEMPLATE"], None
-            )
-            if not template_name:
-                return JsonResponse(
-                    {"error": "Selected tex does not map any html preview"}, status=400
-                )
-
+            
+            # Use the same template as PDF generation for consistency
+            template_name = 'faangpath_simple_template_pdf.html'
+            
             rendered_html = render(
                 request, template_name=template_name, context=context
             ).content.decode("utf-8")
-            return JsonResponse({"html": rendered_html})
+            return HttpResponse(rendered_html)
         
         errors = {}
         if user_form.errors:
@@ -577,7 +719,7 @@ def preview_resume_form(request):
         return JsonResponse({"error": "Invalid request", "form_errors": errors}, status=400)
 
 
-@csrf_exempt
+@login_required
 def upload_cv(request):
     if request.method == "POST":
         cv_file = request.FILES.get("cv_file")
@@ -589,61 +731,89 @@ def upload_cv(request):
 
         # Extract data from the PDF
         reader = PdfReader(cv_file)
-
         extracted_text = " ".join(page.extract_text() for page in reader.pages)
-        import time
-
-        start_time = time.time()
+        
+        start_time = datetime.now()
         extracted_json_string = extract_resume_data(extracted_text)
-        end_time = time.time()
-        print(f"OpenAI API response time: {end_time - start_time} seconds")
+        print(f"OpenAI API response time: {datetime.now() - start_time}")
+        print(f"[DEBUG] Raw OpenAI Response: {extracted_json_string}")
 
-        if extracted_json_string.startswith("```json"):
-            extracted_json_string = extracted_json_string[7:-3].strip()
+        # Check for API Errors
+        if extracted_json_string.startswith("OpenAI API") or extracted_json_string.startswith("Error:"):
+            return JsonResponse({"error": f"AI Service Error: {extracted_json_string}"}, status=503)
+
+        # Clean up JSON string (remove markdown code blocks)
+        if "```json" in extracted_json_string:
+            extracted_json_string = extracted_json_string.split("```json")[1].split("```")[0].strip()
+        elif "```" in extracted_json_string:
+             extracted_json_string = extracted_json_string.split("```")[1].strip()
+        
+        extracted_json_string = extracted_json_string.strip()
 
         try:
             extracted_json = json.loads(extracted_json_string)
-            request.session["extracted_json"] = extracted_json
+            
+            # Save to Database instead of Session
+            resume = Resume.objects.create(
+                user=request.user,
+                title=f"Uploaded Resume {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                content=extracted_json
+            )
+            
+            # Redirect to form with resume ID
+            return redirect("resume:resume_form_edit", pk=resume.pk)
+            
         except json.JSONDecodeError as e:
             print("[ERROR]: Failed to decode JSON:", str(e))
             return JsonResponse({"error": "Failed to parse extracted JSON"}, status=500)
-
-        return redirect("resume:resume_form")
 
     return redirect("resume:index")
 
 
+@login_required
 def upload_linkedin_cv(request):
     if request.method == "POST" and request.FILES.get("linkedin_file"):
         linkedin_file = request.FILES["linkedin_file"]
-        print("[INFO]: CV file uploaded:", linkedin_file.name)
+        print("[INFO]: LinkedIn file uploaded:", linkedin_file.name)
 
-        # Ensure the uploaded file is a PDF
         if not linkedin_file.name.endswith(".pdf"):
             return JsonResponse({"error": "Only PDF files are allowed."}, status=400)
 
-        # Extract data from the PDF
         reader = PdfReader(linkedin_file)
-
         extracted_text = " ".join(page.extract_text() for page in reader.pages)
-        import time
-
-        start_time = time.time()
+        
+        start_time = datetime.now()
         extracted_json_string = extract_linkedin_resume_data(extracted_text)
-        end_time = time.time()
-        print(f"OpenAI API response time: {end_time - start_time} seconds")
+        print(f"OpenAI API response time: {datetime.now() - start_time}")
+        print(f"[DEBUG] Raw OpenAI Response: {extracted_json_string}")
 
-        if extracted_json_string.startswith("```json"):
-            extracted_json_string = extracted_json_string[7:-3].strip()
+        # Check for API Errors
+        if extracted_json_string.startswith("OpenAI API") or extracted_json_string.startswith("Error:"):
+            return JsonResponse({"error": f"AI Service Error: {extracted_json_string}"}, status=503)
+
+        # Clean up JSON string (remove markdown code blocks)
+        if "```json" in extracted_json_string:
+            extracted_json_string = extracted_json_string.split("```json")[1].split("```")[0].strip()
+        elif "```" in extracted_json_string:
+             extracted_json_string = extracted_json_string.split("```")[1].strip()
+        
+        extracted_json_string = extracted_json_string.strip()
 
         try:
             extracted_json = json.loads(extracted_json_string)
-            request.session["extracted_json"] = extracted_json
+            
+            # Save to Database
+            resume = Resume.objects.create(
+                user=request.user,
+                title=f"LinkedIn Profile {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                content=extracted_json
+            )
+            
+            return redirect("resume:resume_form_edit", pk=resume.pk)
+            
         except json.JSONDecodeError as e:
             print("[ERROR]: Failed to decode JSON:", str(e))
             return JsonResponse({"error": "Failed to parse extracted JSON"}, status=500)
-
-        return redirect("resume:resume_form")
 
     return redirect("resume:index")
 

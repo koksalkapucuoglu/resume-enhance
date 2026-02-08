@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'resume',
     'crispy_forms',
     "crispy_bootstrap4",
+    'rest_framework',
 ]
 
 MIDDLEWARE = [
@@ -63,7 +64,7 @@ ROOT_URLCONF = 'core.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -129,11 +130,32 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/4.1/howto/static-files/
 
 STATIC_URL = 'static/'
+STATICFILES_DIRS = [BASE_DIR / 'static']
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Authentication
+LOGIN_URL = '/accounts/login/'  # Custom login page
+LOGIN_REDIRECT_URL = '/resume/dashboard/'  # Redirect to dashboard after login
+LOGOUT_REDIRECT_URL = '/accounts/login/'  # Redirect to login after logout
+
+# Email Configuration
+# For development: emails are printed to console
+# EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+# DEFAULT_FROM_EMAIL = 'ResuStack <noreply@resustack.com>'
+
+# For production with SMTP (uncomment and configure):
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
+
+
 
 # Logging Configuration
 LOGGING = {
@@ -166,6 +188,11 @@ LOGGING = {
             'level': 'WARNING',
             'propagate': False,
         },
+        'fontTools': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
     },
     'root': {
         'handlers': ['console'],
@@ -190,6 +217,12 @@ LATEX_SETTINGS = {
 TEMPLATE_SELECTOR_PREVIEW_MAP = {
     'faangpath-simple': 'faangpath_simple_template_preview.html'
 }
+
+# Map LaTeX templates to HTML preview templates
+TEX_PREVIEW_HTML_MAP = {
+    'faangpath_simple_template.tex': 'faangpath_simple_template_preview.html'
+}
+
 
 TEMPLATE_SELECTOR_HTML_MAP = {
     'faangpath-simple': 'faangpath_simple_template_pdf.html'
