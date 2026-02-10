@@ -1,79 +1,189 @@
-# django-enhance-resume-app
+# Resume Enhance
 
-This project is an AI-enhanced Resume application built using Django, which leverages Django formsets, OpenAI, and pdflatex for the backend. The workflow is as follows:
+Resume Enhance is an open-source resume builder designed to help you create professional, high-impact resumes. It simplifies the process of crafting clear and effective content.
 
-* **Form Data Entry**: Users fill out a form with information related to their resume, such as personal details, education, experience, etc.
+You can import an existing resume or start from scratch. The application provides smart feedback to refine your bullet points using the **STAR method** (Situation, Task, Action, Result), ensuring your achievements are presented clearly. Once done, you can export your resume as a high-quality PDF.
 
-* **AI Enhancement**: Before submitting the form, users have the ability to enhance specific fields instantly using AI. They can choose any entry of experience and project sections and improve it with AI suggestions, allowing for dynamic content refinement.
+## ✨ Key Features
 
-* **Preview Option**: After enhancing the desired sections, users can preview how the resume will look in its final format. This allows them to see the structure and layout of the resume before finalizing.
+*   **Smart Enhancement**: Automatically restructure your experience using the STAR format for maximum impact.
+*   **Resume Dashboard**: Manage multiple resumes, duplicate specific versions, or delete old ones.
+*   **PDF Import**: Upload your existing LinkedIn PDF resume to get started immediately.
+*   **Live Preview**: See how your resume looks in real-time before exporting.
+*   **PDF Export**: Download a professional, ATS-friendly PDF (currently supports FaangPath template).
+*   **User Accounts**: Sign up, log in, and save your work securely.
 
-* **PDF Generation**: Once the user is satisfied with the form and AI enhancements, they can submit the form. The application then generates the resume in PDF format, which the user can download.
+## 📸 Product Tour
 
-This solution ensures a flexible and interactive experience for the user, enabling them to refine their resume content dynamically and preview it before generating the final PDF version.
+Here is what the application looks like:
 
-Currently, resumes can only be exported as [faangpath simple template](https://www.overleaf.com/latex/templates/faangpath-simple-template/npsfpdqnxmbc). Different resume templates will be added here.
+### Landing Page
+![Landing Page](screenshots/Screenshot%202026-02-06%20at%2000.20.25.png)
 
-## Tech Stack
+### Dashboard
+Manage all your resumes in one place.
+![Dashboard](screenshots/Screenshot%202026-02-06%20at%2000.22.22.png)
 
-**Core Tech:** Python
+### Resume Editor
+Edit your details and use AI to enhance your texts.
+![Resume Editor](screenshots/Screenshot%202026-02-06%20at%2000.23.12.png)
 
-**Backend Service:** Django, OpenAI, PDFLatex
+### Live Preview
+Check the final layout instantly.
+![Live Preview](screenshots/Screenshot%202026-02-06%20at%2000.23.37.png)
 
-**IU Integrations**: Htmx, Jinja2
+### PDF Export
+Get the final PDF document.
+![PDF Export](screenshots/Screenshot%202026-02-06%20at%2000.23.56.png)
 
-## Run Locally using Docker
+---
 
-Clone the project
+## 🚀 Getting Started
+
+You can run this project using Docker (recommended) or manually in your terminal.
+
+### Prerequisites
+
+*   **OpenAI API Key**: You need a key to use the AI features.
+*   **Docker**: For the easiest setup.
+*   **Python 3.10+ & PostgreSQL**: If running manually.
+
+### 1. Clone the Project
 
 ```bash
-  git clone https://github.com/koksalkapucuoglu/resume-enhance.git
+git clone https://github.com/koksalkapucuoglu/resume-enhance.git
+cd resume-enhance
 ```
 
-Go to the project directory
+### 2. Configure Environment Variables
+
+Create your `.env` file by copying the example:
 
 ```bash
-  cd resume-enhance
+cp .env_copy .env
 ```
 
-Build
+Open `.env` and fill in the values:
+
+```env
+# Required (Get one from OpenAI)
+OPENAI_API_KEY=sk-...
+
+# Required for Django Security
+SECRET_KEY=your-secret-key-here
+DEBUG=True
+
+# Database URL (Default for Docker is fine)
+# If running manually, set this to your local Postgres DB
+DATABASE_URL=postgres://user:password@localhost:5432/db_name
+```
+
+### 3. Option A: Run with Docker (Recommended)
+
+This serves both the app and the database automatically.
 
 ```bash
-  make build
+# Build the project
+make build
+
+# Run the project
+make run
+```
+The app will be available at [http://localhost:8000](http://localhost:8000).
+
+To stop the app:
+```bash
+make down
 ```
 
-Setup .env
+### 4. Option B: Run Manually (Terminal)
+
+If you prefer running without Docker, you need to have **PostgreSQL** running locally.
+
+1.  **Create and Activate Virtual Environment**
+    ```bash
+    python3 -m venv venv
+    source venv/bin/activate
+    ```
+
+3.  **Install Dependencies**
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+4.  **Run Migrations**
+    Make sure your `DATABASE_URL` in `.env` points to your local Postgres database.
+    ```bash
+    python manage.py migrate
+    ```
+
+5.  **Run the Server**
+    ```bash
+    python manage.py runserver
+    ```
+    Visit [http://127.0.0.1:8000](http://127.0.0.1:8000).
+
+---
+
+## ☁️ Deployment (Fly.io)
+
+This project is ready to deploy on Fly.io.
+
+**Prerequisites:**
+*   [Fly CLI](https://fly.io/docs/hands-on/install-flyctl/) installed.
+*   Docker installed.
+
+**Initial Setup (One-time):**
+
+1.  **Create the App:**
+    ```bash
+    fly apps create resume-enhance
+    ```
+
+2.  **Create Database:**
+    ```bash
+    fly postgres create --name resume-enhance-db --vm-size shared-cpu-1x --initial-cluster-size 1 --volume-size 1
+    ```
+
+3.  **Attach Database:**
+    ```bash
+    fly postgres attach resume-enhance-db --app resume-enhance
+    ```
+
+4.  **Set Secrets:**
+    ```bash
+    fly secrets set SECRET_KEY='<your-random-secret-key>'
+    fly secrets set OPENAI_API_KEY='<your-openai-api-key>'
+    fly secrets set CSRF_TRUSTED_ORIGINS='https://resume-enhance.fly.dev'
+    ```
+
+**Deploying Updates:**
 
 ```bash
-  mv .env_copy .env
+fly deploy
 ```
-* fill .env file
 
-Run project
+**Create Superuser in Production:**
 
 ```bash
-  make run
+fly ssh console
+python manage.py createsuperuser
 ```
 
-## Project Screenshots
+---
 
-Preview
+## 🗺️ Roadmap & Planned Features
 
-![Preview](https://github.com/koksalkapucuoglu/resume-enhance/blob/main/screenshots/preview.png?raw=true)
+We are constantly improving Resume Enhance. Here is what's coming next:
 
+*   **Template Selection**: Choose from multiple resume designs (not just FaangPath).
+*   **Parsing V2**: Better import quality for existing PDFs using newer AI models.
+*   **Direct Download**: Download PDFs directly from the dashboard card.
+*   **Feedback Loop**: A built-in form to report bugs or request features.
+*   **Multi-language Support**: Support for Turkish and English interfaces.
+*   **Rate Limiting**: Better protection against API abuse.
 
-Pdf Export
+---
 
-![Pdf Export](https://github.com/koksalkapucuoglu/resume-enhance/blob/main/screenshots/pdf_export.png?raw=true)
-
-
-## Planned Features
-
-- Extract resume information from an existing PDF and fill the form automatically.  
-- Import resume details from LinkedIn and fill the form automatically.  
-- Add support for multiple LaTeX templates.  
-- Implement an authentication system.  
-- Improve the user interface (UI).  
-- Provide options for selecting different GPT models.  
-- Add multi-language support.  
-- Add a flexible section structure for resumes.   
+### License
+Open Source.
