@@ -11,8 +11,8 @@ services:
       - media_volume:/app/media
       - caddy_data:/data
       - caddy_config:/config
-    environment:
-      - DOMAIN_NAME=${DOMAIN_NAME}
+    env_file:
+      - .env.prod
     depends_on:
       - web
 
@@ -35,10 +35,8 @@ services:
     restart: always
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    environment:
-      - POSTGRES_DB=${POSTGRES_DB}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    env_file:
+      - .env.prod
 
 volumes:
   postgres_data:
