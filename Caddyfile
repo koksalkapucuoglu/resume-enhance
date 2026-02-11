@@ -1,12 +1,13 @@
-# Caddyfile for IP-only (HTTP) access
-# When you buy a domain, replace ":80" with "yourdomain.com" to get automatic HTTPS.
-
 :80 {
     reverse_proxy web:8000
-    file_server /static/* {
-        root /app/static
+
+    handle_path /static/* {
+        root * /app/staticfiles
+        file_server
     }
-    file_server /media/* {
-        root /app/media
+
+    handle_path /media/* {
+        root * /app/mediafiles
+        file_server
     }
 }
