@@ -103,7 +103,7 @@ DATABASES = {
     'default': dj_database_url.config(
         default=os.environ.get('DATABASE_URL', 'postgres://postgres:postgres@db:5432/postgres'),
         conn_max_age=600,
-        ssl_require=not DEBUG
+        ssl_require=False
     )
 }
 
