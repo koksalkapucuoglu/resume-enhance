@@ -43,9 +43,10 @@ if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     # Force SSL redirect
     SECURE_SSL_REDIRECT = False
-    # Mark cookies as secure
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
+    
+    # Allow cookies over HTTP for now (until SSL is set up)
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
 
 
 # Application definition
