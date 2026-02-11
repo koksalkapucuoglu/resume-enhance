@@ -42,7 +42,7 @@ if not DEBUG:
     # Tell Django to trust the X-Forwarded-Proto header that comes from the proxy
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     # Force SSL redirect
-    SECURE_SSL_REDIRECT = True
+    SECURE_SSL_REDIRECT = False
     # Mark cookies as secure
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
