@@ -99,12 +99,27 @@ WSGI_APPLICATION = 'core.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.1/ref/settings/#databases
 
+
+# Construct Database Configuration from Environment Variables
+DB_NAME = os.environ.get('POSTGRES_DB', 'postgres')
+DB_USER = os.environ.get('POSTGRES_USER', 'postgres')
+DB_PASSWORD = os.environ.get('POSTGRES_PASSWORD', 'postgres')
+DB_HOST = os.environ.get('POSTGRES_HOST', 'db')
+DB_PORT = os.environ.get('POSTGRES_PORT', '5432')
+
 DATABASES = {
-    'default': dj_database_url.config(
-        default=os.environ.get('DATABASE_URL', 'postgres://postgres:postgres@db:5432/postgres'),
-        conn_max_age=600,
-        ssl_require=False
-    )
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': DB_NAME,
+        'USER': DB_USER,
+        'PASSWORD': DB_PASSWORD,
+        'HOST': DB_HOST,
+        'PORT': DB_PORT,
+        'CONN_MAX_AGE': 600,
+        'OPTIONS': {
+            'sslmode': 'disable',  # Explicitly disable SSL for Docker internal network
+        }
+    }
 }
 
 
