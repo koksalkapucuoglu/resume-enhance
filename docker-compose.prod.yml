@@ -7,8 +7,8 @@ services:
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile
-      - static_volume:/app/static
-      - media_volume:/app/media
+      - static_volume:/app/staticfiles
+      - media_volume:/app/mediafiles
       - caddy_data:/data
       - caddy_config:/config
     env_file:
@@ -23,8 +23,8 @@ services:
     expose:
       - 8000
     volumes:
-      - static_volume:/app/static
-      - media_volume:/app/media
+      - static_volume:/app/staticfiles
+      - media_volume:/app/mediafiles
     env_file:
       - .env.prod
     depends_on:
