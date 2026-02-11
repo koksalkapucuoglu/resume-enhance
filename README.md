@@ -125,50 +125,18 @@ If you prefer running without Docker, you need to have **PostgreSQL** running lo
 
 ---
 
-## ☁️ Deployment (Fly.io)
+## ☁️ Deployment (Hetzner / Self-Hosted)
 
-This project is ready to deploy on Fly.io.
+We have migrated from Fly.io to a self-hosted setup on **Hetzner Cloud** (or any VPS) using Docker Compose.
 
-**Prerequisites:**
-*   [Fly CLI](https://fly.io/docs/hands-on/install-flyctl/) installed.
-*   Docker installed.
+**👉 [Read the Complete Deployment Guide](docs/HETZNER_GUIDE.md)**
 
-**Initial Setup (One-time):**
-
-1.  **Create the App:**
-    ```bash
-    fly apps create resume-enhance
-    ```
-
-2.  **Create Database:**
-    ```bash
-    fly postgres create --name resume-enhance-db --vm-size shared-cpu-1x --initial-cluster-size 1 --volume-size 1
-    ```
-
-3.  **Attach Database:**
-    ```bash
-    fly postgres attach resume-enhance-db --app resume-enhance
-    ```
-
-4.  **Set Secrets:**
-    ```bash
-    fly secrets set SECRET_KEY='<your-random-secret-key>'
-    fly secrets set OPENAI_API_KEY='<your-openai-api-key>'
-    fly secrets set CSRF_TRUSTED_ORIGINS='https://resume-enhance.fly.dev'
-    ```
-
-**Deploying Updates:**
-
-```bash
-fly deploy
-```
-
-**Create Superuser in Production:**
-
-```bash
-fly ssh console
-python manage.py createsuperuser
-```
+This guide covers:
+1.  Provisioning a cheap & powerful server (Ubuntu 24.04).
+2.  Setting up Security (Firewall, SSH).
+3.  Configuring DNS (`yourdomain.com`).
+4.  Deploying with **Docker Compose** & **Caddy** (Automatic SSL).
+5.  Setting up **GitHub Actions** for automatic deployment.
 
 ---
 
