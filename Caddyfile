@@ -1,4 +1,10 @@
 resustackapp.com, www.resustackapp.com {
+    # Block common exploits and bots
+    @bots {
+        path /.git* /.env* /wp-* *.php *.sql /.DS_Store /config.json /_next*
+    }
+    respond @bots "Access Denied" 403
+
     reverse_proxy web:8000
 
     handle_path /static/* {
