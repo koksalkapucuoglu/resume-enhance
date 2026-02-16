@@ -36,17 +36,17 @@ DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
 
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
 
-CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', 'https://*.seenode.app,https://*.seenode.com').split(',')
+CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', 'https://resustackapp.com,https://www.resustackapp.com').split(',')
 
 if not DEBUG:
     # Tell Django to trust the X-Forwarded-Proto header that comes from the proxy
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     # Force SSL redirect
-    SECURE_SSL_REDIRECT = False
+    SECURE_SSL_REDIRECT = True
     
-    # Allow cookies over HTTP for now (until SSL is set up)
-    SESSION_COOKIE_SECURE = False
-    CSRF_COOKIE_SECURE = False
+    # Mark cookies as secure
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 
 # Application definition
