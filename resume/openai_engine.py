@@ -34,7 +34,7 @@ def send_openai_message(user_message:str, meta_prompt:str = None, model:str = "g
         if is_json:
             kwargs["response_format"] = {"type": "json_object"}
 
-        response = client.chat.completions.create(**kwargs)
+        response = client.chat.completions.create(**kwargs, timeout=90)
         
         if hasattr(response, 'usage'):
             print(f"[INFO] OpenAI Usage: {response.usage}")
@@ -50,19 +50,21 @@ def send_openai_message(user_message:str, meta_prompt:str = None, model:str = "g
 
 
 # TODO Convert class based structure
-def enhance_resume_experience(user_message:str):
+def enhance_resume_experience(user_message: str, language: str = "English"):
     """
     Enhances work experience descriptions to be suitable for a resume in the STAR format.
 
     Parameters:
         user_message (str): The user's work experience description(s) to be improved.
+        language (str): The language to use for enhanced output (default: "English").
 
     Returns:
         str: The STAR-enhanced, resume-ready work experience description(s).
     """
 
-    meta_prompt = """
+    meta_prompt = f"""
     Act as a professional resume experience enhancer.
+    IMPORTANT: You MUST respond in {language}.
     
     I will provide work experience descriptions. Your task:
     
@@ -74,7 +76,7 @@ def enhance_resume_experience(user_message:str):
     2. ENHANCE each bullet point:
        - Start with a strong action verb (Developed, Implemented, Led, Optimized, etc.)
        - Follow the STAR format implicitly (Situation-Task-Action-Result)
-       - Include metrics and quantifiable results when possible
+       - Only include metrics if the user explicitly mentioned them. Do NOT fabricate numbers or percentages.
        - Keep each bullet concise (ideally 1-2 lines)
     
     3. OUTPUT FORMAT:
@@ -87,9 +89,9 @@ def enhance_resume_experience(user_message:str):
     "Developed backend solutions using Django, collaborated with DevOps on Kubernetes, implemented WebSocket for notifications."
     
     Example Output:
-    Developed efficient backend solutions using Django and Django Rest Framework, improving API response time by 40%
+    Developed scalable backend solutions using Django and Django Rest Framework, enabling reliable API services for production workloads
 
-    Collaborated with DevOps team to optimize Kubernetes Helm configurations, reducing deployment time by 25%
+    Collaborated with DevOps team to streamline Kubernetes Helm configurations, accelerating the deployment pipeline
 
     Implemented WebSocket integration for real-time notification and messaging services, enhancing user engagement
     """.strip()
@@ -99,19 +101,21 @@ def enhance_resume_experience(user_message:str):
     )
 
 
-def enhance_project_description(user_message:str):
+def enhance_project_description(user_message: str, language: str = "English"):
     """
     Enhances project description to be suitable for a resume in the STAR format.
 
     Parameters:
         user_message (str): The user's project description to be improved.
+        language (str): The language to use for enhanced output (default: "English").
 
     Returns:
         str: The STAR-enhanced, resume-ready project description.
     """
 
-    meta_prompt = """
+    meta_prompt = f"""
     Act as a professional project description enhancer for resumes.
+    IMPORTANT: You MUST respond in {language}.
     
     I will provide project descriptions. Your task:
     
@@ -122,14 +126,14 @@ def enhance_project_description(user_message:str):
     2. ENHANCE each point:
        - Start with action verbs (Built, Developed, Designed, Implemented, etc.)
        - Highlight technologies used
-       - Include quantifiable impact when possible (users, performance, scale)
+       - Only include metrics if the user explicitly mentioned them. Do NOT fabricate numbers or percentages.
        - Keep each point concise and impactful
     
     3. OUTPUT FORMAT:
        - For projects with multiple features: return each on a separate line
        - One empty line between points
        - No bullet points or numbering
-       - Focus on technical achievements and measurable outcomes
+       - Focus on technical achievements and real outcomes
     
     Example Input:
     "Built a tool to search for Hiring Managers using ReactJS and Firebase. Over 25000 people have used it."
@@ -137,7 +141,7 @@ def enhance_project_description(user_message:str):
     Example Output:
     Built a Hiring Manager search tool using ReactJS, NodeJS, and Firebase, serving over 25,000 users
 
-    Implemented boolean query system that outperforms LinkedIn search results in relevance and accuracy
+    Implemented boolean query system that delivers highly relevant search results for recruiters and job seekers
     """.strip()
 
     return send_openai_message(
@@ -160,6 +164,7 @@ def extract_resume_data(user_message: str):
     Your task is to extract and structure the data into the following JSON format:
 
     {
+        "language": "detected language of the resume (e.g. English, Turkish, German)",
         "user_info": {
             "full_name": "extracted_full_name",
             "email": "extracted_email",
@@ -232,6 +237,10 @@ def extract_resume_data(user_message: str):
     For "user_info" section:
     - if linkendin and github not valid url, leave it empty.
     - if there linkedin url or github url, urls should be start with https://
+
+    For "language" field:
+    - Detect the primary language of the resume content (e.g. "English", "Turkish", "German").
+    - Use the full English name of the language.
     
     Ensure the JSON is well-structured and includes all relevant information. 
     If a section is missing in the input text, leave it empty in the JSON.
@@ -256,6 +265,7 @@ def extract_linkedin_resume_data(user_message: str):
     Your task is to extract and structure the data into the following JSON format:
 
     {
+    "language": "detected language of the resume (e.g. English, Turkish, German)",
     "user_info": {
         "full_name": "extracted_full_name",
         "email": "extracted_email",
@@ -296,6 +306,10 @@ def extract_linkedin_resume_data(user_message: str):
     - In descriptions, use newlines as element, no bullet.
     - If there is only YYYY, use 01 as MM and result should be YYYY-01.
     - If there linkedin url or github url, urls should be start with https://
+
+    For "language" field:
+    - Detect the primary language of the resume content (e.g. "English", "Turkish", "German").
+    - Use the full English name of the language.
 
     Ensure the JSON output is well-formed, accurate, and complete.
     """
