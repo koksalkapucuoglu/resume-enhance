@@ -575,7 +575,7 @@ def get_field_value(request, prefix, field):
     return form_index, field_value
 
 
-def enhance_field(request, prefix, field, enhance_function):
+def enhance_field(request, prefix, field, enhance_function, language="English"):
     """
     Enhances the specified field based on given enhancement function.
 
@@ -584,13 +584,14 @@ def enhance_field(request, prefix, field, enhance_function):
         prefix (str): Prefix to identify the formset (e.g., 'experience', 'project').
         field (str): Field name to enhance (e.g., 'description').
         enhance_function (func): Function that performs enhancement on the field's text.
+        language (str): Language for AI output (default: "English").
 
     Returns:
         HttpResponse: Rendered HTML or error message.
     """
     form_index, field_value = get_field_value(request, prefix=prefix, field=field)
     if form_index and field_value:
-        enhanced_text = enhance_function(field_value)
+        enhanced_text = enhance_function(field_value, language=language)
         
         # Format with double newlines for better readability
         # If GPT returns single-newline separated bullets, convert to double
@@ -607,23 +608,39 @@ def enhance_field(request, prefix, field, enhance_function):
     return HttpResponse({"error": "Invalid request"}, status=400)
 
 
+def _get_resume_language(request):
+    """Extracts the resume language from the POST request's resume_id."""
+    resume_id = request.POST.get("resume_id")
+    if resume_id:
+        try:
+            resume = Resume.objects.get(pk=resume_id, user=request.user)
+            return resume.content.get("language", "English")
+        except Resume.DoesNotExist:
+            pass
+    return "English"
+
+
 @require_http_methods(["POST"])
 def enhance_experience(request):
+    language = _get_resume_language(request)
     return enhance_field(
         request,
         prefix="experience",
         field="description",
         enhance_function=enhance_resume_experience,
+        language=language,
     )
 
 
 @require_http_methods(["POST"])
 def enhance_project(request):
+    language = _get_resume_language(request)
     return enhance_field(
         request,
         prefix="project",
         field="description",
         enhance_function=enhance_project_description,
+        language=language,
     )
 
 

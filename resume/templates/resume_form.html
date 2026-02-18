@@ -287,7 +287,7 @@
                                 <button type="button" class="enhance-experience flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-violet-500 to-purple-600 rounded-lg hover:opacity-90 transition-all shadow-md"
                                     hx-post="{% url 'resume:enhance_experience' %}" 
                                     hx-trigger="click"
-                                    hx-vals='{"field_id": "{{ form.description.id_for_label }}"}'
+                                    hx-vals='{"field_id": "{{ form.description.id_for_label }}", "resume_id": "{{ resume_id }}"}'
                                     hx-target="#{{ form.description.id_for_label }}" 
                                     hx-swap="outerHTML"
                                     hx-indicator=".my-indicator">
@@ -356,7 +356,7 @@
                                 <button type="button" class="enhance-project flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-violet-500 to-purple-600 rounded-lg hover:opacity-90 transition-all shadow-md"
                                     hx-post="{% url 'resume:enhance_project' %}" 
                                     hx-trigger="click"
-                                    hx-vals='{"field_id": "{{ form.description.id_for_label }}"}'
+                                    hx-vals='{"field_id": "{{ form.description.id_for_label }}", "resume_id": "{{ resume_id }}"}'
                                     hx-target="#{{ form.description.id_for_label }}" 
                                     hx-swap="outerHTML"
                                     hx-indicator=".my-indicator">
@@ -445,7 +445,7 @@
                 <button type="button" class="enhance-experience flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-violet-500 to-purple-600 rounded-lg hover:opacity-90 transition-all shadow-md"
                     hx-post="{% url 'resume:enhance_experience' %}" 
                     hx-trigger="click"
-                    hx-vals='{"field_id": "{{ experience_formset.empty_form.description.id_for_label }}"}'
+                    hx-vals='{"field_id": "{{ experience_formset.empty_form.description.id_for_label }}", "resume_id": "{{ resume_id }}"}'
                     hx-target="#{{ experience_formset.empty_form.description.id_for_label }}" 
                     hx-swap="outerHTML"
                     hx-indicator=".my-indicator">
@@ -476,7 +476,7 @@
                 <button type="button" class="enhance-project flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-violet-500 to-purple-600 rounded-lg hover:opacity-90 transition-all shadow-md"
                     hx-post="{% url 'resume:enhance_project' %}" 
                     hx-trigger="click"
-                    hx-vals='{"field_id": "{{ project_formset.empty_form.description.id_for_label }}"}'
+                    hx-vals='{"field_id": "{{ project_formset.empty_form.description.id_for_label }}", "resume_id": "{{ resume_id }}"}'
                     hx-target="#{{ project_formset.empty_form.description.id_for_label }}" 
                     hx-swap="outerHTML"
                     hx-indicator=".my-indicator">

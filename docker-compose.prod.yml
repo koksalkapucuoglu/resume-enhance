@@ -19,7 +19,7 @@ services:
   web:
     build: .
     restart: always
-    command: gunicorn core.wsgi:application --bind 0.0.0.0:8000
+    command: gunicorn core.wsgi:application --bind 0.0.0.0:8000 --timeout 120 --workers 2 --worker-class gthread --threads 4
     expose:
       - 8000
     volumes:
