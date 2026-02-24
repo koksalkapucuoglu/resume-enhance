@@ -39,3 +39,15 @@ class Resume(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.title}"
+
+
+class Feedback(models.Model):
+    RATING_CHOICES = [(i, i) for i in range(1, 6)]
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="feedback")
+    message = models.TextField()
+    rating = models.IntegerField(choices=RATING_CHOICES, null=True, blank=True)
+    page = models.CharField(max_length=100, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Feedback from {self.user or 'anonymous'} at {self.created_at:%Y-%m-%d}"

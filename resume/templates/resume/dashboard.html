@@ -107,7 +107,7 @@
 
             <!-- Messages -->
             {% if messages %}
-            <div class="mb-6 space-y-3" id="messagesContainer">
+            <div class="mb-6 space-y-3 relative z-[9999]" id="messagesContainer">
                 {% for message in messages %}
                 <div class="message-toast flex items-center gap-3 p-4 rounded-lg border {% if message.tags == 'success' %}bg-green-50 border-green-200 text-green-800{% elif message.tags == 'error' %}bg-red-50 border-red-200 text-red-800{% elif message.tags == 'warning' %}bg-yellow-50 border-yellow-200 text-yellow-800{% else %}bg-blue-50 border-blue-200 text-blue-800{% endif %}" role="alert">
                     <span class="material-symbols-outlined !text-[20px]">
@@ -171,17 +171,24 @@
                             <div class="flex items-center justify-between pt-4 border-t border-slate-100">
                                 <div class="flex gap-1">
                                     <!-- Duplicate Button -->
-                                    <button type="button" 
+                                    <button type="button"
                                             onclick="showConfirmModal('duplicate', '{{ resume.pk }}', '{{ resume.display_name|escapejs }}')"
-                                            class="p-2 rounded-md text-slate-400 hover:text-primary hover:bg-primary/10 transition-colors" 
+                                            class="p-2 rounded-md text-slate-400 hover:text-primary hover:bg-primary/10 transition-colors"
                                             title="Duplicate">
                                         <span class="material-symbols-outlined !text-[18px]">content_copy</span>
                                     </button>
+                                    <!-- Download PDF Button -->
+                                    <a href="{% url 'resume:download_resume_pdf' resume.pk %}"
+                                       class="download-btn flex items-center gap-1 px-2.5 py-1.5 rounded-md text-slate-500 hover:text-primary hover:bg-primary/10 transition-colors text-xs font-medium"
+                                       title="Download PDF"
+                                       onclick="this.innerHTML='<span class=\'material-symbols-outlined animate-spin !text-[16px]\'>autorenew</span>'; this.style.pointerEvents='none'; setTimeout(()=>{this.innerHTML='<span class=\'material-symbols-outlined !text-[16px]\'>download</span> PDF'; this.style.pointerEvents=\'auto\';}, 4000);">
+                                        <span class="material-symbols-outlined !text-[16px]">download</span> PDF
+                                    </a>
                                 </div>
                                 <!-- Delete Button -->
                                 <button type="button"
                                         onclick="showConfirmModal('delete', '{{ resume.pk }}', '{{ resume.display_name|escapejs }}')"
-                                        class="p-2 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors" 
+                                        class="p-2 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
                                         title="Delete">
                                     <span class="material-symbols-outlined !text-[18px]">delete</span>
                                 </button>
@@ -249,7 +256,7 @@
                     </button>
                     <button id="modalConfirmBtn" onclick="confirmAction()"
                             class="flex-1 px-4 py-2.5 rounded-lg font-medium text-sm text-white transition-colors">
-                        Onayla
+                        Confirm
                     </button>
                 </div>
             </div>
@@ -368,17 +375,107 @@
         }, 300);
     }
     
-    // Auto-dismiss messages after 5 seconds
+    // Auto-dismiss messages after 5 seconds; error toasts stay until manually closed
     document.addEventListener('DOMContentLoaded', () => {
         const messages = document.querySelectorAll('.message-toast');
         messages.forEach((msg, index) => {
-            setTimeout(() => {
-                if (msg.parentElement) {
-                    dismissMessage(msg);
-                }
-            }, 5000 + (index * 500)); // Stagger dismissal
+            const isError = msg.classList.contains('bg-red-50');
+            if (!isError) {
+                setTimeout(() => {
+                    if (msg.parentElement) {
+                        dismissMessage(msg);
+                    }
+                }, 5000 + (index * 500)); // Stagger dismissal
+            }
         });
     });
+</script>
+<!-- Feedback Widget -->
+<div id="feedback-widget" class="fixed bottom-6 right-6 z-50">
+  <!-- Trigger Button -->
+  <button onclick="document.getElementById('feedback-modal').classList.remove('hidden')"
+          class="bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 text-sm font-medium transition-all hover:shadow-xl">
+    <span class="material-symbols-outlined text-base">feedback</span>
+    Feedback
+  </button>
+
+  <!-- Modal -->
+  <div id="feedback-modal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-end justify-end p-6">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-slate-900 font-semibold text-lg">Share Feedback</h3>
+        <button onclick="document.getElementById('feedback-modal').classList.add('hidden')"
+                class="text-slate-400 hover:text-slate-600">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+
+      <!-- Star Rating -->
+      <div class="mb-4">
+        <p class="text-slate-600 text-sm mb-2">How would you rate your experience?</p>
+        <div class="flex gap-1" id="star-rating">
+          {% for i in "12345" %}
+          <button type="button" class="star-btn text-slate-300 hover:text-yellow-400 transition-colors"
+                  data-value="{{ forloop.counter }}"
+                  onclick="setRating({{ forloop.counter }})">
+            <span class="material-symbols-outlined" style="font-size:28px;">star</span>
+          </button>
+          {% endfor %}
+        </div>
+        <input type="hidden" id="feedback-rating" value="">
+      </div>
+
+      <!-- Message -->
+      <textarea id="feedback-message" rows="3"
+                placeholder="Tell us what you think..."
+                class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 resize-none focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent mb-4"></textarea>
+
+      <!-- Submit via fetch -->
+      <button onclick="submitFeedback()"
+              id="feedback-submit-btn"
+              class="w-full bg-primary hover:bg-primary-hover text-white py-2 rounded-lg text-sm font-medium transition-colors">
+        Send Feedback
+      </button>
+      <div id="feedback-success" class="hidden text-center text-green-600 font-medium mt-2">
+        Thank you for your feedback! 🎉
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function setRating(value) {
+  document.getElementById('feedback-rating').value = value;
+  document.querySelectorAll('.star-btn').forEach((btn, idx) => {
+    btn.style.color = idx < value ? '#facc15' : '';
+  });
+}
+
+function submitFeedback() {
+  const message = document.getElementById('feedback-message').value.trim();
+  if (!message) { alert('Please enter a message.'); return; }
+  const rating = document.getElementById('feedback-rating').value;
+  const btn = document.getElementById('feedback-submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+
+  fetch('/api/v1/feedback/', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+    body: JSON.stringify({message, rating: rating ? parseInt(rating) : null, page: window.location.pathname})
+  })
+  .then(r => r.json())
+  .then(() => {
+    document.getElementById('feedback-success').classList.remove('hidden');
+    btn.classList.add('hidden');
+    setTimeout(() => document.getElementById('feedback-modal').classList.add('hidden'), 2000);
+  })
+  .catch(() => { btn.disabled = false; btn.textContent = 'Send Feedback'; alert('Error. Please try again.'); });
+}
+
+function getCookie(name) {
+  return document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith(name+'='))?.split('=')[1] || '';
+}
 </script>
 </body>
 </html>

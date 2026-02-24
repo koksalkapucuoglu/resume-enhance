@@ -17,4 +17,5 @@ urlpatterns = [
     path('preview-resume-form', views.preview_resume_form, name='preview_resume_form'),
     path('upload-cv/', views.upload_cv, name="upload_cv"),
     path('upload-linkedin/', views.upload_linkedin_cv, name='upload_linkedin_cv'),
+    path('resume/<int:pk>/download/', views.download_resume_pdf, name='download_resume_pdf'),
 ]

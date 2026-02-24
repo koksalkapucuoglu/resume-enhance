@@ -113,7 +113,33 @@
         
         /* Button disabled state */
         .htmx-enhance-disabled { opacity: 0.6; pointer-events: none; }
-        
+
+        /* Form error states - pairs with Django error_css_class = 'field-error' */
+        .field-error .form-control {
+            border-color: #ef4444 !important;
+            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
+        }
+        .errorlist {
+            color: #ef4444;
+            font-size: 0.75rem;
+            margin-top: 0.25rem;
+            list-style: none;
+            padding: 0;
+        }
+        .errorlist li { margin-top: 0; }
+
+        /* Message toast animations */
+        @keyframes fadeInSlide {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; transform: translateY(-10px); }
+        }
+        .message-toast { animation: fadeInSlide 0.3s ease-out; }
+        .message-toast.fade-out { animation: fadeOut 0.3s ease-out forwards; }
+
         /* Preview Modal */
         .preview-modal-dialog {
             width: 210mm;
@@ -150,12 +176,12 @@
                 </span>
                 
                 <!-- Save Button -->
-                <button type="button" 
+                <button type="button"
                         id="saveButton"
                         onclick="saveChanges()"
-                        class="hidden sm:flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-all shadow-md shadow-green-600/20">
+                        class="flex items-center gap-2 px-3 sm:px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-all shadow-md shadow-green-600/20">
                     <span class="material-symbols-outlined text-lg">save</span>
-                    Save
+                    <span class="hidden sm:inline">Save</span>
                 </button>
                 
                 <!-- Preview Button -->
@@ -213,13 +239,16 @@
             
             <!-- Messages -->
             {% if messages %}
-            <div class="mb-6 space-y-3">
+            <div class="mb-6 space-y-3" id="form-messages-container">
                 {% for message in messages %}
-                <div class="p-4 rounded-xl text-sm flex items-center gap-3 {% if message.tags == 'success' %}bg-green-50 border border-green-200 text-green-700{% elif message.tags == 'error' %}bg-red-50 border border-red-200 text-red-700{% elif message.tags == 'warning' %}bg-yellow-50 border border-yellow-200 text-yellow-700{% else %}bg-blue-50 border border-blue-200 text-blue-700{% endif %}">
-                    <span class="material-symbols-outlined">
+                <div class="message-toast flex items-center gap-3 p-4 rounded-xl border {% if message.tags == 'success' %}bg-green-50 border-green-200 text-green-800{% elif message.tags == 'error' %}bg-red-50 border-red-200 text-red-800{% elif message.tags == 'warning' %}bg-yellow-50 border-yellow-200 text-yellow-800{% else %}bg-blue-50 border-blue-200 text-blue-800{% endif %}" role="alert">
+                    <span class="material-symbols-outlined !text-[20px] shrink-0">
                         {% if message.tags == 'success' %}check_circle{% elif message.tags == 'error' %}error{% elif message.tags == 'warning' %}warning{% else %}info{% endif %}
                     </span>
-                    {{ message }}
+                    <span class="flex-1 text-sm font-medium">{{ message }}</span>
+                    <button onclick="dismissFormMessage(this.parentElement)" class="p-1 rounded hover:bg-black/10 transition-colors shrink-0" type="button">
+                        <span class="material-symbols-outlined !text-[18px]">close</span>
+                    </button>
                 </div>
                 {% endfor %}
             </div>
@@ -228,6 +257,89 @@
             <!-- Resume Form -->
             <form method="post" id="resume-form" {% if resume_id %}action="{% url 'resume:resume_form_edit' pk=resume_id %}"{% endif %}>
                 {% csrf_token %}
+
+                <!-- Template Selection -->
+                <div class="mb-6 bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+                    <div class="mb-4">
+                        <h2 class="text-lg font-bold text-slate-900">Choose Template</h2>
+                        <p class="text-slate-500 text-sm mt-0.5">Select a layout for your resume</p>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <!-- FaangPath Simple - Active/Default -->
+                        <div class="template-card cursor-pointer relative rounded-xl border-2 border-primary ring-2 ring-primary bg-white overflow-hidden transition-all hover:shadow-md"
+                             data-template="faangpath-simple"
+                             onclick="selectTemplate('faangpath-simple')">
+                            <div class="aspect-[3/4] bg-blue-50 relative overflow-hidden">
+                                <div class="absolute inset-0 p-4 flex flex-col gap-1.5">
+                                    <div class="w-1/2 h-3 bg-blue-200 rounded"></div>
+                                    <div class="w-full h-1.5 bg-slate-200 rounded"></div>
+                                    <div class="w-full h-1.5 bg-slate-200 rounded"></div>
+                                    <div class="w-3/4 h-1.5 bg-slate-200 rounded"></div>
+                                    <div class="w-full h-px bg-slate-100 my-2"></div>
+                                    <div class="w-1/3 h-2 bg-blue-200 rounded"></div>
+                                    <div class="w-full h-1.5 bg-slate-200 rounded"></div>
+                                    <div class="w-full h-1.5 bg-slate-200 rounded"></div>
+                                    <div class="w-5/6 h-1.5 bg-slate-200 rounded"></div>
+                                </div>
+                            </div>
+                            <div class="p-3 flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm font-semibold text-slate-900">FaangPath Simple</p>
+                                    <span class="text-xs font-medium text-primary">Active</span>
+                                </div>
+                            </div>
+                            <!-- Selected checkmark badge -->
+                            <div class="template-check absolute top-2 right-2 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
+                                <span class="material-symbols-outlined text-white" style="font-size:14px;">check</span>
+                            </div>
+                        </div>
+
+                        <!-- Minimal Clean - Coming Soon -->
+                        <div class="template-card relative rounded-xl border-2 border-slate-200 bg-white overflow-hidden opacity-50 cursor-not-allowed"
+                             data-template="minimal-clean">
+                            <div class="aspect-[3/4] bg-slate-50 relative overflow-hidden">
+                                <div class="absolute inset-0 p-4 flex flex-col gap-1.5">
+                                    <div class="w-1/2 h-3 bg-slate-300 rounded"></div>
+                                    <div class="w-full h-1.5 bg-slate-200 rounded"></div>
+                                    <div class="w-full h-1.5 bg-slate-200 rounded"></div>
+                                    <div class="w-3/4 h-1.5 bg-slate-200 rounded"></div>
+                                    <div class="w-full h-px bg-slate-100 my-2"></div>
+                                    <div class="w-1/3 h-2 bg-slate-300 rounded"></div>
+                                    <div class="w-full h-1.5 bg-slate-200 rounded"></div>
+                                    <div class="w-full h-1.5 bg-slate-200 rounded"></div>
+                                    <div class="w-5/6 h-1.5 bg-slate-200 rounded"></div>
+                                </div>
+                            </div>
+                            <div class="p-3">
+                                <p class="text-sm font-semibold text-slate-900">Minimal Clean</p>
+                                <span class="text-xs font-medium text-slate-500">Coming Soon</span>
+                            </div>
+                        </div>
+
+                        <!-- Executive Pro - Coming Soon -->
+                        <div class="template-card relative rounded-xl border-2 border-slate-200 bg-white overflow-hidden opacity-50 cursor-not-allowed"
+                             data-template="executive-pro">
+                            <div class="aspect-[3/4] bg-slate-50 relative overflow-hidden">
+                                <div class="absolute inset-0 p-4 flex flex-col gap-1.5">
+                                    <div class="w-1/2 h-3 bg-slate-300 rounded"></div>
+                                    <div class="w-full h-1.5 bg-slate-200 rounded"></div>
+                                    <div class="w-full h-1.5 bg-slate-200 rounded"></div>
+                                    <div class="w-3/4 h-1.5 bg-slate-200 rounded"></div>
+                                    <div class="w-full h-px bg-slate-100 my-2"></div>
+                                    <div class="w-1/3 h-2 bg-slate-300 rounded"></div>
+                                    <div class="w-full h-1.5 bg-slate-200 rounded"></div>
+                                    <div class="w-full h-1.5 bg-slate-200 rounded"></div>
+                                    <div class="w-5/6 h-1.5 bg-slate-200 rounded"></div>
+                                </div>
+                            </div>
+                            <div class="p-3">
+                                <p class="text-sm font-semibold text-slate-900">Executive Pro</p>
+                                <span class="text-xs font-medium text-slate-500">Coming Soon</span>
+                            </div>
+                        </div>
+                    </div>
+                    <input type="hidden" name="template" id="selected-template" value="faangpath-simple">
+                </div>
 
                 <!-- Tab Navigation -->
                 <nav class="flex gap-1 mb-6 bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
@@ -666,6 +778,70 @@
             }
         }
 
+        // HTMX error handler: differentiate between enhance and preview/other failures
+        document.body.addEventListener('htmx:responseError', function(evt) {
+            const trigger = evt.detail.elt;
+            const isEnhance = trigger && (trigger.classList.contains('enhance-experience') || trigger.classList.contains('enhance-project'));
+            if (isEnhance) {
+                showToast('Enhancement failed. Please check your connection and try again.', 'error');
+            } else {
+                const status = evt.detail.xhr ? evt.detail.xhr.status : 0;
+                if (status === 400) {
+                    try {
+                        const response = JSON.parse(evt.detail.xhr.responseText);
+                        if (response.form_errors) {
+                            let errorMsgs = [];
+                            for (const [section, sectionErrors] of Object.entries(response.form_errors)) {
+                                const sectionName = section.replace('_form', '').replace('_formset', '').replace('_', ' ').toUpperCase();
+                                if (Array.isArray(sectionErrors)) {
+                                    sectionErrors.forEach((formError, idx) => {
+                                        for (const [field, errors] of Object.entries(formError)) {
+                                            const fieldName = field.charAt(0).toUpperCase() + field.slice(1);
+                                            errorMsgs.push(`<b>${sectionName} #${idx+1} (${fieldName})</b>: ${errors.join(', ')}`);
+                                        }
+                                    });
+                                } else {
+                                    for (const [field, errors] of Object.entries(sectionErrors)) {
+                                        const fieldName = field.charAt(0).toUpperCase() + field.slice(1);
+                                        errorMsgs.push(`<b>${sectionName} (${fieldName})</b>: ${errors.join(', ')}`);
+                                    }
+                                }
+                            }
+                            if (errorMsgs.length > 0) {
+                                showToast('Preview failed due to form validation errors:<br><div class="mt-2 pl-2 text-xs space-y-1">' + errorMsgs.join('<br>') + '</div>', 'error');
+                                return;
+                            }
+                        }
+                    } catch (e) {
+                        // ignore parsing error and fallback
+                    }
+                    showToast('Preview failed: check that URLs (GitHub, LinkedIn, project links) start with https://', 'error');
+                } else {
+                    showToast('Request failed (status ' + status + '). Please try again.', 'error');
+                }
+            }
+        });
+        document.body.addEventListener('htmx:sendError', function(evt) {
+            showToast('Network error. Please check your connection and try again.', 'error');
+        });
+
+        function showToast(message, type) {
+            const toast = document.createElement('div');
+            toast.className = 'fixed top-4 right-4 z-[10000] px-6 py-3 rounded-xl shadow-lg text-sm font-medium flex items-center gap-2 ' +
+                (type === 'error' ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-green-50 border border-green-200 text-green-700');
+            toast.innerHTML = '<span class="material-symbols-outlined text-lg">' + (type === 'error' ? 'error' : 'check_circle') + '</span>' + message;
+            document.body.appendChild(toast);
+            setTimeout(() => { toast.style.transition = 'opacity 0.3s'; toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 5000);
+        }
+
+        // HTMX session expiry interceptor: detect redirect to login
+        document.body.addEventListener('htmx:beforeSwap', function(evt) {
+            if (evt.detail.xhr.status === 0 || (evt.detail.xhr.responseURL && evt.detail.xhr.responseURL.includes('/login'))) {
+                evt.detail.shouldSwap = false;
+                showToast('Your session has expired. Please save your work and log in again.', 'error');
+            }
+        });
+
         // HTMX button disable during enhancement
         let enhanceLoadingCount = 0;
 
@@ -817,6 +993,178 @@
         document.getElementById('resume-form')?.addEventListener('submit', function() {
             hasUnsavedChanges = false;
         });
+
+        // ============================================
+        // FORM MESSAGE HANDLING (Task #9)
+        // ============================================
+        function dismissFormMessage(el) {
+            el.classList.add('fade-out');
+            setTimeout(() => {
+                el.remove();
+                const container = document.getElementById('form-messages-container');
+                if (container && container.children.length === 0) container.remove();
+            }, 300);
+        }
+
+        // Auto-dismiss success/info/warning toasts; error toasts stay until manually closed
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('#form-messages-container .message-toast').forEach(function(toast, index) {
+                const isError = toast.classList.contains('bg-red-50');
+                if (!isError) {
+                    setTimeout(function() {
+                        if (toast.parentElement) dismissFormMessage(toast);
+                    }, 5000 + index * 500);
+                }
+            });
+        });
+
+        // ============================================
+        // SCROLL TO FIRST ERROR (Task #7)
+        // ============================================
+        function scrollToFirstError() {
+            const firstError = document.querySelector('.field-error, .errorlist');
+            if (firstError) {
+                firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // If form was re-rendered with errors, scroll to the first one
+            if (document.querySelector('.field-error, .errorlist')) {
+                setTimeout(scrollToFirstError, 200);
+            }
+        });
+
+        // ============================================
+        // DATE FORMAT HINTS (Task #7)
+        // ============================================
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add YYYY hint after year-only number inputs
+            document.querySelectorAll('input[type="number"][placeholder="YYYY"]').forEach(function(input) {
+                if (input.nextElementSibling && input.nextElementSibling.classList.contains('date-hint')) return;
+                const hint = document.createElement('p');
+                hint.className = 'date-hint text-xs text-slate-400 mt-1';
+                hint.textContent = 'Format: YYYY';
+                input.parentNode.insertBefore(hint, input.nextSibling);
+            });
+
+            // Add YYYY-MM hint after month inputs
+            document.querySelectorAll('input[type="month"]').forEach(function(input) {
+                if (input.nextElementSibling && input.nextElementSibling.classList.contains('date-hint')) return;
+                const hint = document.createElement('p');
+                hint.className = 'date-hint text-xs text-slate-400 mt-1';
+                hint.textContent = 'Format: YYYY-MM';
+                input.parentNode.insertBefore(hint, input.nextSibling);
+            });
+        });
+
+        // Template Selection
+        function selectTemplate(value) {
+            document.getElementById('selected-template').value = value;
+            const legacySelector = document.getElementById('template-selector');
+            if (legacySelector) legacySelector.value = value;
+
+            document.querySelectorAll('.template-card').forEach(card => {
+                if (card.classList.contains('cursor-not-allowed')) return;
+                const check = card.querySelector('.template-check');
+                if (card.dataset.template === value) {
+                    card.classList.add('border-primary', 'ring-2', 'ring-primary');
+                    card.classList.remove('border-slate-200');
+                    if (check) check.classList.remove('hidden');
+                } else {
+                    card.classList.remove('border-primary', 'ring-2', 'ring-primary');
+                    card.classList.add('border-slate-200');
+                    if (check) check.classList.add('hidden');
+                }
+            });
+        }
     </script>
+<!-- Feedback Widget -->
+<div id="feedback-widget" class="fixed bottom-6 right-6 z-50">
+  <!-- Trigger Button -->
+  <button onclick="document.getElementById('feedback-modal').classList.remove('hidden')"
+          class="bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 text-sm font-medium transition-all hover:shadow-xl">
+    <span class="material-symbols-outlined text-base">feedback</span>
+    Feedback
+  </button>
+
+  <!-- Modal -->
+  <div id="feedback-modal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-end justify-end p-6">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-slate-900 font-semibold text-lg">Share Feedback</h3>
+        <button onclick="document.getElementById('feedback-modal').classList.add('hidden')"
+                class="text-slate-400 hover:text-slate-600">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+
+      <!-- Star Rating -->
+      <div class="mb-4">
+        <p class="text-slate-600 text-sm mb-2">How would you rate your experience?</p>
+        <div class="flex gap-1" id="star-rating">
+          {% for i in "12345" %}
+          <button type="button" class="star-btn text-slate-300 hover:text-yellow-400 transition-colors"
+                  data-value="{{ forloop.counter }}"
+                  onclick="setRating({{ forloop.counter }})">
+            <span class="material-symbols-outlined" style="font-size:28px;">star</span>
+          </button>
+          {% endfor %}
+        </div>
+        <input type="hidden" id="feedback-rating" value="">
+      </div>
+
+      <!-- Message -->
+      <textarea id="feedback-message" rows="3"
+                placeholder="Tell us what you think..."
+                class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 resize-none focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent mb-4"></textarea>
+
+      <!-- Submit via fetch -->
+      <button onclick="submitFeedback()"
+              id="feedback-submit-btn"
+              class="w-full bg-primary hover:bg-primary-hover text-white py-2 rounded-lg text-sm font-medium transition-colors">
+        Send Feedback
+      </button>
+      <div id="feedback-success" class="hidden text-center text-green-600 font-medium mt-2">
+        Thank you for your feedback! 🎉
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function setRating(value) {
+  document.getElementById('feedback-rating').value = value;
+  document.querySelectorAll('.star-btn').forEach((btn, idx) => {
+    btn.style.color = idx < value ? '#facc15' : '';
+  });
+}
+
+function submitFeedback() {
+  const message = document.getElementById('feedback-message').value.trim();
+  if (!message) { alert('Please enter a message.'); return; }
+  const rating = document.getElementById('feedback-rating').value;
+  const btn = document.getElementById('feedback-submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+
+  fetch('/api/v1/feedback/', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+    body: JSON.stringify({message, rating: rating ? parseInt(rating) : null, page: window.location.pathname})
+  })
+  .then(r => r.json())
+  .then(() => {
+    document.getElementById('feedback-success').classList.remove('hidden');
+    btn.classList.add('hidden');
+    setTimeout(() => document.getElementById('feedback-modal').classList.add('hidden'), 2000);
+  })
+  .catch(() => { btn.disabled = false; btn.textContent = 'Send Feedback'; alert('Error. Please try again.'); });
+}
+
+function getCookie(name) {
+  return document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith(name+'='))?.split('=')[1] || '';
+}
+</script>
 </body>
 </html>
