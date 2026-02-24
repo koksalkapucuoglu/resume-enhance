@@ -4,11 +4,15 @@ Resume API Views using Django REST Framework.
 These ViewSets provide CRUD operations for Resume model
 via REST API endpoints for mobile and frontend apps.
 """
+import json
+
+from django.http import JsonResponse
+from django.views.decorators.http import require_http_methods
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from .models import Resume
+from .models import Resume, Feedback
 from .serializers import (
     ResumeListSerializer,
     ResumeDetailSerializer,
@@ -70,3 +74,26 @@ class ResumeViewSet(viewsets.ModelViewSet):
         )
         serializer = ResumeDetailSerializer(new_resume)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+@require_http_methods(["POST"])
+def submit_feedback(request):
+    """Submit user feedback. Auth optional."""
+    try:
+        data = json.loads(request.body)
+        message = data.get("message", "").strip()
+        if not message:
+            return JsonResponse({"error": "Message is required"}, status=400)
+        rating = data.get("rating")
+        page = data.get("page", "")
+        Feedback.objects.create(
+            user=request.user if request.user.is_authenticated else None,
+            message=message[:2000],
+            rating=rating if isinstance(rating, int) and rating in range(1, 6) else None,
+            page=page[:100],
+        )
+        return JsonResponse({"success": True})
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)

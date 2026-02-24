@@ -5,6 +5,12 @@ from datetime import datetime
 class MonthYearDateInput(forms.DateInput):
     input_type = 'month'
 
+    def __init__(self, attrs=None, format=None):
+        default_attrs = {'placeholder': 'YYYY-MM'}
+        if attrs:
+            default_attrs.update(attrs)
+        super().__init__(attrs=default_attrs, format=format)
+
 
 class MonthYearField(forms.Field):
     def to_python(self, value):
@@ -59,7 +65,15 @@ class YearOnlyField(forms.IntegerField):
         return super().to_python(value)
 
 
+def _normalize_url(value):
+    """Prepend https:// if the value looks like a URL but has no scheme."""
+    if value and not value.startswith(('http://', 'https://')):
+        return 'https://' + value
+    return value
+
+
 class UserInfoForm(forms.Form):
+    error_css_class = 'field-error'
     full_name = forms.CharField(label='Full Name')
     email = forms.EmailField(label='Email')
     phone = forms.CharField(
@@ -76,8 +90,15 @@ class UserInfoForm(forms.Form):
                 'placeholder': 'Enter your skills separated by commas...'})
     )
 
+    def clean_github(self):
+        return _normalize_url(self.cleaned_data.get('github', ''))
+
+    def clean_linkedin(self):
+        return _normalize_url(self.cleaned_data.get('linkedin', ''))
+
 
 class EducationForm(forms.Form):
+    error_css_class = 'field-error'
     school = forms.CharField(max_length=100, label='School')
     degree = forms.CharField(max_length=100, label='Degree')
     field_of_study = forms.CharField(max_length=100, label='Field of Study')
@@ -86,6 +107,7 @@ class EducationForm(forms.Form):
 
 
 class ExperienceForm(forms.Form):
+    error_css_class = 'field-error'
     title = forms.CharField(
         max_length=255,
         label="Role Title",
@@ -114,6 +136,7 @@ class ExperienceForm(forms.Form):
 
 
 class ProjectForm(forms.Form):
+    error_css_class = 'field-error'
     name = forms.CharField(
         max_length=255,
         label="Name"
@@ -123,3 +146,6 @@ class ProjectForm(forms.Form):
         label="Description"
     )
     link = forms.URLField(label='Link', required=False)
+
+    def clean_link(self):
+        return _normalize_url(self.cleaned_data.get('link', ''))

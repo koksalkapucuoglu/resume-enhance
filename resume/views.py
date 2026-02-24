@@ -27,7 +27,6 @@ from resume.openai_engine import (
     extract_linkedin_resume_data,
 )
 from resume.services.pdf_service import ResumePdfService, PdfGenerationError
-from resume.services.pdf_service import ResumePdfService, PdfGenerationError
 from latex_renderer import latex_handler
 from resume.models import Resume
 
@@ -309,16 +308,19 @@ class ResumeFormView(TemplateView):
     template_name = "resume_form.html"
 
     def get_object(self):
-        return Resume.objects.get(pk=self.kwargs.get("pk")) if self.kwargs.get("pk") else None
+        # SECURITY: Filter by user to prevent IDOR — users must only access their own resumes
+        pk = self.kwargs.get("pk")
+        if pk:
+            return Resume.objects.get(pk=pk, user=self.request.user)
+        return None
 
     def get(self, request, *args, **kwargs):
-        resume = self.get_object()
-        
-        # If accessing form directly without PK, show empty form or redirect? 
-        # For now, let's keep it empty or load from session if we want backward compatibility, 
-        # but the plan is to drop session. Let's assume new flow always has PK.
-        # If no PK, show init values.
-        
+        try:
+            resume = self.get_object()
+        except Resume.DoesNotExist:
+            messages.error(request, "Resume not found.")
+            return redirect("resume:dashboard")
+
         if resume:
             context = populate_formsets_from_extracted_json(resume.content)
             context["resume_id"] = resume.pk
@@ -488,7 +490,8 @@ class ResumeFormView(TemplateView):
 
         if self.kwargs.get("pk"):
             try:
-                resume = Resume.objects.get(pk=self.kwargs.get("pk"))
+                # SECURITY: Filter by user to prevent IDOR on save
+                resume = Resume.objects.get(pk=self.kwargs.get("pk"), user=self.request.user)
                 # Update resume content with clean data from forms
                 # We need to reconstruct the content JSON structure
                 updated_content = {
@@ -620,6 +623,7 @@ def _get_resume_language(request):
     return "English"
 
 
+@login_required
 @require_http_methods(["POST"])
 def enhance_experience(request):
     language = _get_resume_language(request)
@@ -632,6 +636,7 @@ def enhance_experience(request):
     )
 
 
+@login_required
 @require_http_methods(["POST"])
 def enhance_project(request):
     language = _get_resume_language(request)
@@ -740,15 +745,30 @@ def preview_resume_form(request):
 def upload_cv(request):
     if request.method == "POST":
         cv_file = request.FILES.get("cv_file")
+        if not cv_file:
+            return JsonResponse({"error": "No file uploaded."}, status=400)
         print("[INFO]: CV file uploaded:", cv_file.name)
 
         # Ensure the uploaded file is a PDF
         if not cv_file.name.endswith(".pdf"):
             return JsonResponse({"error": "Only PDF files are allowed."}, status=400)
 
+        # SECURITY: File size limit (5MB)
+        if cv_file.size > 5 * 1024 * 1024:
+            return JsonResponse({"error": "File too large. Maximum size is 5MB."}, status=400)
+
         # Extract data from the PDF
         reader = PdfReader(cv_file)
-        extracted_text = " ".join(page.extract_text() for page in reader.pages)
+        extracted_text = " ".join(
+            (page.extract_text() or "") for page in reader.pages
+        )
+
+        # Guard: minimum text length before calling OpenAI
+        if len(extracted_text.strip()) < 50:
+            return JsonResponse(
+                {"error": "Could not extract enough text from this PDF. Please ensure it contains readable text (not a scanned image)."},
+                status=422,
+            )
         
         start_time = datetime.now()
         extracted_json_string = extract_resume_data(extracted_text)
@@ -769,17 +789,24 @@ def upload_cv(request):
 
         try:
             extracted_json = json.loads(extracted_json_string)
-            
+
+            # Check for parse failure from validation layer
+            if extracted_json.get("parse_error"):
+                return JsonResponse(
+                    {"error": extracted_json.get("message", "Could not extract resume data.")},
+                    status=422,
+                )
+
             # Save to Database instead of Session
             resume = Resume.objects.create(
                 user=request.user,
                 title=f"Uploaded Resume {datetime.now().strftime('%Y-%m-%d %H:%M')}",
                 content=extracted_json
             )
-            
+
             # Redirect to form with resume ID
             return redirect("resume:resume_form_edit", pk=resume.pk)
-            
+
         except json.JSONDecodeError as e:
             print("[ERROR]: Failed to decode JSON:", str(e))
             return JsonResponse({"error": "Failed to parse extracted JSON"}, status=500)
@@ -796,8 +823,21 @@ def upload_linkedin_cv(request):
         if not linkedin_file.name.endswith(".pdf"):
             return JsonResponse({"error": "Only PDF files are allowed."}, status=400)
 
+        # SECURITY: File size limit (5MB)
+        if linkedin_file.size > 5 * 1024 * 1024:
+            return JsonResponse({"error": "File too large. Maximum size is 5MB."}, status=400)
+
         reader = PdfReader(linkedin_file)
-        extracted_text = " ".join(page.extract_text() for page in reader.pages)
+        extracted_text = " ".join(
+            (page.extract_text() or "") for page in reader.pages
+        )
+
+        # Guard: minimum text length before calling OpenAI
+        if len(extracted_text.strip()) < 50:
+            return JsonResponse(
+                {"error": "Could not extract enough text from this PDF. Please ensure it contains readable text (not a scanned image)."},
+                status=422,
+            )
         
         start_time = datetime.now()
         extracted_json_string = extract_linkedin_resume_data(extracted_text)
@@ -833,6 +873,89 @@ def upload_linkedin_cv(request):
             return JsonResponse({"error": "Failed to parse extracted JSON"}, status=500)
 
     return redirect("resume:index")
+
+
+@login_required
+@require_http_methods(["GET"])
+def download_resume_pdf(request, pk):
+    """Download a resume as PDF directly from dashboard."""
+    try:
+        resume = Resume.objects.get(pk=pk, user=request.user)
+    except Resume.DoesNotExist:
+        messages.error(request, "Resume not found.")
+        return redirect("resume:dashboard")
+        
+    from django.core.validators import URLValidator
+    from django.core.exceptions import ValidationError
+    from .forms import _normalize_url
+
+    content = resume.content
+    
+    # Validate URLs to provide consistent behavior with Edit page
+    val = URLValidator()
+    validation_failures = []
+    
+    user_info = content.get("user_info", {})
+    for field_name in ["github", "linkedin"]:
+        url_val = user_info.get(field_name)
+        if url_val:
+            url_val = _normalize_url(url_val)
+            try:
+                val(url_val)
+            except ValidationError:
+                validation_failures.append(f"Invalid {field_name.title()} URL: {url_val}")
+                
+    for i, project in enumerate(content.get("projects_and_publications", []), start=1):
+        plink = project.get("link")
+        if plink:
+            plink = _normalize_url(plink)
+            try:
+                val(plink)
+            except ValidationError:
+                validation_failures.append(f"Project #{i} has an invalid URL: {plink}")
+                
+    if validation_failures:
+        for err in validation_failures:
+            messages.error(request, err)
+        messages.error(request, "Please edit your resume to fix these link errors before downloading.")
+        return redirect("resume:dashboard")
+
+    try:
+        # Transform stored JSON into the format expected by the PDF template
+        skills_raw = user_info.get("skills", [])
+        if isinstance(skills_raw, list):
+            skills_str = ", ".join(skills_raw)
+        else:
+            skills_str = str(skills_raw)
+
+        resume_data = {
+            "user_data": {
+                "full_name": user_info.get("full_name", ""),
+                "email": user_info.get("email", ""),
+                "phone": user_info.get("phone", ""),
+                "github": user_info.get("github", ""),
+                "linkedin": user_info.get("linkedin", ""),
+                "skills": skills_str,
+            },
+            "education_data": content.get("education", []),
+            "experience_data": content.get("experience", []),
+            "project_data": content.get("projects_and_publications", []),
+            "generation_date": datetime.now().strftime("%Y-%m-%d"),
+        }
+
+        pdf_service = ResumePdfService()
+        pdf_bytes = pdf_service.generate_resume_pdf(
+            resume_data=resume_data,
+            template_selector="faangpath-simple",
+            request=request,
+        )
+        filename = f"{resume.owner_name or 'resume'}_{resume.pk}.pdf".replace(" ", "_")
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+    except PdfGenerationError as e:
+        messages.error(request, f"PDF generation failed: {str(e)}")
+        return redirect("resume:dashboard")
 
 
 def test_faangpath_template(request):

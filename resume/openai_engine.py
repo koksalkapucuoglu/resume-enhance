@@ -173,11 +173,18 @@ def extract_resume_data(user_message: str):
         user_message (str): The raw text extracted from a resume.
 
     Returns:
-        str: A JSON string containing structured resume data.
+        str: A JSON string containing structured resume data, or a parse error dict as JSON string.
     """
 
     meta_prompt = """
-    Act as a resume parser. I will provide you with raw text extracted from a resume. 
+    Act as a resume parser. I will provide you with raw text extracted from a resume PDF.
+
+    IMPORTANT — Multi-column / garbled text handling:
+    The text may come from a multi-column PDF and could be jumbled, interleaved, or out of order.
+    Reconstruct the logical reading order before extracting data. Look for contextual clues
+    (dates next to company names, job titles near descriptions) to reassemble sections correctly,
+    even if the raw text mixes columns together.
+
     Your task is to extract and structure the data into the following JSON format:
 
     {
@@ -195,17 +202,10 @@ def extract_resume_data(user_message: str):
             {
                 "title": "extracted_job_title1",
                 "company": "extracted_company1",
-                "start_date": "extracted_start_date1",
-                "end_date": "extracted_end_date1",
+                "start_date": "YYYY-MM",
+                "end_date": "YYYY-MM",
                 "description": ["bullet_point_1", "bullet_point_2", "bullet_point_3"],
-                "current_role": "True/False if currently working in this role" but Boolean
-            },
-            {
-                "title": "extracted_job_title2",
-                "company": "extracted_company2",
-                "start_date": "extracted_start_date2",
-                "end_date": "extracted_end_date2",
-                "current_role": "True/False if currently working in this role" but Boolean
+                "current_role": true or false
             }
         ],
         "education": [
@@ -213,14 +213,8 @@ def extract_resume_data(user_message: str):
                 "degree": "extracted_degree1",
                 "school": "extracted_school1",
                 "field_of_study": "extracted_field_of_study1",
-                "start_date": "extracted_start_date1",
-                "end_date": "extracted_end_date1"
-            },
-            {
-                "degree": "extracted_degree2",
-                "school": "extracted_school2",
-                "start_date": "extracted_start_date2",
-                "end_date": "extracted_end_date2"
+                "start_date": "YYYY-MM",
+                "end_date": "YYYY-MM"
             }
         ],
         "projects_and_publications": [
@@ -228,105 +222,138 @@ def extract_resume_data(user_message: str):
                 "name": "extracted_project_or_publication_title1",
                 "description": "extracted_project_or_publication_description1",
                 "link": "extracted_link"
-            },
-            {
-                "name": "extracted_project_or_publication_title2",
-                "description": "extracted_project_or_publication_description2",
-                "link": "extracted_link2"
             }
         ]
     }
 
     For the "experience" section:
-    - Return "description" as a JSON array of strings, where each string is one achievement/responsibility bullet point.
-    - Each bullet point should be a clear, action-oriented statement (e.g., "Developed a dashboard for real-time monitoring").
+    - "description" MUST ALWAYS be a JSON array of strings, one bullet point per element.
+      NEVER return description as a plain string. If the original text has a single paragraph,
+      split it into an array by newlines or logical sentence boundaries.
+    - Each bullet point should be a clear, action-oriented statement.
     - If the start and end dates are not explicitly mentioned for a task or project, inherit them from the main job entry.
+
+    Date normalization rules (apply to ALL date fields):
+    - Always output dates in YYYY-MM format.
+    - If only a year is given (e.g. "2022"), output "2022-01".
+    - If a month name is given (e.g. "March 2022"), convert to "2022-03".
+    - If "Present" or "Current", set end_date to null and current_role to true.
 
     For "education" section:
     - degree should be Bachelor, Master, or PhD.
     - field of study should be Computer Science, Engineering, etc.
-    
-    The start and end dates should be in the format YYYY-MM
 
     For "projects_and_publications" section:
     - if link is not valid url, leave it empty.
 
     For "user_info" section:
-    - if linkendin and github not valid url, leave it empty.
+    - if linkedin and github not valid url, leave it empty.
     - if there linkedin url or github url, urls should be start with https://
 
     For "language" field:
     - Detect the primary language of the resume content (e.g. "English", "Turkish", "German").
     - Use the full English name of the language.
-    
+
     Ensure the JSON is well-structured and includes all relevant information.
     If a section is missing in the input text, leave it empty in the JSON.
     """.strip()
 
-    return send_openai_message(
+    result = send_openai_message(
         user_message=user_message, meta_prompt=meta_prompt, model="gpt-4o-mini",
-        is_json=True, temperature=0, max_tokens=4000,
+        is_json=True, temperature=0, max_tokens=6000,
     )
+
+    # Validation: check for empty/corrupted PDF parse failure
+    try:
+        import json as _json
+        parsed = _json.loads(result)
+        has_name = bool(parsed.get("user_info", {}).get("full_name", "").strip())
+        has_experience = bool(parsed.get("experience"))
+        if not has_name and not has_experience:
+            return _json.dumps({
+                "parse_error": True,
+                "message": "Could not extract resume data. Please ensure the PDF contains readable text."
+            })
+    except (ValueError, TypeError):
+        # If result isn't valid JSON at all, it's likely an API error string — pass through
+        pass
+
+    return result
 
 def extract_linkedin_resume_data(user_message: str):
     """
     Parses LinkedIn profile data from a PDF file using OpenAI's API.
 
     Args:
-        file: The uploaded LinkedIn PDF file.
+        user_message: The raw text extracted from a LinkedIn PDF.
 
     Returns:
         str: Parsed data as a JSON string.
+
     """
+
     meta_prompt = """
-    Act as a LinkedIn profile parser. I will provide you with raw text extracted from a LinkedIn profile.  
+    Act as a LinkedIn profile parser. I will provide you with raw text extracted from a LinkedIn profile PDF.
+
+    IMPORTANT — Multi-column / garbled text handling:
+    The text may come from a multi-column PDF and could be jumbled, interleaved, or out of order.
+    Reconstruct the logical reading order before extracting data. Look for contextual clues
+    (dates next to company names, job titles near descriptions) to reassemble sections correctly.
+
     Your task is to extract and structure the data into the following JSON format:
 
     {
-    "language": "detected language of the resume (e.g. English, Turkish, German)",
-    "user_info": {
-        "full_name": "extracted_full_name",
-        "email": "extracted_email",
-        "phone": "extracted_phone",
-        "address": "extracted_address",
-        "linkedin": "extracted_linkedin_url",
-        "github": "extracted_github_url",
-        "skills": ["extracted_skill1", "extracted_skill2"]
+    “language”: “detected language of the resume (e.g. English, Turkish, German)”,
+    “user_info”: {
+        “full_name”: “extracted_full_name”,
+        “email”: “extracted_email”,
+        “phone”: “extracted_phone”,
+        “address”: “extracted_address”,
+        “linkedin”: “extracted_linkedin_url”,
+        “github”: “extracted_github_url”,
+        “skills”: [“extracted_skill1”, “extracted_skill2”]
     },
-    "experience": [
+    “experience”: [
         {
-        "title": "job_title",
-        "company": "company_name",
-        "start_date": "YYYY-MM",
-        "end_date": "YYYY-MM or null if current",
-        "location": "city, country (if available)",
-        "description": "full_description",
-        "current_role": true/false
+        “title”: “job_title”,
+        “company”: “company_name”,
+        “start_date”: “YYYY-MM”,
+        “end_date”: “YYYY-MM or null if current”,
+        “location”: “city, country (if available)”,
+        “description”: [“bullet_point_1”, “bullet_point_2”],
+        “current_role”: true/false
         }
     ],
-    "education": [
+    “education”: [
         {
-        "school": "university_name",
-        "degree": "Bachelor / Master / PhD",
-        "field_of_study": "field_name",
-        "start_date": "YYYY-MM",
-        "end_date": "YYYY-MM"
+        “school”: “university_name”,
+        “degree”: “Bachelor / Master / PhD”,
+        “field_of_study”: “field_name”,
+        “start_date”: “YYYY-MM”,
+        “end_date”: “YYYY-MM”
         }
     ]
     }
 
     Guidelines:
-    - Dates must be in YYYY-MM format if months are available; otherwise just YYYY.
+    - “description” MUST ALWAYS be a JSON array of strings, one bullet point per element.
+      NEVER return description as a plain string. If the original text has a single paragraph,
+      split it into an array by newlines or logical sentence boundaries.
     - Extract skills and certifications from any relevant sections or lists.
     - For `current_role`, mark as `true` if the person is still working in that position.
     - If any field is missing in the input, set it to null or leave it empty.
     - Remove page numbers or artifacts (e.g., “Page 1 of 3”) from descriptions.
-    - In descriptions, use newlines as element, no bullet.
-    - If there is only YYYY, use 01 as MM and result should be YYYY-01.
+
+    Date normalization rules (apply to ALL date fields):
+    - Always output dates in YYYY-MM format.
+    - If only a year is given (e.g. “2022”), output “2022-01”.
+    - If a month name is given (e.g. “March 2022”), convert to “2022-03”.
+    - If “Present” or “Current”, set end_date to null and current_role to true.
+
     - If there linkedin url or github url, urls should be start with https://
 
-    For "language" field:
-    - Detect the primary language of the resume content (e.g. "English", "Turkish", "German").
+    For “language” field:
+    - Detect the primary language of the resume content (e.g. “English”, “Turkish”, “German”).
     - Use the full English name of the language.
 
     Ensure the JSON output is well-formed, accurate, and complete.
@@ -334,5 +361,5 @@ def extract_linkedin_resume_data(user_message: str):
 
     return send_openai_message(
         user_message=user_message, meta_prompt=meta_prompt, model="gpt-4o-mini",
-        is_json=True, temperature=0, max_tokens=4000,
+        is_json=True, temperature=0, max_tokens=6000,
     )
