@@ -61,6 +61,11 @@ class DashboardView(LoginRequiredMixin, ListView):
     def get_queryset(self):
         return Resume.objects.filter(user=self.request.user).order_by("-updated_at")
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['settings'] = settings
+        return context
+
 
 @login_required
 @require_http_methods(["POST"])
@@ -68,20 +73,27 @@ def duplicate_resume(request, pk):
     """
     Duplicates an existing resume for the current user.
     Creates a new resume with the same content but a new title.
+    QUOTA: Checks resume creation limit for free users.
     """
+    # QUOTA: Check resume creation limit
+    profile = request.user.profile
+    if not profile.can_create_resume():
+        messages.error(request, f"Resume limit reached. Free plan allows {settings.FREE_TIER_LIMITS['resume_count']} resumes. Upgrade to Pro for unlimited resumes.")
+        return redirect("resume:dashboard")
+
     try:
         original_resume = Resume.objects.get(pk=pk, user=request.user)
-        
+
         # Create a copy with modified title
         new_resume = Resume.objects.create(
             user=request.user,
             title=f"{original_resume.title} (Copy)",
             content=original_resume.content.copy()  # Deep copy the JSON content
         )
-        
+
         messages.success(request, f"Resume duplicated successfully!")
         return redirect("resume:resume_form_edit", pk=new_resume.pk)
-        
+
     except Resume.DoesNotExist:
         messages.error(request, "Resume not found.")
         return redirect("resume:dashboard")
@@ -457,6 +469,13 @@ class ResumeFormView(TemplateView):
             HttpResponse: The generated PDF file as a response,
             or renders the form again in case of validation failure.
         """
+        # QUOTA: Check resume creation limit for new resumes only
+        if not self.kwargs.get("pk"):
+            profile = self.request.user.profile
+            if not profile.can_create_resume():
+                messages.error(self.request, f"Resume limit reached. Free plan allows {settings.FREE_TIER_LIMITS['resume_count']} resumes. Upgrade to Pro for unlimited resumes.")
+                return redirect("resume:dashboard")
+
         user_form = UserInfoForm(self.request.POST)
         education_formset = EducationFormSet(self.request.POST, prefix="education")
         experience_formset = ExperienceFormSet(self.request.POST, prefix="experience")
@@ -626,8 +645,16 @@ def _get_resume_language(request):
 @login_required
 @require_http_methods(["POST"])
 def enhance_experience(request):
+    # QUOTA: Check enhance limit
+    profile = request.user.profile
+    if not profile.can_enhance():
+        return HttpResponse(
+            '<p class="text-red-500">Monthly AI enhancement limit reached. Free plan allows 10 enhancements per month.</p>',
+            status=403
+        )
+
     language = _get_resume_language(request)
-    return enhance_field(
+    response = enhance_field(
         request,
         prefix="experience",
         field="description",
@@ -635,18 +662,40 @@ def enhance_experience(request):
         language=language,
     )
 
+    # QUOTA: Increment enhance counter on success
+    if response.status_code == 200:
+        profile.enhance_count += 1
+        profile.save()
+
+    return response
+
 
 @login_required
 @require_http_methods(["POST"])
 def enhance_project(request):
+    # QUOTA: Check enhance limit
+    profile = request.user.profile
+    if not profile.can_enhance():
+        return HttpResponse(
+            '<p class="text-red-500">Monthly AI enhancement limit reached. Free plan allows 10 enhancements per month.</p>',
+            status=403
+        )
+
     language = _get_resume_language(request)
-    return enhance_field(
+    response = enhance_field(
         request,
         prefix="project",
         field="description",
         enhance_function=enhance_project_description,
         language=language,
     )
+
+    # QUOTA: Increment enhance counter on success
+    if response.status_code == 200:
+        profile.enhance_count += 1
+        profile.save()
+
+    return response
 
 
 @require_http_methods(["POST"])
@@ -742,8 +791,14 @@ def preview_resume_form(request):
 
 
 @login_required
+@login_required
 def upload_cv(request):
     if request.method == "POST":
+        # QUOTA: Check import limit
+        profile = request.user.profile
+        if not profile.can_import():
+            return JsonResponse({"error": "Monthly PDF import limit reached. Free plan allows 2 imports per month."}, status=403)
+
         cv_file = request.FILES.get("cv_file")
         if not cv_file:
             return JsonResponse({"error": "No file uploaded."}, status=400)
@@ -804,6 +859,11 @@ def upload_cv(request):
                 content=extracted_json
             )
 
+            # QUOTA: Increment import counter
+            profile = request.user.profile
+            profile.import_count += 1
+            profile.save()
+
             # Redirect to form with resume ID
             return redirect("resume:resume_form_edit", pk=resume.pk)
 
@@ -817,6 +877,11 @@ def upload_cv(request):
 @login_required
 def upload_linkedin_cv(request):
     if request.method == "POST" and request.FILES.get("linkedin_file"):
+        # QUOTA: Check import limit
+        profile = request.user.profile
+        if not profile.can_import():
+            return JsonResponse({"error": "Monthly PDF import limit reached. Free plan allows 2 imports per month."}, status=403)
+
         linkedin_file = request.FILES["linkedin_file"]
         print("[INFO]: LinkedIn file uploaded:", linkedin_file.name)
 
@@ -865,7 +930,12 @@ def upload_linkedin_cv(request):
                 title=f"LinkedIn Profile {datetime.now().strftime('%Y-%m-%d %H:%M')}",
                 content=extracted_json
             )
-            
+
+            # QUOTA: Increment import counter
+            profile = request.user.profile
+            profile.import_count += 1
+            profile.save()
+
             return redirect("resume:resume_form_edit", pk=resume.pk)
             
         except json.JSONDecodeError as e:
@@ -884,7 +954,13 @@ def download_resume_pdf(request, pk):
     except Resume.DoesNotExist:
         messages.error(request, "Resume not found.")
         return redirect("resume:dashboard")
-        
+
+    # QUOTA: Check download limit
+    profile = request.user.profile
+    if not profile.can_download():
+        messages.error(request, "Monthly PDF download limit reached. Free plan allows 5 downloads per month.")
+        return redirect("resume:dashboard")
+
     from django.core.validators import URLValidator
     from django.core.exceptions import ValidationError
     from .forms import _normalize_url
@@ -952,6 +1028,11 @@ def download_resume_pdf(request, pk):
         filename = f"{resume.owner_name or 'resume'}_{resume.pk}.pdf".replace(" ", "_")
         response = HttpResponse(pdf_bytes, content_type="application/pdf")
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
+
+        # QUOTA: Increment download counter on success
+        profile.download_count += 1
+        profile.save()
+
         return response
     except PdfGenerationError as e:
         messages.error(request, f"PDF generation failed: {str(e)}")
