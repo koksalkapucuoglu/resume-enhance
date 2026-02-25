@@ -56,6 +56,16 @@ class ResumeViewSet(viewsets.ModelViewSet):
             return ResumeCreateSerializer
         return ResumeDetailSerializer
     
+    def create(self, request, *args, **kwargs):
+        """Override create to check quota before creating resume."""
+        profile = request.user.profile
+        if not profile.can_create_resume():
+            return Response(
+                {"error": "Resume limit reached. Free plan allows 3 resumes. Upgrade to Pro for unlimited resumes."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return super().create(request, *args, **kwargs)
+
     def perform_create(self, serializer):
         """Set the user to current user when creating."""
         serializer.save(user=self.request.user)
@@ -65,7 +75,16 @@ class ResumeViewSet(viewsets.ModelViewSet):
         """
         Duplicate an existing resume.
         POST /api/v1/resumes/{id}/duplicate/
+        QUOTA: Checks resume creation limit for free users.
         """
+        # QUOTA: Check resume creation limit
+        profile = request.user.profile
+        if not profile.can_create_resume():
+            return Response(
+                {"error": "Resume limit reached. Free plan allows 3 resumes. Upgrade to Pro for unlimited resumes."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         resume = self.get_object()
         new_resume = Resume.objects.create(
             user=request.user,

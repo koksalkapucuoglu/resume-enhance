@@ -138,6 +138,108 @@
                 </div>
             </div>
 
+            <!-- Subscription Tier Card -->
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-6">
+                <div class="px-6 py-4 border-b border-slate-100 bg-slate-50">
+                    <h2 class="font-semibold text-slate-900 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary">card_membership</span>
+                        Subscription Plan
+                    </h2>
+                </div>
+                <div class="p-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-2xl font-bold text-slate-900">
+                                {% if request.user.profile.is_pro %}
+                                    <span class="text-green-600">Pro</span>
+                                {% else %}
+                                    <span class="text-slate-600">Free</span>
+                                {% endif %}
+                            </p>
+                            <p class="text-sm text-slate-500 mt-1">
+                                {% if request.user.profile.is_pro %}
+                                    Unlimited resumes, imports, enhancements & downloads
+                                {% else %}
+                                    Limited features with monthly quotas
+                                {% endif %}
+                            </p>
+                        </div>
+                        <div class="px-5 py-2.5 bg-slate-100 text-slate-500 text-sm font-bold rounded-lg">
+                            {% if request.user.profile.is_pro %}Active{% else %}Free Plan{% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Usage & Quotas Card (Free Users Only) -->
+            {% if not request.user.profile.is_pro %}
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-6">
+                <div class="px-6 py-4 border-b border-slate-100 bg-slate-50">
+                    <h2 class="font-semibold text-slate-900 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary">insights</span>
+                        Monthly Usage & Limits
+                    </h2>
+                </div>
+                <div class="p-6 space-y-6">
+                    <!-- PDF Imports -->
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <label class="text-sm font-medium text-slate-700">PDF Imports</label>
+                            <span class="text-sm font-semibold text-slate-900">{{ request.user.profile.import_count }}/{{ settings.FREE_TIER_LIMITS.import_count }}</span>
+                        </div>
+                        <div class="w-full bg-slate-200 rounded-full h-2">
+                            <div class="bg-primary rounded-full h-2 transition-all" style="width: {{ quota_percentages.import_percent }}%"></div>
+                        </div>
+                        <p class="text-xs text-slate-500 mt-1">Upload PDF resumes to auto-extract data</p>
+                    </div>
+
+                    <!-- AI Enhancements -->
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <label class="text-sm font-medium text-slate-700">AI Enhancements</label>
+                            <span class="text-sm font-semibold text-slate-900">{{ request.user.profile.enhance_count }}/{{ settings.FREE_TIER_LIMITS.enhance_count }}</span>
+                        </div>
+                        <div class="w-full bg-slate-200 rounded-full h-2">
+                            <div class="bg-primary rounded-full h-2 transition-all" style="width: {{ quota_percentages.enhance_percent }}%"></div>
+                        </div>
+                        <p class="text-xs text-slate-500 mt-1">AI-powered text improvements for experience & projects</p>
+                    </div>
+
+                    <!-- PDF Downloads -->
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <label class="text-sm font-medium text-slate-700">PDF Downloads</label>
+                            <span class="text-sm font-semibold text-slate-900">{{ request.user.profile.download_count }}/{{ settings.FREE_TIER_LIMITS.download_count }}</span>
+                        </div>
+                        <div class="w-full bg-slate-200 rounded-full h-2">
+                            <div class="bg-primary rounded-full h-2 transition-all" style="width: {{ quota_percentages.download_percent }}%"></div>
+                        </div>
+                        <p class="text-xs text-slate-500 mt-1">Download final PDFs to your device</p>
+                    </div>
+
+                    <!-- Total Resumes -->
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <label class="text-sm font-medium text-slate-700">Total Resumes</label>
+                            <span class="text-sm font-semibold text-slate-900">{{ request.user.resumes.count }}/{{ settings.FREE_TIER_LIMITS.resume_count }}</span>
+                        </div>
+                        <div class="w-full bg-slate-200 rounded-full h-2">
+                            <div class="bg-primary rounded-full h-2 transition-all" style="width: {{ quota_percentages.resume_percent }}%"></div>
+                        </div>
+                        <p class="text-xs text-slate-500 mt-1">Maximum number of resumes you can create</p>
+                    </div>
+
+                    <!-- Reset Info -->
+                    <div class="pt-4 border-t border-slate-100">
+                        <p class="text-xs text-slate-500">
+                            <span class="material-symbols-outlined text-sm align-middle">info</span>
+                            Monthly quotas reset on <strong>{{ request.user.profile.quota_reset_date|date:"F j" }}</strong> each month
+                        </p>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
             <!-- Change Password Card -->
             <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                 <div class="px-6 py-4 border-b border-slate-100 bg-slate-50">

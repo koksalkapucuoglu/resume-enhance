@@ -271,3 +271,11 @@ PDF_SETTINGS = {
     'ENABLE_LOGGING': True,
     'FONT_CONFIG': True,
 }
+
+# Subscription Tier Limits
+FREE_TIER_LIMITS = {
+    'import_count': 2,        # Monthly PDF imports
+    'enhance_count': 10,      # Monthly AI enhancements (experience + project combined)
+    'download_count': 5,      # Monthly PDF downloads
+    'resume_count': 3,        # Total resume count (not monthly)
+}
