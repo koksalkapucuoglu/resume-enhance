@@ -9,6 +9,6 @@ Jinja2==3.1.4
 PyPDF2==3.0.1
 WeasyPrint>=62.0
 pydyf>=0.11.0
-gunicorn
+gunicorn==25.1.0
 dj-database-url
-whitenoise
+whitenoise==6.11.0

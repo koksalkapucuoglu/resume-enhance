@@ -58,10 +58,11 @@ class ResumeViewSet(viewsets.ModelViewSet):
     
     def create(self, request, *args, **kwargs):
         """Override create to check quota before creating resume."""
+        from django.conf import settings
         profile = request.user.profile
         if not profile.can_create_resume():
             return Response(
-                {"error": "Resume limit reached. Free plan allows 3 resumes. Upgrade to Pro for unlimited resumes."},
+                {"error": f"Resume limit reached. Free plan allows {settings.FREE_TIER_LIMITS['resume_count']} resumes. Upgrade to Pro for unlimited resumes."},
                 status=status.HTTP_403_FORBIDDEN
             )
         return super().create(request, *args, **kwargs)

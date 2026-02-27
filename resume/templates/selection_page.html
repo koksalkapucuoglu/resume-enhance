@@ -252,18 +252,80 @@
     </div>
 
     <script>
-        // File input change handlers - auto submit
+        // Toast notification system
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            const bgColor = type === 'error' ? 'bg-red-500' : type === 'success' ? 'bg-green-500' : 'bg-blue-500';
+            toast.className = `fixed bottom-4 right-4 ${bgColor} text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-fade-in`;
+            toast.innerHTML = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 4000);
+        }
+
+        // File upload via AJAX with proper error handling
+        async function uploadFile(fileInputId, formId, uploadUrl) {
+            const fileInput = document.getElementById(fileInputId);
+            if (fileInput.files.length === 0) return;
+
+            const file = fileInput.files[0];
+            const formData = new FormData();
+            formData.append('csrf_token', document.querySelector('[name="csrfmiddlewaretoken"]').value);
+            formData.append(fileInput.name, file);
+
+            showGlobalLoading();
+
+            try {
+                const response = await fetch(uploadUrl, {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-CSRFToken': document.querySelector('[name="csrfmiddlewaretoken"]').value,
+                    }
+                });
+
+                hideGlobalLoading();
+
+                if (response.ok) {
+                    // Success - redirect to form
+                    const data = await response.json();
+                    window.location.href = `/form/${data.resume_id}/`;
+                } else if (response.status === 403) {
+                    // Quota limit reached
+                    const data = await response.json();
+                    showToast(data.error || 'Resume limit reached', 'error');
+                    fileInput.value = ''; // Clear file input
+                } else if (response.status === 400 || response.status === 422) {
+                    // Validation error
+                    const data = await response.json();
+                    showToast(data.error || 'Invalid file', 'error');
+                    fileInput.value = '';
+                } else if (response.status === 503) {
+                    // API error
+                    const data = await response.json();
+                    showToast(data.error || 'AI service error', 'error');
+                    fileInput.value = '';
+                } else {
+                    // Other errors
+                    showToast('Upload failed. Please try again.', 'error');
+                    fileInput.value = '';
+                }
+            } catch (error) {
+                hideGlobalLoading();
+                showToast('Upload failed: ' + error.message, 'error');
+                fileInput.value = '';
+            }
+        }
+
+        // File input change handlers - auto upload via AJAX
         document.getElementById('cv-file-input').addEventListener('change', function() {
             if (this.files.length > 0) {
-                showGlobalLoading();
-                document.getElementById('upload-cv-form').submit();
+                uploadFile('cv-file-input', 'upload-cv-form', '{% url "resume:upload_cv" %}');
             }
         });
 
         document.getElementById('linkedin-file-input').addEventListener('change', function() {
             if (this.files.length > 0) {
-                showGlobalLoading();
-                document.getElementById('upload-linkedin-form').submit();
+                uploadFile('linkedin-file-input', 'upload-linkedin-form', '{% url "resume:upload_linkedin_cv" %}');
             }
         });
 

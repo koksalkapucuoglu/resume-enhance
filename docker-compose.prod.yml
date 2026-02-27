@@ -17,9 +17,18 @@ services:
       - web
 
   web:
-    build: .
+    image: resustack:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
     restart: always
-    command: gunicorn core.wsgi:application --bind 0.0.0.0:8000 --timeout 120 --workers 2 --worker-class gthread --threads 4
+    healthcheck:
+      test: ["CMD", "curl", "-f", "https://resustackapp.com/accounts/login/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    command: gunicorn core.wsgi:application --bind 0.0.0.0:8000 --timeout 120 --workers 2 --worker-class gthread --threads 4 --max-requests 10000
     expose:
       - 8000
     volumes:

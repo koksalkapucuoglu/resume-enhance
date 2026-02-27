@@ -27,7 +27,8 @@ from resume.openai_engine import (
     extract_linkedin_resume_data,
 )
 from resume.services.pdf_service import ResumePdfService, PdfGenerationError
-from latex_renderer import latex_handler
+# Phase 4 (Future): Uncomment when LaTeX renderer is implemented
+# from latex_renderer import latex_handler
 from resume.models import Resume
 
 
@@ -400,36 +401,37 @@ class ResumeFormView(TemplateView):
             "generation_date": datetime.now().strftime("%Y-%m-%d"),
         }
 
-    def _generate_tex_file(self, context):
-        """
-        Generate TEX file using the existing LaTeX handler.
-        
-        Args:
-            context: Resume data context
-            
-        Returns:
-            HttpResponse: TEX file download response
-        """
-        base_tex_template = self.request.POST.get(
-            "base_tex_template", settings.LATEX_SETTINGS["DEFAULT_TEMPLATE"]
-        )
-        output_tex = (
-            settings.LATEX_SETTINGS["TEMP_DIR"]
-            / f"resume_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{secrets.token_hex(4)}.tex"
-        )
-        
-        tex_file = latex_handler.render_tex_template(
-            template_name=base_tex_template,
-            context=context,
-            output_path=output_tex,
-        )
-        
-        with open(tex_file, 'rb') as f:
-            tex_content = f.read()
-        
-        response = HttpResponse(tex_content, content_type='application/x-tex')
-        response['Content-Disposition'] = 'attachment; filename="resume.tex"'
-        return response
+    # Phase 4 (Future): Uncomment when LaTeX renderer is implemented
+    # def _generate_tex_file(self, context):
+    #     """
+    #     Generate TEX file using the existing LaTeX handler.
+    #
+    #     Args:
+    #         context: Resume data context
+    #
+    #     Returns:
+    #         HttpResponse: TEX file download response
+    #     """
+    #     base_tex_template = self.request.POST.get(
+    #         "base_tex_template", settings.LATEX_SETTINGS["DEFAULT_TEMPLATE"]
+    #     )
+    #     output_tex = (
+    #         settings.LATEX_SETTINGS["TEMP_DIR"]
+    #         / f"resume_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{secrets.token_hex(4)}.tex"
+    #     )
+    #
+    #     tex_file = latex_handler.render_tex_template(
+    #         template_name=base_tex_template,
+    #         context=context,
+    #         output_path=output_tex,
+    #     )
+    #
+    #     with open(tex_file, 'rb') as f:
+    #         tex_content = f.read()
+    #
+    #     response = HttpResponse(tex_content, content_type='application/x-tex')
+    #     response['Content-Disposition'] = 'attachment; filename="resume.tex"'
+    #     return response
 
     def _generate_pdf_file(self, context):
         """
@@ -469,11 +471,16 @@ class ResumeFormView(TemplateView):
             HttpResponse: The generated PDF file as a response,
             or renders the form again in case of validation failure.
         """
-        # QUOTA: Check resume creation limit for new resumes only
-        if not self.kwargs.get("pk"):
+        # QUOTA: Check resume creation limit for creating blank resumes (no pk)
+        pk = self.kwargs.get("pk")
+        if not pk:
             profile = self.request.user.profile
             if not profile.can_create_resume():
-                messages.error(self.request, f"Resume limit reached. Free plan allows {settings.FREE_TIER_LIMITS['resume_count']} resumes. Upgrade to Pro for unlimited resumes.")
+                error_msg = f"Resume limit reached. Free plan allows {settings.FREE_TIER_LIMITS['resume_count']} resumes. Upgrade to Pro for unlimited resumes."
+                # AJAX request - return JSON, else redirect
+                if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return JsonResponse({"error": error_msg}, status=403)
+                messages.error(self.request, error_msg)
                 return redirect("resume:dashboard")
 
         user_form = UserInfoForm(self.request.POST)
@@ -507,50 +514,88 @@ class ResumeFormView(TemplateView):
             }
             return self.render_to_response(context)
 
-        if self.kwargs.get("pk"):
+        # Prepare resume content from forms
+        updated_content = {
+            "user_info": clean_data_for_json({
+                "full_name": user_form.cleaned_data.get("full_name"),
+                "email": user_form.cleaned_data.get("email"),
+                "phone": user_form.cleaned_data.get("phone"),
+                "github": user_form.cleaned_data.get("github"),
+                "linkedin": user_form.cleaned_data.get("linkedin"),
+                "skills": [s.strip() for s in user_form.cleaned_data.get("skills", "").split(",")],
+            }),
+            "education": clean_data_for_json([f.cleaned_data for f in education_formset if f.cleaned_data]),
+            "experience": clean_data_for_json(self._split_experience_description(experience_formset)),
+            "projects_and_publications": clean_data_for_json([f.cleaned_data for f in project_formset if f.cleaned_data]),
+        }
+
+        # Determine export format and action BEFORE saving resume
+        export_format = self.request.POST.get("export_format", "pdf").lower()
+        form_action = self.request.POST.get("form_action")
+
+        # QUOTA: Check download limit for PDF export BEFORE saving resume
+        if export_format == "pdf" and form_action != "save_only":
+            profile = self.request.user.profile
+            if not profile.can_download():
+                messages.error(self.request, "Monthly PDF download limit reached. Free plan allows 5 downloads per month.")
+                # Re-render form instead of PDF
+                context_data = {
+                    "user_form": user_form,
+                    "education_formset": education_formset,
+                    "experience_formset": experience_formset,
+                    "project_formset": project_formset,
+                }
+                if pk:
+                    context_data["resume_id"] = pk
+                return self.render_to_response(context_data)
+
+        # NOW save/update resume after all quota checks pass
+        if pk:
             try:
                 # SECURITY: Filter by user to prevent IDOR on save
-                resume = Resume.objects.get(pk=self.kwargs.get("pk"), user=self.request.user)
-                # Update resume content with clean data from forms
-                # We need to reconstruct the content JSON structure
-                updated_content = {
-                    "user_info": clean_data_for_json({
-                        "full_name": user_form.cleaned_data.get("full_name"),
-                        "email": user_form.cleaned_data.get("email"),
-                        "phone": user_form.cleaned_data.get("phone"),
-                        "github": user_form.cleaned_data.get("github"),
-                        "linkedin": user_form.cleaned_data.get("linkedin"),
-                        "skills": [s.strip() for s in user_form.cleaned_data.get("skills", "").split(",")],
-                    }),
-                    "education": clean_data_for_json([f.cleaned_data for f in education_formset if f.cleaned_data]),
-                    "experience": clean_data_for_json(self._split_experience_description(experience_formset)),
-                    "projects_and_publications": clean_data_for_json([f.cleaned_data for f in project_formset if f.cleaned_data]),
-                }
+                resume = Resume.objects.get(pk=pk, user=self.request.user)
                 resume.content = updated_content
                 resume.save()
             except Resume.DoesNotExist:
                 # Should not happen typically
                 pass
+        else:
+            # Create a new resume if editing from scratch (no pk)
+            resume = Resume.objects.create(
+                user=self.request.user,
+                title=f"New Resume {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                content=updated_content
+            )
+            # Store pk in kwargs for subsequent actions
+            self.kwargs['pk'] = resume.pk
 
         # Check if this is a save-only request (AJAX)
-        if self.request.POST.get("form_action") == "save_only":
-            return JsonResponse({"status": "saved", "message": "Resume saved successfully"})
+        if form_action == "save_only":
+            return JsonResponse({
+                "status": "saved",
+                "message": "Resume saved successfully",
+                "resume_id": self.kwargs.get('pk')
+            })
 
         # Prepare resume context
         context = self._prepare_resume_context(
             user_form, education_formset, experience_formset, project_formset
         )
-        
+
         # Check if this is a preview request for our new template
         if self.request.POST.get("action") == "preview_faangpath":
             return render(self.request, "faangpath_simple_template_pdf.html", context)
-        
+
         try:
-            # Determine export format
-            export_format = self.request.POST.get("export_format", "pdf").lower()
-            if export_format == "tex":
-                return self._generate_tex_file(context)
-            else:
+            # Phase 4 (Future): LaTeX export
+            # if export_format == "tex":
+            #     return self._generate_tex_file(context)
+            # else:
+            if True:  # Always use PDF for now
+                # Increment download counter for PDF exports (after quota check passed)
+                profile = self.request.user.profile
+                profile.download_count += 1
+                profile.save()
                 return self._generate_pdf_file(context)
             
         except Exception as e:
@@ -791,11 +836,14 @@ def preview_resume_form(request):
 
 
 @login_required
-@login_required
 def upload_cv(request):
     if request.method == "POST":
-        # QUOTA: Check import limit
+        # QUOTA: Check resume creation limit (PDF upload with AI parsing counts toward resume limit)
         profile = request.user.profile
+        if not profile.can_create_resume():
+            return JsonResponse({"error": f"Resume limit reached. Free plan allows {settings.FREE_TIER_LIMITS['resume_count']} resumes. Upgrade to Pro for unlimited resumes."}, status=403)
+
+        # QUOTA: Check import limit
         if not profile.can_import():
             return JsonResponse({"error": "Monthly PDF import limit reached. Free plan allows 2 imports per month."}, status=403)
 
@@ -859,13 +907,13 @@ def upload_cv(request):
                 content=extracted_json
             )
 
-            # QUOTA: Increment import counter
+            # QUOTA: Increment counters
             profile = request.user.profile
             profile.import_count += 1
             profile.save()
 
-            # Redirect to form with resume ID
-            return redirect("resume:resume_form_edit", pk=resume.pk)
+            # Return resume ID for frontend redirect (AJAX-friendly)
+            return JsonResponse({"status": "success", "resume_id": resume.pk})
 
         except json.JSONDecodeError as e:
             print("[ERROR]: Failed to decode JSON:", str(e))
@@ -877,8 +925,12 @@ def upload_cv(request):
 @login_required
 def upload_linkedin_cv(request):
     if request.method == "POST" and request.FILES.get("linkedin_file"):
-        # QUOTA: Check import limit
+        # QUOTA: Check resume creation limit (PDF upload with AI parsing counts toward resume limit)
         profile = request.user.profile
+        if not profile.can_create_resume():
+            return JsonResponse({"error": f"Resume limit reached. Free plan allows {settings.FREE_TIER_LIMITS['resume_count']} resumes. Upgrade to Pro for unlimited resumes."}, status=403)
+
+        # QUOTA: Check import limit
         if not profile.can_import():
             return JsonResponse({"error": "Monthly PDF import limit reached. Free plan allows 2 imports per month."}, status=403)
 
@@ -936,7 +988,8 @@ def upload_linkedin_cv(request):
             profile.import_count += 1
             profile.save()
 
-            return redirect("resume:resume_form_edit", pk=resume.pk)
+            # Return resume ID for frontend redirect (AJAX-friendly)
+            return JsonResponse({"status": "success", "resume_id": resume.pk})
             
         except json.JSONDecodeError as e:
             print("[ERROR]: Failed to decode JSON:", str(e))

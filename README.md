@@ -57,26 +57,27 @@ cd resume-enhance
 
 ### 2. Configure Environment Variables
 
-Create your `.env` file by copying the example:
+Create your `.env` file by copying the template:
 
 ```bash
-cp .env_copy .env
+cp .env.example .env
 ```
 
-Open `.env` and fill in the values:
+Open `.env` and update the values:
 
-```env
-# Required (Get one from OpenAI)
-OPENAI_API_KEY=sk-...
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `OPENAI_API_KEY` | API key from OpenAI | `sk-proj-...` |
+| `DEBUG` | Django debug mode | `True` (dev) or `False` (prod) |
+| `SECRET_KEY` | Django secret key | Auto-generated for dev |
+| `ALLOWED_HOSTS` | Allowed domain list | `localhost,127.0.0.1` |
+| `POSTGRES_DB` | Database name | `postgres` |
+| `POSTGRES_USER` | Database user | `postgres` |
+| `POSTGRES_PASSWORD` | Database password | `postgres` (change in prod) |
+| `EMAIL_HOST_USER` | SMTP email | `your_email@gmail.com` |
+| `EMAIL_HOST_PASSWORD` | SMTP password | App password (not account password) |
 
-# Required for Django Security
-SECRET_KEY=your-secret-key-here
-DEBUG=True
-
-# Database URL (Default for Docker is fine)
-# If running manually, set this to your local Postgres DB
-DATABASE_URL=postgres://user:password@localhost:5432/db_name
-```
+For **production**, use `.env.prod.example` as your template and set `DEBUG=False`.
 
 ### 3. Option A: Run with Docker (Recommended)
 
