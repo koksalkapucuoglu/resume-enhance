@@ -243,21 +243,21 @@ CRISPY_TEMPLATE_PACK = "bootstrap4"
 OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
 
 # TODO: Convert to template selector map (faangpath-simple: faangpath_simple_template.tex, cls)
-LATEX_SETTINGS = {
-    'TEMPLATE_DIR': BASE_DIR / 'latex_renderer' / 'templates',
-    'TEMP_DIR': BASE_DIR / 'latex_renderer' / 'templates' / 'temp_latex_files',
-    'DEFAULT_TEMPLATE': 'faangpath_simple_template.tex',
-    'PDF_TIMEOUT': 30,
-}
+# LATEX_SETTINGS = {
+#     'TEMPLATE_DIR': BASE_DIR / 'latex_renderer' / 'templates',
+#     'TEMP_DIR': BASE_DIR / 'latex_renderer' / 'templates' / 'temp_latex_files',
+#     'DEFAULT_TEMPLATE': 'faangpath_simple_template.tex',
+#     'PDF_TIMEOUT': 30,
+# }
 
-TEMPLATE_SELECTOR_PREVIEW_MAP = {
-    'faangpath-simple': 'faangpath_simple_template_preview.html'
-}
+# TEMPLATE_SELECTOR_PREVIEW_MAP = {
+#     'faangpath-simple': 'faangpath_simple_template_preview.html'
+# }
 
-# Map LaTeX templates to HTML preview templates
-TEX_PREVIEW_HTML_MAP = {
-    'faangpath_simple_template.tex': 'faangpath_simple_template_preview.html'
-}
+# Map LaTeX templates to HTML preview templates (Phase 4)
+# TEX_PREVIEW_HTML_MAP = {
+#     'faangpath_simple_template.tex': 'faangpath_simple_template_preview.html'
+# }
 
 
 TEMPLATE_SELECTOR_HTML_MAP = {

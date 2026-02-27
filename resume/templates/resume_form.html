@@ -957,17 +957,39 @@
             })
             .then(response => {
                 if (response.ok) {
-                    markAsSaved();
-                    saveBtn.innerHTML = '<span class="material-symbols-outlined text-lg">check</span> Saved!';
-                    setTimeout(() => {
-                        saveBtn.innerHTML = originalHtml;
-                    }, 2000);
+                    return response.json().then(data => {
+                        // If a new resume was created, update the form action
+                        if (data.resume_id && !form.getAttribute('action')) {
+                            const newAction = `/form/${data.resume_id}/`;
+                            form.setAttribute('action', newAction);
+                        }
+                        markAsSaved();
+                        saveBtn.innerHTML = '<span class="material-symbols-outlined text-lg">check</span> Saved!';
+                        setTimeout(() => {
+                            saveBtn.innerHTML = originalHtml;
+                        }, 2000);
+                    });
                 } else {
-                    throw new Error('Save failed');
+                    // Parse error response and show user-friendly message
+                    return response.json().then(data => {
+                        const errorMsg = data.error || `Error: ${response.status}`;
+                        showToast(errorMsg, 'error');
+                        saveBtn.innerHTML = '<span class="material-symbols-outlined text-lg">error</span> Error';
+                        setTimeout(() => {
+                            saveBtn.innerHTML = originalHtml;
+                        }, 2000);
+                    }).catch(() => {
+                        showToast('Save failed. Please try again.', 'error');
+                        saveBtn.innerHTML = '<span class="material-symbols-outlined text-lg">error</span> Error';
+                        setTimeout(() => {
+                            saveBtn.innerHTML = originalHtml;
+                        }, 2000);
+                    });
                 }
             })
             .catch(error => {
                 console.error('Save error:', error);
+                showToast('Save failed: ' + error.message, 'error');
                 saveBtn.innerHTML = '<span class="material-symbols-outlined text-lg">error</span> Error';
                 setTimeout(() => {
                     saveBtn.innerHTML = originalHtml;

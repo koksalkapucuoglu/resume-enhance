@@ -23,3 +23,9 @@ build_force:
 
 run_command:
 	$(DOCKER_COMPOSE) run web python manage.py $(command)
+
+recreate:
+	$(DOCKER_COMPOSE) up -d --force-recreate web
+
+logs:
+	$(DOCKER_COMPOSE) logs -f enhance_resume_app
