@@ -38,6 +38,13 @@
     </script>
     
     <style>
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+        }
         body { font-family: 'Inter', sans-serif; }
         
         .material-symbols-outlined {
@@ -155,7 +162,7 @@
 
 <body class="bg-background-light min-h-screen flex flex-col font-display">
     <!-- Header (Same as Dashboard) -->
-    <header class="flex items-center justify-between whitespace-nowrap border-b border-slate-200 bg-white px-4 md:px-10 lg:px-20 py-4 z-50 sticky top-0 shadow-sm">
+    <header class="flex items-center justify-between whitespace-nowrap border-b border-slate-200 bg-white px-3 md:px-4 py-3 z-50 sticky top-0 shadow-sm">
         <a href="{% url 'resume:dashboard' %}" class="flex items-center gap-3">
             <img src="{% static 'img/resustack_logo.png' %}" alt="ResuStack Logo" class="h-8 w-auto object-contain"/>
             <h2 class="text-slate-900 text-2xl font-bold tracking-tight">ResuStack</h2>
@@ -164,7 +171,6 @@
         <div class="flex flex-1 justify-end gap-4 md:gap-8">
             <nav class="hidden md:flex items-center gap-6">
                 <a class="text-slate-500 text-sm font-medium hover:text-primary transition-colors" href="{% url 'resume:dashboard' %}">Dashboard</a>
-                <a class="text-slate-500 text-sm font-medium hover:text-primary transition-colors" href="mailto:koksalkapucuoglu@gmail.com">Help</a>
             </nav>
             
             <!-- Action Buttons -->
@@ -184,21 +190,6 @@
                     <span class="hidden sm:inline">Save</span>
                 </button>
                 
-                <!-- Preview Button -->
-                <button type="button" 
-                        class="hidden sm:flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-slate-300 transition-all"
-                        hx-post="{% url 'resume:preview_resume_form' %}"
-                        hx-include="#resume-form"
-                        hx-trigger="click"
-                        hx-swap="none"
-                        hx-on::after-request="if(event.detail.successful) { 
-                            const iframe = document.getElementById('preview-iframe');
-                            iframe.srcdoc = event.detail.xhr.responseText;
-                            document.getElementById('preview-modal').classList.remove('hidden');
-                        }">
-                    <span class="material-symbols-outlined text-lg">visibility</span>
-                    Preview
-                </button>
                 
                 <!-- Download Button -->
                 <button type="button" 
@@ -227,119 +218,38 @@
     <!-- Hidden Template Selector (MVP - single template) -->
     <input type="hidden" id="template-selector" name="template_selector" value="faangpath-simple">
 
-    <!-- Main Content -->
-    <main class="flex-1 px-4 md:px-10 lg:px-20 py-8">
-        <div class="max-w-4xl mx-auto">
-            
-            <!-- Page Title -->
-            <div class="mb-8">
-                <h1 class="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Resume Editor</h1>
-                <p class="text-slate-500 text-sm mt-1">Fill in your details and let AI enhance your resume</p>
+    <!-- Page Title & Messages (Outside split pane) -->
+    <div class="w-full px-3 md:px-4 pt-4 pb-3">
+        <h1 class="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Resume Editor</h1>
+        <p class="text-slate-500 text-sm mt-1">Fill in your details and let AI enhance your resume</p>
+
+        <!-- Messages -->
+        {% if messages %}
+        <div class="mt-4 space-y-3" id="form-messages-container">
+            {% for message in messages %}
+            <div class="message-toast flex items-center gap-3 p-4 rounded-xl border {% if message.tags == 'success' %}bg-green-50 border-green-200 text-green-800{% elif message.tags == 'error' %}bg-red-50 border-red-200 text-red-800{% elif message.tags == 'warning' %}bg-yellow-50 border-yellow-200 text-yellow-800{% else %}bg-blue-50 border-blue-200 text-blue-800{% endif %}" role="alert">
+                <span class="material-symbols-outlined !text-[20px] shrink-0">
+                    {% if message.tags == 'success' %}check_circle{% elif message.tags == 'error' %}error{% elif message.tags == 'warning' %}warning{% else %}info{% endif %}
+                </span>
+                <span class="flex-1 text-sm font-medium">{{ message }}</span>
+                <button onclick="dismissFormMessage(this.parentElement)" class="p-1 rounded hover:bg-black/10 transition-colors shrink-0" type="button">
+                    <span class="material-symbols-outlined !text-[18px]">close</span>
+                </button>
             </div>
-            
-            <!-- Messages -->
-            {% if messages %}
-            <div class="mb-6 space-y-3" id="form-messages-container">
-                {% for message in messages %}
-                <div class="message-toast flex items-center gap-3 p-4 rounded-xl border {% if message.tags == 'success' %}bg-green-50 border-green-200 text-green-800{% elif message.tags == 'error' %}bg-red-50 border-red-200 text-red-800{% elif message.tags == 'warning' %}bg-yellow-50 border-yellow-200 text-yellow-800{% else %}bg-blue-50 border-blue-200 text-blue-800{% endif %}" role="alert">
-                    <span class="material-symbols-outlined !text-[20px] shrink-0">
-                        {% if message.tags == 'success' %}check_circle{% elif message.tags == 'error' %}error{% elif message.tags == 'warning' %}warning{% else %}info{% endif %}
-                    </span>
-                    <span class="flex-1 text-sm font-medium">{{ message }}</span>
-                    <button onclick="dismissFormMessage(this.parentElement)" class="p-1 rounded hover:bg-black/10 transition-colors shrink-0" type="button">
-                        <span class="material-symbols-outlined !text-[18px]">close</span>
-                    </button>
-                </div>
-                {% endfor %}
-            </div>
-            {% endif %}
-            
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Main Content: Split Pane Layout (Equal width split) -->
+    <main class="flex gap-3 md:gap-4 w-full px-3 md:px-4 pb-6 items-start">
+
+        <!-- LEFT: Form Section (60% width) -->
+        <div class="w-full lg:w-3/5 xl:w-[60%] min-w-0">
+
             <!-- Resume Form -->
             <form method="post" id="resume-form" {% if resume_id %}action="{% url 'resume:resume_form_edit' pk=resume_id %}"{% endif %}>
                 {% csrf_token %}
-
-                <!-- Template Selection -->
-                <div class="mb-6 bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-                    <div class="mb-4">
-                        <h2 class="text-lg font-bold text-slate-900">Choose Template</h2>
-                        <p class="text-slate-500 text-sm mt-0.5">Select a layout for your resume</p>
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <!-- FaangPath Simple - Active/Default -->
-                        <div class="template-card cursor-pointer relative rounded-xl border-2 border-primary ring-2 ring-primary bg-white overflow-hidden transition-all hover:shadow-md"
-                             data-template="faangpath-simple"
-                             onclick="selectTemplate('faangpath-simple')">
-                            <div class="aspect-[3/4] bg-blue-50 relative overflow-hidden">
-                                <div class="absolute inset-0 p-4 flex flex-col gap-1.5">
-                                    <div class="w-1/2 h-3 bg-blue-200 rounded"></div>
-                                    <div class="w-full h-1.5 bg-slate-200 rounded"></div>
-                                    <div class="w-full h-1.5 bg-slate-200 rounded"></div>
-                                    <div class="w-3/4 h-1.5 bg-slate-200 rounded"></div>
-                                    <div class="w-full h-px bg-slate-100 my-2"></div>
-                                    <div class="w-1/3 h-2 bg-blue-200 rounded"></div>
-                                    <div class="w-full h-1.5 bg-slate-200 rounded"></div>
-                                    <div class="w-full h-1.5 bg-slate-200 rounded"></div>
-                                    <div class="w-5/6 h-1.5 bg-slate-200 rounded"></div>
-                                </div>
-                            </div>
-                            <div class="p-3 flex items-center justify-between">
-                                <div>
-                                    <p class="text-sm font-semibold text-slate-900">FaangPath Simple</p>
-                                    <span class="text-xs font-medium text-primary">Active</span>
-                                </div>
-                            </div>
-                            <!-- Selected checkmark badge -->
-                            <div class="template-check absolute top-2 right-2 w-5 h-5 bg-primary rounded-full flex items-center justify-center">
-                                <span class="material-symbols-outlined text-white" style="font-size:14px;">check</span>
-                            </div>
-                        </div>
-
-                        <!-- Minimal Clean - Coming Soon -->
-                        <div class="template-card relative rounded-xl border-2 border-slate-200 bg-white overflow-hidden opacity-50 cursor-not-allowed"
-                             data-template="minimal-clean">
-                            <div class="aspect-[3/4] bg-slate-50 relative overflow-hidden">
-                                <div class="absolute inset-0 p-4 flex flex-col gap-1.5">
-                                    <div class="w-1/2 h-3 bg-slate-300 rounded"></div>
-                                    <div class="w-full h-1.5 bg-slate-200 rounded"></div>
-                                    <div class="w-full h-1.5 bg-slate-200 rounded"></div>
-                                    <div class="w-3/4 h-1.5 bg-slate-200 rounded"></div>
-                                    <div class="w-full h-px bg-slate-100 my-2"></div>
-                                    <div class="w-1/3 h-2 bg-slate-300 rounded"></div>
-                                    <div class="w-full h-1.5 bg-slate-200 rounded"></div>
-                                    <div class="w-full h-1.5 bg-slate-200 rounded"></div>
-                                    <div class="w-5/6 h-1.5 bg-slate-200 rounded"></div>
-                                </div>
-                            </div>
-                            <div class="p-3">
-                                <p class="text-sm font-semibold text-slate-900">Minimal Clean</p>
-                                <span class="text-xs font-medium text-slate-500">Coming Soon</span>
-                            </div>
-                        </div>
-
-                        <!-- Executive Pro - Coming Soon -->
-                        <div class="template-card relative rounded-xl border-2 border-slate-200 bg-white overflow-hidden opacity-50 cursor-not-allowed"
-                             data-template="executive-pro">
-                            <div class="aspect-[3/4] bg-slate-50 relative overflow-hidden">
-                                <div class="absolute inset-0 p-4 flex flex-col gap-1.5">
-                                    <div class="w-1/2 h-3 bg-slate-300 rounded"></div>
-                                    <div class="w-full h-1.5 bg-slate-200 rounded"></div>
-                                    <div class="w-full h-1.5 bg-slate-200 rounded"></div>
-                                    <div class="w-3/4 h-1.5 bg-slate-200 rounded"></div>
-                                    <div class="w-full h-px bg-slate-100 my-2"></div>
-                                    <div class="w-1/3 h-2 bg-slate-300 rounded"></div>
-                                    <div class="w-full h-1.5 bg-slate-200 rounded"></div>
-                                    <div class="w-full h-1.5 bg-slate-200 rounded"></div>
-                                    <div class="w-5/6 h-1.5 bg-slate-200 rounded"></div>
-                                </div>
-                            </div>
-                            <div class="p-3">
-                                <p class="text-sm font-semibold text-slate-900">Executive Pro</p>
-                                <span class="text-xs font-medium text-slate-500">Coming Soon</span>
-                            </div>
-                        </div>
-                    </div>
-                    <input type="hidden" name="template" id="selected-template" value="faangpath-simple">
-                </div>
 
                 <!-- Tab Navigation -->
                 <nav class="flex gap-1 mb-6 bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
@@ -490,10 +400,117 @@
                 </section>
             </form>
         </div>
+
+        <!-- RIGHT: Live Preview Pane (Desktop only, 40% width) -->
+        <aside class="hidden lg:flex flex-col w-full lg:w-2/5 xl:w-[40%]">
+            <div class="sticky" style="top: 72px;">
+
+                <!-- Template Selection: Collapsible Accordion -->
+                <div class="mb-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
+                    <!-- Accordion Header (Toggle Button) -->
+                    <button type="button" id="template-toggle" onclick="toggleTemplateSection()"
+                            class="w-full flex items-center justify-between px-5 py-3 text-left hover:bg-slate-50 transition-colors">
+                        <div>
+                            <h2 class="text-base font-semibold text-slate-800">Choose Template</h2>
+                            <p class="text-xs text-slate-500 mt-0.5">Select a layout for your resume</p>
+                        </div>
+                        <span id="template-chevron" class="material-symbols-outlined text-slate-400 transition-transform duration-200">
+                            expand_more
+                        </span>
+                    </button>
+
+                    <!-- Accordion Content (Collapsible) -->
+                    <div id="template-content" class="hidden border-t border-slate-200 p-4">
+                        <div class="grid grid-cols-3 gap-3">
+                            <!-- FaangPath Simple - Active/Default -->
+                            <div class="template-card cursor-pointer relative rounded-lg border-2 border-primary ring-2 ring-primary bg-white overflow-hidden transition-all hover:shadow-md"
+                                 data-template="faangpath-simple"
+                                 onclick="selectTemplate('faangpath-simple')">
+                                <div class="aspect-[3/4] bg-blue-50 relative overflow-hidden">
+                                    <div class="absolute inset-0 p-2 flex flex-col gap-1">
+                                        <div class="w-1/2 h-2 bg-blue-200 rounded"></div>
+                                        <div class="w-full h-1 bg-slate-200 rounded"></div>
+                                        <div class="w-full h-1 bg-slate-200 rounded"></div>
+                                        <div class="w-3/4 h-1 bg-slate-200 rounded"></div>
+                                        <div class="w-full h-px bg-slate-100 my-1"></div>
+                                        <div class="w-1/3 h-1.5 bg-blue-200 rounded"></div>
+                                        <div class="w-full h-1 bg-slate-200 rounded"></div>
+                                        <div class="w-full h-1 bg-slate-200 rounded"></div>
+                                    </div>
+                                </div>
+                                <div class="p-2 flex items-center justify-between">
+                                    <div>
+                                        <p class="text-xs font-semibold text-slate-900">FaangPath Simple</p>
+                                        <span class="text-xs font-medium text-primary">Active</span>
+                                    </div>
+                                </div>
+                                <div class="template-check absolute top-1 right-1 w-4 h-4 bg-primary rounded-full flex items-center justify-center">
+                                    <span class="material-symbols-outlined text-white" style="font-size:12px;">check</span>
+                                </div>
+                            </div>
+
+                            <!-- Minimal Clean - Coming Soon -->
+                            <div class="template-card relative rounded-lg border-2 border-slate-200 bg-white overflow-hidden opacity-50 cursor-not-allowed"
+                                 data-template="minimal-clean">
+                                <div class="aspect-[3/4] bg-slate-50 relative overflow-hidden">
+                                    <div class="absolute inset-0 p-2 flex flex-col gap-1">
+                                        <div class="w-1/2 h-2 bg-slate-300 rounded"></div>
+                                        <div class="w-full h-1 bg-slate-200 rounded"></div>
+                                        <div class="w-full h-1 bg-slate-200 rounded"></div>
+                                        <div class="w-3/4 h-1 bg-slate-200 rounded"></div>
+                                        <div class="w-full h-px bg-slate-100 my-1"></div>
+                                        <div class="w-1/3 h-1.5 bg-slate-300 rounded"></div>
+                                        <div class="w-full h-1 bg-slate-200 rounded"></div>
+                                        <div class="w-full h-1 bg-slate-200 rounded"></div>
+                                    </div>
+                                </div>
+                                <div class="p-2">
+                                    <p class="text-xs font-semibold text-slate-900">Minimal Clean</p>
+                                    <span class="text-xs font-medium text-slate-500">Coming Soon</span>
+                                </div>
+                            </div>
+
+                            <!-- Executive Pro - Coming Soon -->
+                            <div class="template-card relative rounded-lg border-2 border-slate-200 bg-white overflow-hidden opacity-50 cursor-not-allowed"
+                                 data-template="executive-pro">
+                                <div class="aspect-[3/4] bg-slate-50 relative overflow-hidden">
+                                    <div class="absolute inset-0 p-2 flex flex-col gap-1">
+                                        <div class="w-1/2 h-2 bg-slate-300 rounded"></div>
+                                        <div class="w-full h-1 bg-slate-200 rounded"></div>
+                                        <div class="w-full h-1 bg-slate-200 rounded"></div>
+                                        <div class="w-3/4 h-1 bg-slate-200 rounded"></div>
+                                        <div class="w-full h-px bg-slate-100 my-1"></div>
+                                        <div class="w-1/3 h-1.5 bg-slate-300 rounded"></div>
+                                        <div class="w-full h-1 bg-slate-200 rounded"></div>
+                                        <div class="w-full h-1 bg-slate-200 rounded"></div>
+                                    </div>
+                                </div>
+                                <div class="p-2">
+                                    <p class="text-xs font-semibold text-slate-900">Executive Pro</p>
+                                    <span class="text-xs font-medium text-slate-500">Coming Soon</span>
+                                </div>
+                            </div>
+                        </div>
+                        <input type="hidden" name="template" id="selected-template" value="faangpath-simple">
+                    </div>
+                </div>
+
+                <!-- Preview iframe container - fills space and allows inner scroll -->
+                <div class="relative bg-slate-200 rounded-xl overflow-hidden shadow-inner w-full flex-1 flex"
+                     style="height: calc(100vh - 180px);">
+                    <iframe id="preview-iframe"
+                            class="border-none bg-slate-200 w-full h-full"
+                            frameborder="0"></iframe>
+                </div>
+
+                <p class="text-xs text-slate-400 text-center mt-2">Updates automatically as you type</p>
+            </div>
+        </aside>
+
     </main>
 
     <!-- Footer -->
-    <footer class="mt-auto border-t border-slate-200 bg-white py-8 px-4 md:px-10 lg:px-20">
+    <footer class="mt-auto border-t border-slate-200 bg-white py-4 px-3 md:px-4">
         <div class="flex flex-col md:flex-row items-center justify-between gap-4 max-w-[1200px] mx-auto w-full">
             <div class="flex items-center gap-2">
                 <img src="{% static 'img/resustack_logo.png' %}" alt="Logo" class="w-4 h-4 object-contain grayscale opacity-50"/>
@@ -503,7 +520,17 @@
         </div>
     </footer>
 
-    <!-- Preview Modal -->
+    <!-- Mobile Floating Action Button (FAB) - visible on mobile/tablet -->
+    <button type="button" id="mobile-preview-btn"
+            class="lg:hidden fixed bottom-24 right-6 z-50 flex items-center gap-2
+                   bg-primary hover:bg-blue-700 text-white px-4 py-3 rounded-full shadow-xl
+                   active:scale-95 transition-all"
+            onclick="triggerMobilePreview()">
+        <span class="material-symbols-outlined text-lg">visibility</span>
+        <span class="text-sm font-medium">Preview</span>
+    </button>
+
+    <!-- Preview Modal (used by both mobile FAB and legacy preview button) -->
     <div id="preview-modal" class="hidden fixed inset-0 z-[9999]" style="animation: fadeIn 0.2s ease;">
         <div class="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" onclick="document.getElementById('preview-modal').classList.add('hidden')"></div>
         <div class="preview-modal-dialog relative mx-auto my-[5vh] bg-white rounded-xl shadow-2xl flex flex-col" style="animation: slideUp 0.3s ease;">
@@ -517,7 +544,7 @@
                 </button>
             </div>
             <div class="flex-1 overflow-hidden bg-slate-100">
-                <iframe id="preview-iframe" frameborder="0" class="w-full h-full border-none"></iframe>
+                <iframe id="preview-iframe-modal" frameborder="0" class="w-full h-full border-none"></iframe>
             </div>
         </div>
     </div>
@@ -604,10 +631,114 @@
     </template>
 
     <script>
+        // ============================================
+        // TEMPLATE ACCORDION TOGGLE
+        // ============================================
+        function toggleTemplateSection() {
+            const content = document.getElementById('template-content');
+            const chevron = document.getElementById('template-chevron');
+            const isHidden = content.classList.contains('hidden');
+            content.classList.toggle('hidden');
+            chevron.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+        }
+
+        // ============================================
+        // LIVE PREVIEW (DESKTOP)
+        // ============================================
+        let previewDebounceTimer = null;
+        let previewAbortController = null;
+
+        function schedulePreviewUpdate() {
+            clearTimeout(previewDebounceTimer);
+            previewDebounceTimer = setTimeout(updatePreview, 700);
+        }
+
+        async function updatePreview() {
+            // Cancel previous in-flight request
+            if (previewAbortController) {
+                previewAbortController.abort();
+            }
+            previewAbortController = new AbortController();
+
+            const loadingIndicator = document.getElementById('preview-loading');
+            if (loadingIndicator) loadingIndicator.classList.remove('hidden');
+
+            try {
+                const formData = new FormData(document.getElementById('resume-form'));
+                const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+                const response = await fetch("{% url 'resume:preview_resume_form' %}", {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-CSRFToken': csrfToken,
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    signal: previewAbortController.signal
+                });
+
+                if (response.ok) {
+                    const html = await response.text();
+                    const iframe = document.getElementById('preview-iframe');
+                    if (iframe) iframe.srcdoc = html;
+                }
+                // 400+ error: validation fail, preview not updated (silent)
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    console.warn('Preview update failed:', err);
+                }
+            } finally {
+                if (loadingIndicator) loadingIndicator.classList.add('hidden');
+            }
+        }
+
+        // ============================================
+        // MOBILE PREVIEW (FAB)
+        // ============================================
+        function triggerMobilePreview() {
+            const formData = new FormData(document.getElementById('resume-form'));
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+            fetch("{% url 'resume:preview_resume_form' %}", {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-CSRFToken': csrfToken }
+            })
+            .then(r => r.ok ? r.text() : null)
+            .then(html => {
+                if (html) {
+                    document.getElementById('preview-iframe-modal').srcdoc = html;
+                    document.getElementById('preview-modal').classList.remove('hidden');
+                }
+            });
+        }
+
+        // ============================================
+        // INITIAL PREVIEW LOAD & FORM LISTENERS
+        // ============================================
+        const resumeForm = document.getElementById('resume-form');
+        if (resumeForm) {
+            // Attach live preview listeners (desktop only)
+            resumeForm.addEventListener('input', schedulePreviewUpdate);
+            resumeForm.addEventListener('change', schedulePreviewUpdate);
+            
+            // Listen for HTMX updates (e.g., AI Enhance) to trigger preview
+            document.body.addEventListener('htmx:afterSwap', function(evt) {
+                schedulePreviewUpdate();
+            });
+
+            // Load initial preview on page load if resume exists
+            {% if resume_id %}
+            window.addEventListener('DOMContentLoaded', () => {
+                updatePreview();
+            });
+            {% endif %}
+        }
+
         // Tab Navigation
         document.addEventListener('DOMContentLoaded', function() {
             const tabs = document.querySelectorAll('.form-section-tab');
-            
+
             tabs.forEach(tab => {
                 tab.addEventListener('click', function() {
                     // Remove active from all tabs and sections
@@ -616,17 +747,17 @@
                         t.classList.add('text-slate-500', 'hover:bg-slate-100');
                     });
                     document.querySelectorAll('.section-content').forEach(s => s.classList.remove('active'));
-                    
+
                     // Add active to clicked tab
                     this.classList.add('active', 'bg-primary', 'text-white');
                     this.classList.remove('text-slate-500', 'hover:bg-slate-100');
-                    
+
                     // Show corresponding section
                     const sectionId = this.getAttribute('data-section');
                     document.getElementById(sectionId).classList.add('active');
                 });
             });
-            
+
             // Set initial active tab styling
             const activeTab = document.querySelector('.form-section-tab.active');
             if (activeTab) {
