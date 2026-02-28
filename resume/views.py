@@ -743,6 +743,7 @@ def enhance_project(request):
     return response
 
 
+@login_required
 @require_http_methods(["POST"])
 def preview_resume_form(request):
     """

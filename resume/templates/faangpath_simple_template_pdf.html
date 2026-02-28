@@ -116,20 +116,30 @@
         
         /* Add padding for screen preview (not for PDF) */
         @media screen {
+            html, body {
+                background-color: #f1f5f9; /* Match Tailwind slate-100 */
+                min-height: 100vh;
+                overflow-x: hidden;
+            }
+
             .pdf-content {
                 padding: 0.3in; /* Match PDF @page margin */
                 box-sizing: border-box;
             }
             
-            body {
-                background-color: #f5f5f5;
-                min-height: 100vh;
-            }
-            
             .pdf-container {
-                max-width: 8.5in;
+                width: 8.27in; /* A4 width */
+                min-height: 11.69in; /* A4 height */
                 margin: 0 auto;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                background-color: white;
+                background-image: repeating-linear-gradient(
+                    to bottom,
+                    transparent,
+                    transparent calc(11.69in - 2px),
+                    #94a3b8 calc(11.69in - 2px), /* Tailwind slate-400 */
+                    #94a3b8 11.69in
+                );
+                box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
             }
         }
 
@@ -487,5 +497,34 @@
             <!-- Other sections will be added piece by piece -->
         </div>
     </div>
+    
+    <!-- Script to scale the A4 preview dynamically to fit the iframe width -->
+    <script>
+        function scaleToFit() {
+            // Only apply scaling in iframe/screen preview, not when generating PDF
+            if (window.self !== window.top) {
+                // A4 width is 8.27in * 96dpi = ~794px
+                const originalWidth = 794; 
+                const containerWidth = window.innerWidth;
+                
+                // Calculate scale factor, keeping a tiny margin
+                const scale = (containerWidth - 20) / originalWidth;
+                
+                // Apply the zoom/scale transform
+                if (scale < 1) {
+                    document.body.style.zoom = scale;
+                    // For Firefox fallback
+                    document.body.style.transform = `scale(${scale})`;
+                    document.body.style.transformOrigin = 'top center';
+                } else {
+                    document.body.style.zoom = 1;
+                    document.body.style.transform = 'none';
+                }
+            }
+        }
+        
+        window.addEventListener('resize', scaleToFit);
+        window.addEventListener('DOMContentLoaded', scaleToFit);
+    </script>
 </body>
 </html>
