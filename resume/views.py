@@ -337,6 +337,7 @@ class ResumeFormView(TemplateView):
         if resume:
             context = populate_formsets_from_extracted_json(resume.content)
             context["resume_id"] = resume.pk
+            context["saved_template"] = resume.template_selector
         else:
             # Fallback for "Create New" flow without upload
             context = get_init_values_for_resume_form()
@@ -445,7 +446,7 @@ class ResumeFormView(TemplateView):
         """
         try:
             # Get template selector from request
-            template_selector = self.request.POST.get('template_selector', 'faangpath-simple')
+            template_selector = self.request.POST.get('template', 'faangpath-simple')
             
             resume_pdf_service = ResumePdfService()
             pdf_bytes = resume_pdf_service.generate_resume_pdf(
@@ -550,11 +551,13 @@ class ResumeFormView(TemplateView):
                 return self.render_to_response(context_data)
 
         # NOW save/update resume after all quota checks pass
+        template_selector = self.request.POST.get('template', 'faangpath-simple')
         if pk:
             try:
                 # SECURITY: Filter by user to prevent IDOR on save
                 resume = Resume.objects.get(pk=pk, user=self.request.user)
                 resume.content = updated_content
+                resume.template_selector = template_selector
                 resume.save()
             except Resume.DoesNotExist:
                 # Should not happen typically
@@ -564,7 +567,8 @@ class ResumeFormView(TemplateView):
             resume = Resume.objects.create(
                 user=self.request.user,
                 title=f"New Resume {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-                content=updated_content
+                content=updated_content,
+                template_selector=template_selector,
             )
             # Store pk in kwargs for subsequent actions
             self.kwargs['pk'] = resume.pk
@@ -813,7 +817,8 @@ def preview_resume_form(request):
             }
             
             # Use the same template as PDF generation for consistency
-            template_name = 'faangpath_simple_template_pdf.html'
+            template_selector = request.POST.get('template', 'faangpath-simple')
+            template_name = settings.TEMPLATE_SELECTOR_HTML_MAP.get(template_selector, 'faangpath_simple_template_pdf.html')
             
             rendered_html = render(
                 request, template_name=template_name, context=context
@@ -1076,7 +1081,7 @@ def download_resume_pdf(request, pk):
         pdf_service = ResumePdfService()
         pdf_bytes = pdf_service.generate_resume_pdf(
             resume_data=resume_data,
-            template_selector="faangpath-simple",
+            template_selector=resume.template_selector,
             request=request,
         )
         filename = f"{resume.owner_name or 'resume'}_{resume.pk}.pdf".replace(" ", "_")

@@ -261,7 +261,8 @@ OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
 
 
 TEMPLATE_SELECTOR_HTML_MAP = {
-    'faangpath-simple': 'faangpath_simple_template_pdf.html'
+    'faangpath-simple': 'faangpath_simple_template_pdf.html',
+    'modern-sidebar': 'modern_sidebar_template_pdf.html',
 }
 
 # PDF Generation Settings
