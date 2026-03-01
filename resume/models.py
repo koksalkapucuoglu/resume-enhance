@@ -15,7 +15,8 @@ class Resume(models.Model):
     """
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="resumes")
     title = models.CharField(max_length=255, default="My Resume")
-    content = models.JSONField(default=dict) 
+    content = models.JSONField(default=dict)
+    template_selector = models.CharField(max_length=50, default='faangpath-simple')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

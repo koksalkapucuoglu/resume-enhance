@@ -250,6 +250,7 @@
             <!-- Resume Form -->
             <form method="post" id="resume-form" {% if resume_id %}action="{% url 'resume:resume_form_edit' pk=resume_id %}"{% endif %}>
                 {% csrf_token %}
+                <input type="hidden" name="template" id="selected-template" value="{{ saved_template|default:'faangpath-simple' }}">
 
                 <!-- Tab Navigation -->
                 <nav class="flex gap-1 mb-6 bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
@@ -422,8 +423,8 @@
                     <!-- Accordion Content (Collapsible) -->
                     <div id="template-content" class="hidden border-t border-slate-200 p-4">
                         <div class="grid grid-cols-3 gap-3">
-                            <!-- FaangPath Simple - Active/Default -->
-                            <div class="template-card cursor-pointer relative rounded-lg border-2 border-primary ring-2 ring-primary bg-white overflow-hidden transition-all hover:shadow-md"
+                            <!-- FaangPath Simple -->
+                            <div class="template-card cursor-pointer relative rounded-lg border-2 {% if saved_template == 'modern-sidebar' %}border-slate-200{% else %}border-primary ring-2 ring-primary{% endif %} bg-white overflow-hidden transition-all hover:shadow-md"
                                  data-template="faangpath-simple"
                                  onclick="selectTemplate('faangpath-simple')">
                                 <div class="aspect-[3/4] bg-blue-50 relative overflow-hidden">
@@ -441,32 +442,47 @@
                                 <div class="p-2 flex items-center justify-between">
                                     <div>
                                         <p class="text-xs font-semibold text-slate-900">FaangPath Simple</p>
-                                        <span class="text-xs font-medium text-primary">Active</span>
+                                        <span class="text-xs font-medium text-primary">Classic</span>
                                     </div>
                                 </div>
-                                <div class="template-check absolute top-1 right-1 w-4 h-4 bg-primary rounded-full flex items-center justify-center">
+                                <div class="template-check absolute top-1 right-1 w-4 h-4 bg-primary rounded-full flex items-center justify-center {% if saved_template == 'modern-sidebar' %}hidden{% endif %}">
                                     <span class="material-symbols-outlined text-white" style="font-size:12px;">check</span>
                                 </div>
                             </div>
 
-                            <!-- Minimal Clean - Coming Soon -->
-                            <div class="template-card relative rounded-lg border-2 border-slate-200 bg-white overflow-hidden opacity-50 cursor-not-allowed"
-                                 data-template="minimal-clean">
-                                <div class="aspect-[3/4] bg-slate-50 relative overflow-hidden">
+                            <!-- Modern Sidebar -->
+                            <div class="template-card cursor-pointer relative rounded-lg border-2 {% if saved_template == 'modern-sidebar' %}border-primary ring-2 ring-primary{% else %}border-slate-200{% endif %} bg-white overflow-hidden transition-all hover:shadow-md"
+                                 data-template="modern-sidebar"
+                                 onclick="selectTemplate('modern-sidebar')">
+                                <div class="aspect-[3/4] bg-blue-50 relative overflow-hidden">
                                     <div class="absolute inset-0 p-2 flex flex-col gap-1">
-                                        <div class="w-1/2 h-2 bg-slate-300 rounded"></div>
-                                        <div class="w-full h-1 bg-slate-200 rounded"></div>
-                                        <div class="w-full h-1 bg-slate-200 rounded"></div>
-                                        <div class="w-3/4 h-1 bg-slate-200 rounded"></div>
-                                        <div class="w-full h-px bg-slate-100 my-1"></div>
-                                        <div class="w-1/3 h-1.5 bg-slate-300 rounded"></div>
-                                        <div class="w-full h-1 bg-slate-200 rounded"></div>
-                                        <div class="w-full h-1 bg-slate-200 rounded"></div>
+                                        <div class="w-full h-3 bg-blue-300 rounded mb-1"></div>
+                                        <div class="flex gap-1 flex-1">
+                                            <div class="w-2/5 flex flex-col gap-1">
+                                                <div class="w-full h-1.5 bg-blue-200 rounded"></div>
+                                                <div class="w-full h-1 bg-slate-200 rounded"></div>
+                                                <div class="w-full h-1 bg-slate-200 rounded"></div>
+                                                <div class="w-full h-px bg-slate-100 my-0.5"></div>
+                                                <div class="w-full h-1.5 bg-blue-200 rounded"></div>
+                                                <div class="w-full h-1 bg-slate-200 rounded"></div>
+                                            </div>
+                                            <div class="w-3/5 flex flex-col gap-1">
+                                                <div class="w-full h-1.5 bg-slate-300 rounded"></div>
+                                                <div class="w-full h-1 bg-slate-200 rounded"></div>
+                                                <div class="w-full h-1 bg-slate-200 rounded"></div>
+                                                <div class="w-3/4 h-1 bg-slate-200 rounded"></div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
-                                <div class="p-2">
-                                    <p class="text-xs font-semibold text-slate-900">Minimal Clean</p>
-                                    <span class="text-xs font-medium text-slate-500">Coming Soon</span>
+                                <div class="p-2 flex items-center justify-between">
+                                    <div>
+                                        <p class="text-xs font-semibold text-slate-900">Modern Sidebar</p>
+                                        <span class="text-xs font-medium text-primary">Two-column</span>
+                                    </div>
+                                </div>
+                                <div class="template-check absolute top-1 right-1 w-4 h-4 bg-primary rounded-full flex items-center justify-center {% if saved_template != 'modern-sidebar' %}hidden{% endif %}">
+                                    <span class="material-symbols-outlined text-white" style="font-size:12px;">check</span>
                                 </div>
                             </div>
 
@@ -491,7 +507,7 @@
                                 </div>
                             </div>
                         </div>
-                        <input type="hidden" name="template" id="selected-template" value="faangpath-simple">
+
                     </div>
                 </div>
 
@@ -665,6 +681,8 @@
 
             try {
                 const formData = new FormData(document.getElementById('resume-form'));
+                const templateInput = document.getElementById('selected-template');
+                if (templateInput) formData.set('template', templateInput.value);
                 const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
 
                 const response = await fetch("{% url 'resume:preview_resume_form' %}", {
@@ -880,15 +898,9 @@
             const templateSelector = document.getElementById('template-selector');
             const templateValue = templateSelector ? templateSelector.value : 'faangpath-simple';
 
-            // Add hidden inputs
-            let templateInput = form.querySelector('input[name="template_selector"]');
-            if (!templateInput) {
-                templateInput = document.createElement('input');
-                templateInput.type = 'hidden';
-                templateInput.name = 'template_selector';
-                form.appendChild(templateInput);
-            }
-            templateInput.value = templateValue;
+            // Update the existing hidden template input
+            const templateInput = document.getElementById('selected-template');
+            if (templateInput) templateInput.value = templateValue;
 
             let formatInput = form.querySelector('input[name="export_format"]');
             if (!formatInput) {
@@ -1230,7 +1242,15 @@
                     if (check) check.classList.add('hidden');
                 }
             });
+
+            schedulePreviewUpdate();
         }
+
+        // Initialize correct template card state on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            const savedTemplate = '{{ saved_template|default:"faangpath-simple" }}';
+            selectTemplate(savedTemplate);
+        });
     </script>
 <!-- Feedback Widget -->
 <div id="feedback-widget" class="fixed bottom-6 right-6 z-50">

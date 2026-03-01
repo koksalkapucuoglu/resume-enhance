@@ -22,29 +22,30 @@
 
         body {
             margin: 0;
-            font-size: 13.5px;
+            font-size: 12px;
             width: 100%;
             line-height: 1.4;
         }
         
-        /* PDF-specific smaller fonts (WeasyPrint uses print media) */
-        @media print {
+        /* Smaller fonts for PDF generation (WeasyPrint uses print media)
+           AND screen preview — both must match so page breaks align. */
+        @media print, screen {
             body {
                 font-size: 12px;
             }
-            
+
             .full-name {
                 font-size: 20px !important;
             }
-            
+
             .contact-details {
                 font-size: 10pt !important;
             }
-            
+
             .contact-item {
                 font-size: 10pt !important;
             }
-            
+
             .section-header {
                 font-size: 10pt !important;
             }
@@ -117,7 +118,7 @@
         /* Add padding for screen preview (not for PDF) */
         @media screen {
             html, body {
-                background-color: #f1f5f9; /* Match Tailwind slate-100 */
+                background-color: #e2e8f0; /* Tailwind slate-300 */
                 min-height: 100vh;
                 overflow-x: hidden;
             }
@@ -126,20 +127,36 @@
                 padding: 0.3in; /* Match PDF @page margin */
                 box-sizing: border-box;
             }
-            
+
             .pdf-container {
                 width: 8.27in; /* A4 width */
-                min-height: 11.69in; /* A4 height */
                 margin: 0 auto;
+                background-color: transparent; /* Let body bg show between page sheets */
+            }
+
+            /* Each page is a visual "sheet" separated by a gap */
+            .page-sheet {
+                width: 100%;
+                min-height: 11.69in; /* A4 height */
+                height: 11.69in;
                 background-color: white;
-                background-image: repeating-linear-gradient(
-                    to bottom,
-                    transparent,
-                    transparent calc(11.69in - 2px),
-                    #94a3b8 calc(11.69in - 2px), /* Tailwind slate-400 */
-                    #94a3b8 11.69in
-                );
-                box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+                box-shadow: 0 2px 8px rgb(0 0 0 / 0.15);
+                position: relative;
+                box-sizing: border-box;
+            }
+
+            .page-sheet + .page-sheet {
+                margin-top: 20px; /* Visible gap between pages */
+            }
+
+            /* Section wrapper used during pagination to keep
+               section header (h2 + hr) together with items */
+            .section-header-group {
+                margin-bottom: 0;
+            }
+
+            .section-header-group .section-header {
+                margin-bottom: 0.25rem;
             }
         }
 
@@ -211,8 +228,12 @@
             margin-top: 0rem;
         }
 
-        /* Page break and print optimization */
-        .resume-header {
+        /* Page break and print optimization —
+           avoid splitting individual items across pages */
+        .resume-header,
+        .experience-item,
+        .education-item,
+        .project-item {
             page-break-inside: avoid;
         }
 
@@ -498,22 +519,18 @@
         </div>
     </div>
     
-    <!-- Script to scale the A4 preview dynamically to fit the iframe width -->
+    <!-- Script to scale the A4 preview dynamically to fit the iframe width,
+         and paginate content into separate visual page sheets -->
     <script>
         function scaleToFit() {
             // Only apply scaling in iframe/screen preview, not when generating PDF
             if (window.self !== window.top) {
-                // A4 width is 8.27in * 96dpi = ~794px
-                const originalWidth = 794; 
+                const originalWidth = 794; // A4 width: 8.27in * 96dpi
                 const containerWidth = window.innerWidth;
-                
-                // Calculate scale factor, keeping a tiny margin
                 const scale = (containerWidth - 20) / originalWidth;
-                
-                // Apply the zoom/scale transform
+
                 if (scale < 1) {
                     document.body.style.zoom = scale;
-                    // For Firefox fallback
                     document.body.style.transform = `scale(${scale})`;
                     document.body.style.transformOrigin = 'top center';
                 } else {
@@ -522,9 +539,167 @@
                 }
             }
         }
-        
+
+        /**
+         * Measures the outer height of an element including margins.
+         */
+        function outerHeight(el) {
+            const style = window.getComputedStyle(el);
+            return el.getBoundingClientRect().height
+                + parseFloat(style.marginTop)
+                + parseFloat(style.marginBottom);
+        }
+
+        /**
+         * Flattens sections into atomic "blocks" for pagination.
+         * Each block is either:
+         *   - The resume header (kept whole)
+         *   - A section-header-group (h2 + hr, kept with first item)
+         *   - An individual item (experience-item, education-item, project-item, skills-content)
+         *
+         * For sections with multiple items (experience, education, projects),
+         * the section is broken apart so items can be placed on different pages.
+         * The section header (h2 + hr) is grouped with the first item to avoid
+         * orphaned headers at the bottom of a page.
+         */
+        function flattenIntoBlocks(content) {
+            const blocks = [];
+            const children = Array.from(content.children);
+
+            children.forEach(child => {
+                // The <header> is one atomic block
+                if (child.tagName === 'HEADER') {
+                    blocks.push(child);
+                    return;
+                }
+
+                // For <section class="resume-section">, decompose into header-group + items
+                if (child.classList.contains('resume-section')) {
+                    const sectionChildren = Array.from(child.children);
+                    const h2 = child.querySelector('.section-header');
+                    const hr = child.querySelector('.section-line');
+
+                    // Find all items in this section
+                    const items = sectionChildren.filter(el =>
+                        el.classList.contains('experience-item') ||
+                        el.classList.contains('education-item') ||
+                        el.classList.contains('project-item') ||
+                        el.classList.contains('skills-content')
+                    );
+
+                    if (items.length === 0) {
+                        // No decomposable items — keep section as-is
+                        blocks.push(child);
+                        return;
+                    }
+
+                    // Create a wrapper for h2 + hr + first item (avoid orphan header)
+                    const headerGroup = document.createElement('div');
+                    headerGroup.className = 'section-header-group';
+                    // Copy the section's margin-bottom for the last block
+                    headerGroup.style.marginBottom = '0';
+                    if (h2) headerGroup.appendChild(h2.cloneNode(true));
+                    if (hr) headerGroup.appendChild(hr.cloneNode(true));
+                    headerGroup.appendChild(items[0].cloneNode(true));
+                    blocks.push(headerGroup);
+
+                    // Remaining items are individual blocks
+                    for (let i = 1; i < items.length; i++) {
+                        blocks.push(items[i].cloneNode(true));
+                    }
+                    return;
+                }
+
+                // Any other element — keep as-is
+                blocks.push(child);
+            });
+
+            return blocks;
+        }
+
+        /**
+         * Splits content into page-sized "sheets" so users can see
+         * exactly where pages break, matching WeasyPrint's behavior.
+         *
+         * Key behavior: page-break-inside: avoid — if a block doesn't
+         * fit on the current page, the entire block moves to the next page.
+         */
+        function paginateContent() {
+            // Only run on screen, not during PDF generation
+            if (window.matchMedia('print').matches) return;
+
+            const container = document.querySelector('.pdf-container');
+            const content = document.querySelector('.pdf-content');
+            if (!container || !content) return;
+
+            // A4 usable height = total height - top/bottom padding
+            const paddingPx = 0.3 * 96;       // 28.8px
+            const usableHeight = (11.69 * 96) - (paddingPx * 2); // ~1064.64px
+
+            // Step 1: Flatten sections into atomic blocks
+            const blocks = flattenIntoBlocks(content);
+            if (blocks.length === 0) return;
+
+            // Step 2: Create a hidden measurement area with proper width/padding
+            const measureArea = document.createElement('div');
+            measureArea.className = 'pdf-content';
+            measureArea.style.position = 'absolute';
+            measureArea.style.visibility = 'hidden';
+            measureArea.style.width = '8.27in';
+            measureArea.style.padding = '0.3in';
+            measureArea.style.boxSizing = 'border-box';
+            document.body.appendChild(measureArea);
+
+            // Step 3: Measure each block and assign to pages
+            const pages = [[]];  // Array of arrays of {block, height}
+            let currentPageHeight = 0;
+
+            blocks.forEach(block => {
+                measureArea.appendChild(block);
+                const h = outerHeight(block);
+                measureArea.removeChild(block);
+
+                // page-break-inside: avoid — if block doesn't fit, move to new page
+                if (currentPageHeight + h > usableHeight && currentPageHeight > 0) {
+                    pages.push([]);
+                    currentPageHeight = 0;
+                }
+
+                pages[pages.length - 1].push(block);
+                currentPageHeight += h;
+            });
+
+            document.body.removeChild(measureArea);
+
+            // Step 4: Build page sheets
+            container.innerHTML = '';
+            pages.forEach(pageBlocks => {
+                const sheet = document.createElement('div');
+                sheet.className = 'page-sheet';
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'pdf-content';
+
+                pageBlocks.forEach(block => contentDiv.appendChild(block));
+
+                sheet.appendChild(contentDiv);
+                container.appendChild(sheet);
+            });
+        }
+
+        function createPageSheet() {
+            const sheet = document.createElement('div');
+            sheet.className = 'page-sheet';
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'pdf-content';
+            sheet.appendChild(contentDiv);
+            return sheet;
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            paginateContent();
+            scaleToFit();
+        });
         window.addEventListener('resize', scaleToFit);
-        window.addEventListener('DOMContentLoaded', scaleToFit);
     </script>
 </body>
 </html>
