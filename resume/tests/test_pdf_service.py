@@ -4,11 +4,9 @@ Unit Tests for PDF Service
 Tests following Django and Python best practices for clean, readable, and maintainable code.
 """
 
-from unittest.mock import Mock, patch, MagicMock
-from pathlib import Path
+from unittest.mock import Mock, patch
 
 from django.test import TestCase, RequestFactory
-from django.conf import settings
 
 from resume.services.pdf_service import (
     HtmlToPdfConverter, 

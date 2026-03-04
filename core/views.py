@@ -61,23 +61,24 @@ class SignupView(View):
 class ProfileView(View):
     """User profile view with password change."""
 
+    def _get_quota_percentages(self, request):
+        """Calculate quota percentages for progress bars."""
+        profile = request.user.profile
+        limits = settings.FREE_TIER_LIMITS
+        return {
+            'import_percent': int((profile.import_count / limits['import_count']) * 100) if limits['import_count'] > 0 else 0,
+            'enhance_percent': int((profile.enhance_count / limits['enhance_count']) * 100) if limits['enhance_count'] > 0 else 0,
+            'download_percent': int((profile.download_count / limits['download_count']) * 100) if limits['download_count'] > 0 else 0,
+            'resume_percent': int((request.user.resumes.count() / limits['resume_count']) * 100) if limits['resume_count'] > 0 else 0,
+        }
+
     def get(self, request):
         """Display profile page."""
         password_form = PasswordChangeForm(request.user)
-        profile = request.user.profile
-
-        # Calculate quota percentages for progress bars
-        quota_percentages = {
-            'import_percent': int((profile.import_count / settings.FREE_TIER_LIMITS['import_count']) * 100) if settings.FREE_TIER_LIMITS['import_count'] > 0 else 0,
-            'enhance_percent': int((profile.enhance_count / settings.FREE_TIER_LIMITS['enhance_count']) * 100) if settings.FREE_TIER_LIMITS['enhance_count'] > 0 else 0,
-            'download_percent': int((profile.download_count / settings.FREE_TIER_LIMITS['download_count']) * 100) if settings.FREE_TIER_LIMITS['download_count'] > 0 else 0,
-            'resume_percent': int((request.user.resumes.count() / settings.FREE_TIER_LIMITS['resume_count']) * 100) if settings.FREE_TIER_LIMITS['resume_count'] > 0 else 0,
-        }
-
         return render(request, 'registration/profile.html', {
             'password_form': password_form,
             'settings': settings,
-            'quota_percentages': quota_percentages,
+            'quota_percentages': self._get_quota_percentages(request),
         })
 
     def post(self, request):
@@ -91,17 +92,8 @@ class ProfileView(View):
             messages.success(request, 'Your password has been changed successfully!')
             return redirect('profile')
 
-        # Calculate quota percentages for progress bars
-        profile = request.user.profile
-        quota_percentages = {
-            'import_percent': int((profile.import_count / settings.FREE_TIER_LIMITS['import_count']) * 100) if settings.FREE_TIER_LIMITS['import_count'] > 0 else 0,
-            'enhance_percent': int((profile.enhance_count / settings.FREE_TIER_LIMITS['enhance_count']) * 100) if settings.FREE_TIER_LIMITS['enhance_count'] > 0 else 0,
-            'download_percent': int((profile.download_count / settings.FREE_TIER_LIMITS['download_count']) * 100) if settings.FREE_TIER_LIMITS['download_count'] > 0 else 0,
-            'resume_percent': int((request.user.resumes.count() / settings.FREE_TIER_LIMITS['resume_count']) * 100) if settings.FREE_TIER_LIMITS['resume_count'] > 0 else 0,
-        }
-
         return render(request, 'registration/profile.html', {
             'password_form': password_form,
             'settings': settings,
-            'quota_percentages': quota_percentages,
+            'quota_percentages': self._get_quota_percentages(request),
         })

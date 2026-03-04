@@ -1,5 +1,4 @@
 import logging
-from io import BytesIO
 from typing import Dict, Any, Optional
 from pathlib import Path
 
@@ -7,7 +6,6 @@ from django.conf import settings
 from django.template.loader import render_to_string
 from django.http import HttpRequest
 from weasyprint import HTML, CSS
-from weasyprint.text.fonts import FontConfiguration
 
 
 logger = logging.getLogger(__name__)

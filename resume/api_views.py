@@ -5,6 +5,7 @@ These ViewSets provide CRUD operations for Resume model
 via REST API endpoints for mobile and frontend apps.
 """
 import json
+import logging
 
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
@@ -18,6 +19,9 @@ from .serializers import (
     ResumeDetailSerializer,
     ResumeCreateSerializer,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class IsOwnerOrReadOnly(permissions.BasePermission):
@@ -115,5 +119,6 @@ def submit_feedback(request):
         return JsonResponse({"success": True})
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON"}, status=400)
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
+    except Exception:
+        logger.exception("Unexpected error in submit_feedback")
+        return JsonResponse({"error": "An unexpected error occurred."}, status=500)
