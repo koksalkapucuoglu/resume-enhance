@@ -1,8 +1,11 @@
+import logging
+
 from django.conf import settings
 
 import openai
 from openai import OpenAI
 
+logger = logging.getLogger(__name__)
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
 
@@ -52,7 +55,7 @@ def send_openai_message(
         response = client.chat.completions.create(**kwargs, timeout=90)
 
         if hasattr(response, 'usage'):
-            print(f"[INFO] OpenAI Usage: {response.usage}")
+            logger.info("OpenAI Usage: %s", response.usage)
 
         return response.choices[0].message.content
 

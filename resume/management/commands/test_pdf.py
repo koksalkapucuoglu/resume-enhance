@@ -6,7 +6,6 @@ Follows Django best practices for management commands.
 """
 
 from django.core.management.base import BaseCommand, CommandError
-from django.conf import settings
 from pathlib import Path
 
 from resume.services.pdf_service import resume_pdf_service, PdfGenerationError

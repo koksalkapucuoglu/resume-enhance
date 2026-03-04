@@ -77,7 +77,6 @@ class UserProfile(models.Model):
 
     def reset_if_new_month(self):
         """Reset monthly quotas if a new month has started."""
-        from django.conf import settings
         today = date.today()
         if today.month != self.quota_reset_date.month or today.year != self.quota_reset_date.year:
             self.import_count = 0

@@ -1,20 +1,17 @@
-import re
 import json
-import secrets
-from datetime import datetime
+import logging
+import re
+from datetime import date, datetime
 
 from django.conf import settings
 from django.contrib import messages
-from django.forms import formset_factory
-from django.shortcuts import redirect, render
-from django.views.generic import TemplateView
-from django.views.decorators.http import require_http_methods
-from django.http import JsonResponse, HttpResponse
-from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.decorators import login_required
-from datetime import date, datetime
-
-
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.forms import formset_factory
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import redirect, render
+from django.views.decorators.http import require_http_methods
+from django.views.generic import ListView, TemplateView
 from PyPDF2 import PdfReader
 
 from resume.forms import (
@@ -26,19 +23,14 @@ from resume.openai_engine import (
     extract_resume_data,
     extract_linkedin_resume_data,
 )
-from resume.services.pdf_service import ResumePdfService, PdfGenerationError
-# Phase 4 (Future): Uncomment when LaTeX renderer is implemented
-# from latex_renderer import latex_handler
+from resume.services.pdf_service import ResumePdfService, PdfGenerationError, resume_pdf_service
 from resume.models import Resume
 
-
+logger = logging.getLogger(__name__)
 
 EducationFormSet = formset_factory(EducationForm, extra=0)
 ExperienceFormSet = formset_factory(ExperienceForm, extra=0)
 ProjectFormSet = formset_factory(ProjectForm, extra=0)
-
-from django.views.generic import ListView
-from django.contrib.auth.mixins import LoginRequiredMixin
 
 
 def landing_page(request):
@@ -92,7 +84,7 @@ def duplicate_resume(request, pk):
             content=original_resume.content.copy()  # Deep copy the JSON content
         )
 
-        messages.success(request, f"Resume duplicated successfully!")
+        messages.success(request, "Resume duplicated successfully!")
         return redirect("resume:resume_form_edit", pk=new_resume.pk)
 
     except Resume.DoesNotExist:
@@ -591,18 +583,13 @@ class ResumeFormView(TemplateView):
             return render(self.request, "faangpath_simple_template_pdf.html", context)
 
         try:
-            # Phase 4 (Future): LaTeX export
-            # if export_format == "tex":
-            #     return self._generate_tex_file(context)
-            # else:
-            if True:  # Always use PDF for now
-                # Increment download counter for PDF exports (after quota check passed)
-                profile = self.request.user.profile
-                profile.download_count += 1
-                profile.save()
-                return self._generate_pdf_file(context)
-            
-        except Exception as e:
+            # Increment download counter for PDF exports (after quota check passed)
+            profile = self.request.user.profile
+            profile.download_count += 1
+            profile.save()
+            return self._generate_pdf_file(context)
+
+        except PdfGenerationError as e:
             messages.error(self.request, f"Failed to render PDF: {str(e)}")
             # If error, stay on the same page. If we have PK, we should probably redirect or just render.
             # Ideally redirect to avoid resubmission issues, but we need errors.
@@ -856,7 +843,7 @@ def upload_cv(request):
         cv_file = request.FILES.get("cv_file")
         if not cv_file:
             return JsonResponse({"error": "No file uploaded."}, status=400)
-        print("[INFO]: CV file uploaded:", cv_file.name)
+        logger.info("CV file uploaded: %s", cv_file.name)
 
         # Ensure the uploaded file is a PDF
         if not cv_file.name.endswith(".pdf"):
@@ -881,8 +868,7 @@ def upload_cv(request):
         
         start_time = datetime.now()
         extracted_json_string = extract_resume_data(extracted_text)
-        print(f"OpenAI API response time: {datetime.now() - start_time}")
-        # print(f"[DEBUG] Raw OpenAI Response: {extracted_json_string}")
+        logger.info("OpenAI API response time: %s", datetime.now() - start_time)
 
         # Check for API Errors
         if extracted_json_string.startswith("OpenAI API") or extracted_json_string.startswith("Error:"):
@@ -922,7 +908,7 @@ def upload_cv(request):
             return JsonResponse({"status": "success", "resume_id": resume.pk})
 
         except json.JSONDecodeError as e:
-            print("[ERROR]: Failed to decode JSON:", str(e))
+            logger.error("Failed to decode JSON: %s", e)
             return JsonResponse({"error": "Failed to parse extracted JSON"}, status=500)
 
     return redirect("resume:index")
@@ -941,7 +927,7 @@ def upload_linkedin_cv(request):
             return JsonResponse({"error": "Monthly PDF import limit reached. Free plan allows 2 imports per month."}, status=403)
 
         linkedin_file = request.FILES["linkedin_file"]
-        print("[INFO]: LinkedIn file uploaded:", linkedin_file.name)
+        logger.info("LinkedIn file uploaded: %s", linkedin_file.name)
 
         if not linkedin_file.name.endswith(".pdf"):
             return JsonResponse({"error": "Only PDF files are allowed."}, status=400)
@@ -964,8 +950,7 @@ def upload_linkedin_cv(request):
         
         start_time = datetime.now()
         extracted_json_string = extract_linkedin_resume_data(extracted_text)
-        print(f"OpenAI API response time: {datetime.now() - start_time}")
-        # print(f"[DEBUG] Raw OpenAI Response: {extracted_json_string}")
+        logger.info("OpenAI API response time: %s", datetime.now() - start_time)
 
         # Check for API Errors
         if extracted_json_string.startswith("OpenAI API") or extracted_json_string.startswith("Error:"):
@@ -976,12 +961,12 @@ def upload_linkedin_cv(request):
             extracted_json_string = extracted_json_string.split("```json")[1].split("```")[0].strip()
         elif "```" in extracted_json_string:
              extracted_json_string = extracted_json_string.split("```")[1].strip()
-        
+
         extracted_json_string = extracted_json_string.strip()
 
         try:
             extracted_json = json.loads(extracted_json_string)
-            
+
             # Save to Database
             resume = Resume.objects.create(
                 user=request.user,
@@ -996,9 +981,9 @@ def upload_linkedin_cv(request):
 
             # Return resume ID for frontend redirect (AJAX-friendly)
             return JsonResponse({"status": "success", "resume_id": resume.pk})
-            
+
         except json.JSONDecodeError as e:
-            print("[ERROR]: Failed to decode JSON:", str(e))
+            logger.error("Failed to decode JSON: %s", e)
             return JsonResponse({"error": "Failed to parse extracted JSON"}, status=500)
 
     return redirect("resume:index")
@@ -1078,8 +1063,7 @@ def download_resume_pdf(request, pk):
             "generation_date": datetime.now().strftime("%Y-%m-%d"),
         }
 
-        pdf_service = ResumePdfService()
-        pdf_bytes = pdf_service.generate_resume_pdf(
+        pdf_bytes = resume_pdf_service.generate_resume_pdf(
             resume_data=resume_data,
             template_selector=resume.template_selector,
             request=request,

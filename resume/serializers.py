@@ -54,12 +54,7 @@ class ResumeDetailSerializer(serializers.ModelSerializer):
         if not isinstance(value, dict):
             raise serializers.ValidationError("Content must be a JSON object")
         
-        # Optional: Validate expected keys exist
-        expected_sections = ['user_info', 'education', 'experience', 'projects_and_publications']
-        missing = [key for key in expected_sections if key not in value]
-        
         # We don't enforce all sections - allow partial saves
-        # This is a "warn" not "error" scenario for MVP
         
         return value
 
