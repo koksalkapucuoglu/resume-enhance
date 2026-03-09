@@ -66,13 +66,19 @@ class UserProfile(models.Model):
     TIER_PRO = 'pro'
     TIER_CHOICES = [(TIER_FREE, 'Free'), (TIER_PRO, 'Pro')]
 
+    UI_STANDARD = 'standard'
+    UI_AGENTIC = 'agentic'
+    UI_MODE_CHOICES = [(UI_STANDARD, 'Standard'), (UI_AGENTIC, 'Agentic')]
+
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     tier = models.CharField(max_length=10, choices=TIER_CHOICES, default=TIER_FREE)
+    ui_mode = models.CharField(max_length=20, choices=UI_MODE_CHOICES, default=UI_STANDARD)
 
     # Monthly quota counters
     import_count = models.IntegerField(default=0)
     enhance_count = models.IntegerField(default=0)
     download_count = models.IntegerField(default=0)
+    agent_message_count = models.IntegerField(default=0)
     quota_reset_date = models.DateField(auto_now_add=True)
 
     def reset_if_new_month(self):
@@ -82,6 +88,7 @@ class UserProfile(models.Model):
             self.import_count = 0
             self.enhance_count = 0
             self.download_count = 0
+            self.agent_message_count = 0
             self.quota_reset_date = today
             self.save()
 
@@ -112,6 +119,14 @@ class UserProfile(models.Model):
         self.reset_if_new_month()
         from django.conf import settings
         return self.download_count < settings.FREE_TIER_LIMITS['download_count']
+
+    def can_send_agent_message(self):
+        """Check if user can send an agent chat message."""
+        if self.is_pro():
+            return True
+        self.reset_if_new_month()
+        from django.conf import settings
+        return self.agent_message_count < settings.FREE_TIER_LIMITS['agent_message_count']
 
     def can_create_resume(self):
         """Check if user can create a new resume."""

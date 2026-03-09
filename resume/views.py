@@ -10,6 +10,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.forms import formset_factory
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_http_methods
 from django.views.generic import ListView, TemplateView
 from PyPDF2 import PdfReader
@@ -47,9 +48,13 @@ def selection_page(request):
 
 class DashboardView(LoginRequiredMixin, ListView):
     model = Resume
-    template_name = "resume/dashboard.html"
     context_object_name = "resumes"
     ordering = ["-updated_at"]
+
+    def get_template_names(self):
+        if self.request.user.profile.ui_mode == 'agentic':
+            return ['resume/dashboard_agentic.html']
+        return ['resume/dashboard.html']
 
     def get_queryset(self):
         return Resume.objects.filter(user=self.request.user).order_by("-updated_at")
@@ -1068,7 +1073,11 @@ def download_resume_pdf(request, pk):
             template_selector=resume.template_selector,
             request=request,
         )
-        filename = f"{resume.owner_name or 'resume'}_{resume.pk}.pdf".replace(" ", "_")
+        raw_name = resume.owner_name or 'resume'
+        tr_map = str.maketrans('şıöüğçŞİÖÜĞÇ', 'siougcSIOUGC')
+        safe_name = raw_name.translate(tr_map)
+        safe_name = "".join(c if c.isascii() and (c.isalnum() or c in '-_. ') else '_' for c in safe_name)
+        filename = safe_name.replace(' ', '_') + f'_{resume.pk}.pdf'
         response = HttpResponse(pdf_bytes, content_type="application/pdf")
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
 
@@ -1138,3 +1147,173 @@ def test_faangpath_template(request):
     # If GET request or form validation failed, show the form
     context = get_init_values_for_resume_form()
     return render(request, "resume_form.html", context)
+
+
+# ---------------------------------------------------------------------------
+# Agentic dashboard — preview saved resume
+# ---------------------------------------------------------------------------
+
+@login_required
+@xframe_options_sameorigin
+@require_http_methods(["GET"])
+def preview_saved_resume(request, pk):
+    """
+    Renders a preview of a saved resume by its primary key.
+    Used by the agentic dashboard context panel (iframe src).
+    """
+    try:
+        resume = Resume.objects.get(pk=pk, user=request.user)
+    except Resume.DoesNotExist:
+        return HttpResponse("<p>Resume not found.</p>", status=404)
+
+    content = resume.content or {}
+    user_info = content.get("user_info", {})
+    experience_data = []
+    for exp in content.get("experience", []):
+        exp_copy = dict(exp)
+        desc = exp_copy.get("description", [])
+        if isinstance(desc, str):
+            exp_copy["description"] = [line for line in desc.split("\n") if line.strip()]
+        experience_data.append(exp_copy)
+
+    context = {
+        "user_data": user_info,
+        "education_data": content.get("education", []),
+        "experience_data": experience_data,
+        "project_data": content.get("projects_and_publications", []),
+        "generation_date": datetime.now().strftime("%Y-%m-%d"),
+    }
+    template_name = settings.TEMPLATE_SELECTOR_HTML_MAP.get(
+        resume.template_selector, "faangpath_simple_template_pdf.html"
+    )
+    return render(request, template_name, context)
+
+
+# ---------------------------------------------------------------------------
+# Agentic dashboard — chat endpoint
+# ---------------------------------------------------------------------------
+
+@login_required
+@require_http_methods(["POST"])
+def agent_chat(request):
+    """
+    JSON in:  {message, history, builder_state, active_resume_id}
+    JSON out: {type, message, ...extra fields, active_resume_id?}
+    """
+    from resume.services.agent_service import agent_service
+
+    try:
+        data = json.loads(request.body)
+    except (ValueError, KeyError):
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    message = data.get("message", "").strip()
+    if not message:
+        return JsonResponse({"error": "Empty message"}, status=400)
+
+    builder_state = data.get("builder_state")
+    active_resume_id = data.get("active_resume_id")
+
+    # Resolve active resume (IDOR-safe)
+    active_resume = None
+    if active_resume_id:
+        try:
+            active_resume = Resume.objects.get(pk=active_resume_id, user=request.user)
+        except Resume.DoesNotExist:
+            pass
+
+    profile = request.user.profile
+
+    # Check agent message quota BEFORE processing (saves LLM cost)
+    if not profile.can_send_agent_message():
+        lang = 'tr' if any(c in message for c in 'çğıöşüÇĞİÖŞÜ') else 'en'
+        msg = {
+            'en': "You've reached your monthly chat message limit (10). Upgrade to Pro for unlimited usage.",
+            'tr': "Aylık sohbet mesajı limitinize (10) ulaştınız. Sınırsız kullanım için Pro'ya geçin.",
+        }.get(lang)
+        return JsonResponse({"type": "chat", "message": msg, "quota_exceeded": True})
+
+    resume_qs = list(Resume.objects.filter(user=request.user).order_by("-updated_at"))
+    resumes = [
+        {
+            "rank": idx + 1,
+            "id": r.id,
+            "display_name": r.display_name,
+            "title": r.title,
+            "updated_at": r.updated_at.strftime("%Y-%m-%d %H:%M"),
+        }
+        for idx, r in enumerate(resume_qs)
+    ]
+
+    limits = settings.FREE_TIER_LIMITS
+    context = {
+        "resumes": resumes,
+        "active_resume_id": active_resume_id,
+        "quota": {
+            "import_remaining": max(0, limits["import_count"] - profile.import_count),
+            "enhance_remaining": max(0, limits["enhance_count"] - profile.enhance_count),
+            "download_remaining": max(0, limits["download_count"] - profile.download_count),
+            "resume_count": request.user.resumes.count(),
+            "resume_limit": limits["resume_count"],
+            "is_pro": profile.is_pro(),
+        },
+    }
+
+    # Multi-step conversational builder
+    if builder_state and builder_state.get("mode") == "build":
+        result = agent_service.handle_builder_step(message, builder_state, request.user)
+    else:
+        classified = agent_service.classify_intent(message, context, active_resume=active_resume)
+        lang = classified.get("lang", "en")
+        llm_msg = classified.pop("llm_message", None)
+        result = agent_service.execute_intent(
+            classified["intent"],
+            classified.get("params", {}),
+            request.user,
+            lang=lang,
+            builder_state=builder_state,
+            active_resume=active_resume,
+            user_message=message,
+        )
+        if llm_msg and result.get("type") == "chat" and not result.get("message"):
+            result["message"] = llm_msg
+
+    # Propagate active_resume_id to frontend so it stays in sync.
+    # For modify_resume / preview, update the active resume to the one that was acted on.
+    if result.get("type") in ("modify_resume", "preview") and result.get("resume_id"):
+        result["active_resume_id"] = result["resume_id"]
+    elif active_resume_id and result.get("type") not in ("redirect", "multi_step"):
+        # Keep existing active resume unless we're navigating away
+        result["active_resume_id"] = active_resume_id
+
+    # Increment agent message counter AFTER successful processing
+    profile.agent_message_count += 1
+    profile.save(update_fields=['agent_message_count'])
+
+    return JsonResponse({**result, "user_message": message})
+
+
+# ---------------------------------------------------------------------------
+# Agentic dashboard — toggle UI mode
+# ---------------------------------------------------------------------------
+
+@login_required
+@require_http_methods(["POST"])
+def toggle_agent_mode(request):
+    """
+    POST body: {mode: 'standard' | 'agentic'}
+    Returns:   {success: bool, mode: str}
+    """
+    try:
+        data = json.loads(request.body)
+    except (ValueError, KeyError):
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    mode = data.get("mode", "standard")
+    if mode not in ("standard", "agentic"):
+        return JsonResponse({"error": "Invalid mode"}, status=400)
+
+    profile = request.user.profile
+    profile.ui_mode = mode
+    profile.save(update_fields=["ui_mode"])
+    return JsonResponse({"success": True, "mode": profile.ui_mode})
