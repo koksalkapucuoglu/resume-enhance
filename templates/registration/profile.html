@@ -240,6 +240,36 @@
             </div>
             {% endif %}
 
+            <!-- Dashboard Mode Card -->
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-6">
+                <div class="px-6 py-4 border-b border-slate-100 bg-slate-50">
+                    <h2 class="font-semibold text-slate-900 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary">auto_awesome</span>
+                        Dashboard Mode
+                    </h2>
+                </div>
+                <div class="p-6">
+                    <p class="text-sm text-slate-600 mb-4">Choose how you want to interact with your resumes. <strong>Agentic mode</strong> gives you a conversational AI assistant to manage everything via natural language.</p>
+                    <div class="flex items-center gap-3 bg-slate-100 rounded-xl p-1.5 w-fit">
+                        <button id="profile-btn-standard"
+                                onclick="setUiMode('standard')"
+                                class="px-5 py-2 rounded-lg text-sm font-semibold transition-all {% if request.user.profile.ui_mode == 'standard' %}bg-white text-slate-800 shadow-sm{% else %}text-slate-500 hover:text-slate-700{% endif %}">
+                            Standard
+                        </button>
+                        <button id="profile-btn-agentic"
+                                onclick="setUiMode('agentic')"
+                                class="px-5 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 {% if request.user.profile.ui_mode == 'agentic' %}bg-primary text-white shadow-sm{% else %}text-slate-500 hover:text-slate-700{% endif %}">
+                            <span class="material-symbols-outlined !text-[16px]">auto_awesome</span>
+                            Agentic
+                        </button>
+                    </div>
+                    <p id="mode-saved-msg" class="hidden text-xs text-green-600 mt-3 flex items-center gap-1">
+                        <span class="material-symbols-outlined !text-[14px]">check_circle</span>
+                        Mode saved. Changes apply on next dashboard visit.
+                    </p>
+                </div>
+            </div>
+
             <!-- Change Password Card -->
             <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                 <div class="px-6 py-4 border-b border-slate-100 bg-slate-50">
@@ -347,5 +377,32 @@
             <p class="text-slate-400 text-xs font-medium">© 2026 ResuStack. All rights reserved.</p>
         </div>
     </footer>
+
+<script>
+function getCsrfToken() {
+    return document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith('csrftoken='))?.split('=')[1] || '';
+}
+
+async function setUiMode(mode) {
+    await fetch('{% url "resume:toggle_agent_mode" %}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken()},
+        body: JSON.stringify({mode}),
+    });
+
+    const stdBtn = document.getElementById('profile-btn-standard');
+    const agBtn  = document.getElementById('profile-btn-agentic');
+    if (mode === 'standard') {
+        stdBtn.className = stdBtn.className.replace('text-slate-500 hover:text-slate-700', 'bg-white text-slate-800 shadow-sm');
+        agBtn.className  = agBtn.className.replace('bg-primary text-white shadow-sm', 'text-slate-500 hover:text-slate-700');
+    } else {
+        agBtn.className  = agBtn.className.replace('text-slate-500 hover:text-slate-700', 'bg-primary text-white shadow-sm');
+        stdBtn.className = stdBtn.className.replace('bg-white text-slate-800 shadow-sm', 'text-slate-500 hover:text-slate-700');
+    }
+    const msg = document.getElementById('mode-saved-msg');
+    msg.classList.remove('hidden');
+    setTimeout(() => msg.classList.add('hidden'), 4000);
+}
+</script>
 </body>
 </html>

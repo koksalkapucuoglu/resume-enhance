@@ -18,4 +18,7 @@ urlpatterns = [
     path('upload-cv/', views.upload_cv, name="upload_cv"),
     path('upload-linkedin/', views.upload_linkedin_cv, name='upload_linkedin_cv'),
     path('resume/<int:pk>/download/', views.download_resume_pdf, name='download_resume_pdf'),
+    path('resume/<int:pk>/preview/', views.preview_saved_resume, name='preview_saved_resume'),
+    path('agent/chat/', views.agent_chat, name='agent_chat'),
+    path('agent/toggle-mode/', views.toggle_agent_mode, name='toggle_agent_mode'),
 ]

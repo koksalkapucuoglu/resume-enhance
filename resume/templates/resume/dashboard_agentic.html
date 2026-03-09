@@ -1,0 +1,740 @@
+{% load static %}
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Dashboard (Agentic) - ResuStack</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+    tailwind.config = {
+        darkMode: "class",
+        theme: {
+            extend: {
+                colors: {
+                    "primary": "#2563eb",
+                    "primary-hover": "#1d4ed8",
+                    "background-light": "#f1f5f9",
+                },
+                fontFamily: {
+                    "display": ["Inter", "sans-serif"],
+                    "sans": ["Inter", "sans-serif"]
+                },
+            },
+        },
+    }
+</script>
+<style type="text/tailwindcss">
+    @layer base { body { @apply font-display bg-background-light text-slate-900; } }
+    .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        font-size: 20px;
+    }
+    .bubble-bot {
+        @apply bg-white border border-slate-200 text-slate-800 rounded-2xl rounded-tl-sm px-4 py-3 max-w-[85%] text-sm leading-relaxed shadow-sm;
+    }
+    .bubble-user {
+        @apply bg-primary text-white rounded-2xl rounded-tr-sm px-4 py-3 max-w-[85%] text-sm leading-relaxed ml-auto;
+    }
+    @keyframes dot-bounce {
+        0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-6px)}
+    }
+    .typing-dot{animation:dot-bounce 1.2s infinite;}
+    .typing-dot:nth-child(2){animation-delay:.2s;}
+    .typing-dot:nth-child(3){animation-delay:.4s;}
+    .chat-scroll::-webkit-scrollbar{width:4px;}
+    .chat-scroll::-webkit-scrollbar-track{background:transparent;}
+    .chat-scroll::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:2px;}
+    .resume-mini-card {
+        @apply flex items-center gap-3 p-3 rounded-lg border border-slate-200 bg-slate-50 hover:bg-white hover:shadow-sm transition-all cursor-pointer;
+    }
+    .resume-mini-card.active-card {
+        @apply border-primary/40 bg-primary/5;
+    }
+</style>
+</head>
+<body class="min-h-screen">
+<div class="relative flex h-screen w-full flex-col overflow-hidden">
+
+    <!-- Header -->
+    <header class="flex items-center justify-between whitespace-nowrap border-b border-slate-200 bg-white px-4 md:px-8 py-3 z-10 flex-shrink-0">
+        <div class="flex items-center gap-3">
+            <img src="{% static 'img/resustack_logo.png' %}" alt="ResuStack Logo" class="h-7 w-auto object-contain"/>
+            <h2 class="text-slate-900 text-xl font-bold tracking-tight">ResuStack</h2>
+        </div>
+        <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2 bg-slate-100 rounded-lg p-1">
+                <button id="btn-standard" onclick="switchMode('standard')"
+                        class="px-3 py-1.5 rounded-md text-xs font-semibold transition-all text-slate-500 hover:text-slate-700">
+                    Standard
+                </button>
+                <button id="btn-agentic" onclick="switchMode('agentic')"
+                        class="px-3 py-1.5 rounded-md text-xs font-semibold transition-all bg-primary text-white shadow-sm">
+                    <span class="material-symbols-outlined !text-[14px] align-middle">auto_awesome</span>
+                    Agentic
+                </button>
+            </div>
+            <a href="{% url 'profile' %}" class="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold border border-slate-300 hover:bg-primary hover:text-white hover:border-primary transition-all text-sm" title="Profile">
+                {{ user.username|slice:":1"|upper }}
+            </a>
+            <a href="{% url 'logout' %}" class="flex items-center gap-1 text-slate-500 text-sm font-medium hover:text-red-500 transition-colors">
+                <span class="material-symbols-outlined text-lg">logout</span>
+                <span class="hidden sm:inline text-xs">Logout</span>
+            </a>
+        </div>
+    </header>
+
+    <!-- Main Split Pane -->
+    <div class="flex flex-1 overflow-hidden">
+
+        <!-- LEFT: Chat Panel (60%) -->
+        <div class="flex flex-col w-full lg:w-3/5 border-r border-slate-200 bg-white">
+
+            <!-- Chat Messages -->
+            <div id="chat-messages" class="chat-scroll flex-1 overflow-y-auto px-4 py-4 space-y-4">
+                <div class="flex items-start gap-2">
+                    <div class="w-7 h-7 rounded-full bg-primary flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <span class="material-symbols-outlined !text-[14px] text-white">auto_awesome</span>
+                    </div>
+                    <div class="bubble-bot" id="welcome-bubble">Loading...</div>
+                </div>
+            </div>
+
+            <!-- Active Resume Indicator (visible when a resume is selected) -->
+            <div id="active-resume-bar" class="hidden px-4 py-2 bg-primary/5 border-t border-primary/20 flex items-center gap-2 text-xs">
+                <span class="material-symbols-outlined !text-[14px] text-primary">edit_note</span>
+                <span class="text-primary font-medium">Editing:</span>
+                <span id="active-resume-label" class="text-primary font-semibold truncate flex-1"></span>
+                <button onclick="clearActiveResume()"
+                        class="text-slate-400 hover:text-slate-600 ml-auto flex-shrink-0 transition-colors"
+                        title="Clear active resume">
+                    <span class="material-symbols-outlined !text-[14px]">close</span>
+                </button>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="px-4 py-2 border-t border-slate-100 flex flex-wrap gap-2">
+                <button onclick="sendQuickAction('list_resumes')"
+                        class="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition-colors flex items-center gap-1">
+                    <span class="material-symbols-outlined !text-[14px]">list</span>List Resumes
+                </button>
+                <button onclick="sendQuickAction('check_quota')"
+                        class="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition-colors flex items-center gap-1">
+                    <span class="material-symbols-outlined !text-[14px]">speed</span>My Limits
+                </button>
+                <button onclick="sendQuickAction('create_blank_resume')"
+                        class="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition-colors flex items-center gap-1">
+                    <span class="material-symbols-outlined !text-[14px]">add</span>New Resume
+                </button>
+                <button onclick="sendQuickAction('upload_resume')"
+                        class="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition-colors flex items-center gap-1">
+                    <span class="material-symbols-outlined !text-[14px]">upload_file</span>Upload PDF
+                </button>
+                <button onclick="sendQuickAction('help')"
+                        class="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition-colors flex items-center gap-1">
+                    <span class="material-symbols-outlined !text-[14px]">help</span>Help
+                </button>
+            </div>
+
+            <!-- Input Area -->
+            <div class="px-4 py-3 border-t border-slate-200 bg-white">
+                <div class="flex items-end gap-2">
+                    <textarea id="chat-input" rows="1"
+                              placeholder="Type a message or command..."
+                              class="flex-1 resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all leading-relaxed max-h-32 overflow-y-auto"
+                              onkeydown="handleInputKeydown(event)"
+                              oninput="autoResizeTextarea(this)"></textarea>
+                    <button id="send-btn" onclick="sendMessage()"
+                            class="flex-shrink-0 w-11 h-11 rounded-xl bg-primary hover:bg-primary-hover text-white flex items-center justify-center transition-colors shadow-sm shadow-primary/30">
+                        <span class="material-symbols-outlined !text-[20px]">send</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT: Context Panel (40%) — desktop only -->
+        <div id="context-panel" class="hidden lg:flex flex-col w-2/5 bg-slate-50 overflow-hidden">
+
+            <!-- Default state -->
+            <div id="context-default" class="flex flex-col items-center justify-center flex-1 text-center px-8">
+                <div class="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-4">
+                    <span class="material-symbols-outlined text-slate-400 text-3xl">chat_bubble</span>
+                </div>
+                <h3 class="text-slate-700 font-semibold mb-2">Context Panel</h3>
+                <p class="text-slate-400 text-sm max-w-xs">Resume previews, lists, and quota info will appear here as you chat.</p>
+            </div>
+
+            <!-- Resume List Panel -->
+            <div id="context-resume-list" class="hidden flex-col flex-1 overflow-hidden">
+                <div class="px-4 py-3 border-b border-slate-200 bg-white flex items-center gap-2">
+                    <span class="material-symbols-outlined text-slate-500">description</span>
+                    <h3 class="font-semibold text-slate-700 text-sm">Your Resumes</h3>
+                </div>
+                <div id="resume-list-content" class="flex-1 overflow-y-auto p-4 space-y-2 chat-scroll"></div>
+            </div>
+
+            <!-- Preview Panel -->
+            <div id="context-preview" class="hidden flex-col flex-1 overflow-hidden">
+                <div class="px-4 py-3 border-b border-slate-200 bg-white flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-slate-500">preview</span>
+                        <h3 id="preview-title" class="font-semibold text-slate-700 text-sm truncate max-w-[160px]">Preview</h3>
+                    </div>
+                    <div class="flex gap-1">
+                        <a id="preview-edit-btn" href="#" target="_blank"
+                           class="p-1.5 rounded-md text-slate-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
+                            <span class="material-symbols-outlined !text-[16px]">edit</span>
+                        </a>
+                        <a id="preview-download-btn" href="#" download="resume.pdf"
+                           class="p-1.5 rounded-md text-slate-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Download PDF">
+                            <span class="material-symbols-outlined !text-[16px]">download</span>
+                        </a>
+                        <button onclick="refreshPreview()"
+                                class="p-1.5 rounded-md text-slate-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Refresh preview">
+                            <span class="material-symbols-outlined !text-[16px]">refresh</span>
+                        </button>
+                    </div>
+                </div>
+                <!-- Loading overlay -->
+                <div id="preview-loading" class="hidden absolute inset-0 bg-white/80 flex items-center justify-center z-10">
+                    <div class="flex flex-col items-center gap-2">
+                        <span class="material-symbols-outlined animate-spin text-primary text-3xl">autorenew</span>
+                        <p class="text-xs text-slate-500">Applying changes...</p>
+                    </div>
+                </div>
+                <div class="flex-1 overflow-hidden bg-slate-100 relative">
+                    <iframe id="context-iframe" class="w-full h-full border-0" src="about:blank"></iframe>
+                </div>
+            </div>
+
+            <!-- Quota Panel -->
+            <div id="context-quota" class="hidden flex-col p-4 gap-4">
+                <div class="flex items-center gap-2 pb-3 border-b border-slate-200">
+                    <span class="material-symbols-outlined text-slate-500">speed</span>
+                    <h3 class="font-semibold text-slate-700 text-sm">Usage Limits</h3>
+                </div>
+                <div id="quota-content" class="space-y-4"></div>
+            </div>
+
+            <!-- Confirm Panel -->
+            <div id="context-confirm" class="hidden flex-col p-6 justify-center">
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                            <span class="material-symbols-outlined text-red-500 !text-[20px]">delete</span>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-slate-900 text-sm" id="confirm-title">Delete Resume</h3>
+                            <p class="text-xs text-slate-500" id="confirm-subtitle"></p>
+                        </div>
+                    </div>
+                    <p class="text-slate-600 text-sm mb-6 leading-relaxed" id="confirm-message"></p>
+                    <div class="flex gap-3">
+                        <button onclick="cancelConfirm()"
+                                class="flex-1 py-2 rounded-lg border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors">
+                            Cancel
+                        </button>
+                        <button id="confirm-action-btn" onclick="executeConfirm()"
+                                class="flex-1 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm font-semibold transition-colors">
+                            Delete
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+let conversationHistory = [];
+let builderState = null;
+let pendingConfirm = null;
+let isSending = false;
+let activeResumeId = null;      // currently selected resume
+let activeResumeName = null;    // display name of active resume
+const CSRF_TOKEN = '{{ csrf_token }}';
+
+// ---------------------------------------------------------------------------
+// Init
+// ---------------------------------------------------------------------------
+document.addEventListener('DOMContentLoaded', () => {
+    const lang = navigator.language.startsWith('tr') ? 'tr' : 'en';
+    const welcomeMessages = {
+        en: "Hello! I'm your ResuStack assistant. I can list your resumes, show previews, download PDFs, and help you create or edit them.\n\nTip: Select a resume first, then describe any changes you want — in plain language!",
+        tr: "Merhaba! ResuStack asistaniyim. Resume'larinizi listeleyebilir, onizleme gosterebilir, PDF indirebilir ve duzenlemenize yardimci olabilirim.\n\nIpucu: Once bir resume secin, sonra istediginiz degisiklikleri dogal dille soyleyin!",
+    };
+    document.getElementById('welcome-bubble').innerHTML = formatMessage(welcomeMessages[lang] || welcomeMessages.en);
+    document.getElementById('chat-input').focus();
+});
+
+// ---------------------------------------------------------------------------
+// Mode toggle
+// ---------------------------------------------------------------------------
+async function switchMode(mode) {
+    if (mode === 'standard') {
+        await fetch('{% url "resume:toggle_agent_mode" %}', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN},
+            body: JSON.stringify({mode: 'standard'}),
+        });
+        window.location.href = '{% url "resume:dashboard" %}';
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Active resume management
+// ---------------------------------------------------------------------------
+function setActiveResume(id, name) {
+    activeResumeId = id;
+    activeResumeName = name;
+    const bar = document.getElementById('active-resume-bar');
+    const label = document.getElementById('active-resume-label');
+    if (id) {
+        label.textContent = name || `Resume ${id}`;
+        bar.classList.remove('hidden');
+        bar.classList.add('flex');
+        // Highlight active card in resume list if visible
+        document.querySelectorAll('.resume-mini-card').forEach(el => {
+            el.classList.toggle('active-card', el.dataset.resumeId == id);
+        });
+    } else {
+        bar.classList.add('hidden');
+        bar.classList.remove('flex');
+    }
+}
+
+function clearActiveResume() {
+    setActiveResume(null, null);
+    showContextDefault();
+}
+
+// ---------------------------------------------------------------------------
+// Send message
+// ---------------------------------------------------------------------------
+async function sendMessage(text) {
+    const input = document.getElementById('chat-input');
+    const msg = (text !== undefined ? text : input.value).trim();
+    if (!msg || isSending) return;
+
+    isSending = true;
+    if (text === undefined) { input.value = ''; autoResizeTextarea(input); }
+
+    appendMessage('user', msg);
+    showTyping();
+    setSendDisabled(true);
+
+    try {
+        const body = {message: msg, history: conversationHistory};
+        if (builderState) body.builder_state = builderState;
+        if (activeResumeId) body.active_resume_id = activeResumeId;
+
+        const resp = await fetch('{% url "resume:agent_chat" %}', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN},
+            body: JSON.stringify(body),
+        });
+        const data = await resp.json();
+
+        conversationHistory.push({role: 'user', content: msg});
+        conversationHistory.push({role: 'assistant', content: data.message || ''});
+
+        // Sync active resume from response
+        if (data.active_resume_id) {
+            setActiveResume(data.active_resume_id, data.resume_name || activeResumeName);
+        }
+
+        hideTyping();
+        handleResponse(data);
+    } catch (err) {
+        hideTyping();
+        appendMessage('bot', 'Error connecting to assistant. Please try again.');
+    }
+
+    isSending = false;
+    setSendDisabled(false);
+    input.focus();
+}
+
+function sendQuickAction(intentLabel) {
+    const labels = {
+        list_resumes: 'List my resumes',
+        check_quota: 'Show my limits',
+        create_blank_resume: 'Create a new resume',
+        upload_resume: 'Upload a PDF resume',
+        help: 'Help',
+    };
+    sendMessage(labels[intentLabel] || intentLabel);
+}
+
+// ---------------------------------------------------------------------------
+// Handle agent response
+// ---------------------------------------------------------------------------
+function handleResponse(data) {
+    const msg = data.message || '';
+    appendMessage('bot', msg);
+
+    switch (data.type) {
+        case 'chat':
+            if (data.data_type === 'resume_list' && data.data) {
+                renderResumeListPanel(data.data);
+            } else if (data.data_type === 'quota' && data.data) {
+                renderQuotaPanel(data.data);
+            } else {
+                // Keep current context panel if preview is shown
+                if (!activeResumeId) showContextDefault();
+            }
+            break;
+
+        case 'preview':
+            setActiveResume(data.resume_id, data.resume_name);
+            loadPreviewPanel(data.resume_id, data.resume_name);
+            break;
+
+        case 'modify_resume':
+            // Changes were saved — refresh the preview
+            setActiveResume(data.resume_id, data.resume_name || activeResumeName);
+            refreshPreviewAfterModify(data.resume_id, data.resume_name);
+            break;
+
+        case 'switch_template':
+            // Template changed — set active resume and refresh preview
+            setActiveResume(data.resume_id, data.resume_name || activeResumeName);
+            refreshPreviewAfterModify(data.resume_id, data.resume_name);
+            break;
+
+        case 'download':
+            triggerDownload(data.download_url, data.filename);
+            break;
+
+        case 'redirect':
+            builderState = null;
+            setTimeout(() => { window.location.href = data.url; }, 800);
+            break;
+
+        case 'create_choice':
+            renderCreateChoice(data.choices);
+            if (!activeResumeId) showContextDefault();
+            break;
+
+        case 'confirm':
+            pendingConfirm = {action: data.action, params: data.params};
+            showConfirmPanel(data);
+            break;
+
+        case 'multi_step':
+            builderState = data.session_data;
+            if (!activeResumeId) showContextDefault();
+            break;
+
+        default:
+            if (!activeResumeId) showContextDefault();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Context panel helpers
+// ---------------------------------------------------------------------------
+function showContextDefault() {
+    hideAllContextPanels();
+    document.getElementById('context-default').classList.remove('hidden');
+    document.getElementById('context-default').classList.add('flex');
+}
+
+function hideAllContextPanels() {
+    ['context-default','context-resume-list','context-preview',
+     'context-quota','context-confirm'].forEach(id => {
+        const el = document.getElementById(id);
+        el.classList.add('hidden');
+        el.classList.remove('flex');
+    });
+}
+
+function renderResumeListPanel(resumes) {
+    hideAllContextPanels();
+    const panel = document.getElementById('context-resume-list');
+    panel.classList.remove('hidden');
+    panel.classList.add('flex');
+
+    const container = document.getElementById('resume-list-content');
+    if (!resumes || resumes.length === 0) {
+        container.innerHTML = '<p class="text-slate-400 text-sm text-center py-8">No resumes yet.</p>';
+        return;
+    }
+    container.innerHTML = resumes.map(r => {
+        const isActive = activeResumeId && r.id == activeResumeId;
+        const safeName = escHtml(r.display_name || r.title);
+        return `
+        <div class="resume-mini-card group ${isActive ? 'active-card' : ''}"
+             data-resume-id="${r.id}"
+             data-resume-name="${safeName}"
+             onclick="selectResumeFromCard(this)">
+            <div class="w-9 h-9 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+                <span class="material-symbols-outlined !text-[18px] text-primary">description</span>
+            </div>
+            <div class="flex-1 min-w-0">
+                <p class="text-sm font-semibold text-slate-800 truncate">${safeName}</p>
+                <p class="text-xs text-slate-400">ID ${r.id} &middot; ${r.updated_at}</p>
+            </div>
+            <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onclick="event.stopPropagation(); sendMessage('Preview resume ${r.id}')"
+                        class="p-1 rounded text-slate-400 hover:text-primary" title="Preview">
+                    <span class="material-symbols-outlined !text-[14px]">preview</span>
+                </button>
+                <a href="/resume/${r.id}/download/" onclick="event.stopPropagation()"
+                   download="${safeName.replace(/\s+/g, '_')}_${r.id}.pdf"
+                   class="p-1 rounded text-slate-400 hover:text-primary" title="Download">
+                    <span class="material-symbols-outlined !text-[14px]">download</span>
+                </a>
+                <a href="/form/${r.id}/" onclick="event.stopPropagation()" target="_blank"
+                   class="p-1 rounded text-slate-400 hover:text-primary" title="Edit">
+                    <span class="material-symbols-outlined !text-[14px]">edit</span>
+                </a>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function selectResumeFromCard(el) {
+    const id = parseInt(el.dataset.resumeId, 10);
+    const name = el.dataset.resumeName || `Resume ${id}`;
+    selectResumeFromList(id, name);
+}
+
+function selectResumeFromList(id, name) {
+    setActiveResume(id, name);
+    loadPreviewPanel(id, name);
+    const displayName = name.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'");
+    appendMessage('bot', `**${displayName}** selected. You can now ask me to make changes to it.`);
+}
+
+function loadPreviewPanel(resumeId, title) {
+    hideAllContextPanels();
+    const panel = document.getElementById('context-preview');
+    panel.classList.remove('hidden');
+    panel.classList.add('flex');
+
+    document.getElementById('preview-title').textContent = title || `Resume ${resumeId}`;
+    document.getElementById('preview-edit-btn').href = `/form/${resumeId}/`;
+    const dlBtn = document.getElementById('preview-download-btn');
+    dlBtn.href = `/resume/${resumeId}/download/`;
+    dlBtn.download = `${(title || 'resume').replace(/\s+/g, '_')}_${resumeId}.pdf`;
+
+    const iframe = document.getElementById('context-iframe');
+    iframe.src = `/resume/${resumeId}/preview/`;
+}
+
+function refreshPreview() {
+    if (!activeResumeId) return;
+    const iframe = document.getElementById('context-iframe');
+    // Force reload by toggling src
+    const src = `/resume/${activeResumeId}/preview/?t=${Date.now()}`;
+    iframe.src = src;
+}
+
+function refreshPreviewAfterModify(resumeId, resumeName) {
+    // Show the preview panel (or refresh if already shown)
+    loadPreviewPanel(resumeId, resumeName || `Resume ${resumeId}`);
+    // Show brief loading indicator
+    const loading = document.getElementById('preview-loading');
+    if (loading) {
+        loading.classList.remove('hidden');
+        loading.classList.add('flex');
+        setTimeout(() => {
+            loading.classList.add('hidden');
+            loading.classList.remove('flex');
+        }, 1500);
+    }
+}
+
+function renderQuotaPanel(data) {
+    hideAllContextPanels();
+    const panel = document.getElementById('context-quota');
+    panel.classList.remove('hidden');
+    panel.classList.add('flex');
+    panel.classList.add('flex-col');
+
+    if (data.tier === 'pro') {
+        document.getElementById('quota-content').innerHTML =
+            '<div class="text-center py-4"><p class="text-slate-600 font-semibold mt-2">Pro Plan — Unlimited</p></div>';
+        return;
+    }
+    const bars = [
+        {label: 'PDF Imports',       remaining: data.import_remaining,          max: 2},
+        {label: 'AI Enhancements',   remaining: data.enhance_remaining,         max: 10},
+        {label: 'PDF Downloads',     remaining: data.download_remaining,        max: 5},
+        {label: 'Chat Messages',     remaining: data.agent_message_remaining,   max: 10},
+    ];
+    document.getElementById('quota-content').innerHTML = bars.map(b => {
+        const used = b.max - b.remaining;
+        const pct = Math.min(100, Math.round((used / b.max) * 100));
+        const color = pct >= 100 ? 'bg-red-400' : pct >= 70 ? 'bg-yellow-400' : 'bg-primary';
+        return `<div>
+            <div class="flex justify-between text-xs font-medium text-slate-600 mb-1">
+                <span>${b.label}</span><span>${b.remaining}/${b.max} left</span>
+            </div>
+            <div class="w-full bg-slate-200 rounded-full h-2">
+                <div class="${color} h-2 rounded-full" style="width:${pct}%"></div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function renderCreateChoice(choices) {
+    const container = document.getElementById('chat-messages');
+    const div = document.createElement('div');
+    div.className = 'flex items-start gap-2';
+    div.innerHTML = `
+        <div class="w-7 h-7 rounded-full bg-primary flex items-center justify-center flex-shrink-0 mt-0.5">
+            <span class="material-symbols-outlined !text-[14px] text-white">auto_awesome</span>
+        </div>
+        <div class="flex flex-col gap-2 max-w-[85%]">
+            ${choices.map(c => {
+                if (c.action === 'redirect') {
+                    return `<a href="${c.url}" class="px-4 py-2.5 rounded-xl border-2 border-primary text-primary font-semibold text-sm hover:bg-primary hover:text-white transition-all text-center">${escHtml(c.label)}</a>`;
+                }
+                return `<button onclick="sendMessage('${escHtml(c.label)}')" class="px-4 py-2.5 rounded-xl border-2 border-primary text-primary font-semibold text-sm hover:bg-primary hover:text-white transition-all">${escHtml(c.label)}</button>`;
+            }).join('')}
+        </div>`;
+    container.appendChild(div);
+    scrollToBottom();
+}
+
+function showConfirmPanel(data) {
+    hideAllContextPanels();
+    const panel = document.getElementById('context-confirm');
+    panel.classList.remove('hidden');
+    panel.classList.add('flex');
+    document.getElementById('confirm-title').textContent = 'Delete Resume';
+    document.getElementById('confirm-subtitle').textContent = data.resume_name || '';
+    document.getElementById('confirm-message').textContent =
+        'This resume will be permanently deleted. This action cannot be undone.';
+}
+
+function cancelConfirm() {
+    pendingConfirm = null;
+    if (activeResumeId) {
+        loadPreviewPanel(activeResumeId, activeResumeName);
+    } else {
+        showContextDefault();
+    }
+    appendMessage('bot', 'Operation cancelled.');
+}
+
+async function executeConfirm() {
+    if (!pendingConfirm) return;
+    const {action, params} = pendingConfirm;
+    pendingConfirm = null;
+
+    if (action === 'delete_resume') {
+        try {
+            await fetch(`/delete/${params.resume_id}/`, {
+                method: 'POST',
+                headers: {'X-CSRFToken': CSRF_TOKEN},
+            });
+            // Clear active resume if it was deleted
+            if (activeResumeId == params.resume_id) clearActiveResume();
+            else showContextDefault();
+            appendMessage('bot', 'Resume deleted successfully.');
+        } catch {
+            appendMessage('bot', 'Error deleting resume.');
+            showContextDefault();
+        }
+    }
+}
+
+function triggerDownload(url, filename) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || 'resume.pdf';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
+
+// ---------------------------------------------------------------------------
+// Chat UI helpers
+// ---------------------------------------------------------------------------
+function appendMessage(role, text) {
+    const container = document.getElementById('chat-messages');
+    const div = document.createElement('div');
+    div.className = 'flex items-start gap-2' + (role === 'user' ? ' justify-end' : '');
+    if (role === 'bot') {
+        div.innerHTML = `
+            <div class="w-7 h-7 rounded-full bg-primary flex items-center justify-center flex-shrink-0 mt-0.5">
+                <span class="material-symbols-outlined !text-[14px] text-white">auto_awesome</span>
+            </div>
+            <div class="bubble-bot">${formatMessage(text)}</div>`;
+    } else {
+        div.innerHTML = `<div class="bubble-user">${escHtml(text)}</div>`;
+    }
+    container.appendChild(div);
+    scrollToBottom();
+}
+
+function showTyping() {
+    const container = document.getElementById('chat-messages');
+    const div = document.createElement('div');
+    div.id = 'typing-indicator';
+    div.className = 'flex items-start gap-2';
+    div.innerHTML = `
+        <div class="w-7 h-7 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+            <span class="material-symbols-outlined !text-[14px] text-white">auto_awesome</span>
+        </div>
+        <div class="bubble-bot flex gap-1 py-3">
+            <span class="typing-dot w-2 h-2 rounded-full bg-slate-400 inline-block"></span>
+            <span class="typing-dot w-2 h-2 rounded-full bg-slate-400 inline-block"></span>
+            <span class="typing-dot w-2 h-2 rounded-full bg-slate-400 inline-block"></span>
+        </div>`;
+    container.appendChild(div);
+    scrollToBottom();
+}
+
+function hideTyping() {
+    const el = document.getElementById('typing-indicator');
+    if (el) el.remove();
+}
+
+function scrollToBottom() {
+    const c = document.getElementById('chat-messages');
+    c.scrollTop = c.scrollHeight;
+}
+
+function setSendDisabled(disabled) {
+    const btn = document.getElementById('send-btn');
+    btn.disabled = disabled;
+    btn.classList.toggle('opacity-50', disabled);
+}
+
+function handleInputKeydown(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+
+function autoResizeTextarea(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 128) + 'px';
+}
+
+function formatMessage(text) {
+    if (!text) return '';
+    let html = escHtml(text);
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/^- (.+)$/gm, '<li class="ml-4 list-disc">$1</li>');
+    html = html.replace(/(<li[^>]*>.*<\/li>\n?)+/g, m => `<ul class="my-1 space-y-0.5">${m}</ul>`);
+    html = html.replace(/\n/g, '<br>');
+    return html;
+}
+
+function escHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+              .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+</script>
+</body>
+</html>
