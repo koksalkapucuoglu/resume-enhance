@@ -79,12 +79,12 @@
             <div class="flex items-center gap-2 bg-slate-100 rounded-lg p-1">
                 <button id="btn-standard"
                         class="px-3 py-1.5 rounded-md text-xs font-semibold bg-white text-slate-700 shadow-sm">
-                    Standard
+                    {{ UI.mode_standard }}
                 </button>
                 <button id="btn-agentic" onclick="switchToAgentic()"
                         class="px-3 py-1.5 rounded-md text-xs font-semibold text-slate-500 hover:text-slate-700 transition-all flex items-center gap-1">
                     <span class="material-symbols-outlined !text-[14px]">auto_awesome</span>
-                    Agentic
+                    {{ UI.mode_agentic }}
                 </button>
             </div>
 
@@ -94,7 +94,7 @@
                 </a>
                 <a href="{% url 'logout' %}" class="flex items-center gap-1 text-slate-500 text-sm font-medium hover:text-red-500 transition-colors">
                     <span class="material-symbols-outlined text-lg">logout</span>
-                    <span class="hidden sm:inline">Logout</span>
+                    <span class="hidden sm:inline">{{ UI.logout }}</span>
                 </a>
             </div>
         </div>
@@ -107,13 +107,13 @@
             <!-- Page Header -->
             <div class="flex flex-wrap items-end justify-between gap-4 mb-6">
                 <div class="flex flex-col gap-1">
-                    <h1 class="text-slate-900 text-3xl font-black tracking-tight">My Resumes</h1>
-                    <p class="text-slate-500 text-sm">Manage and organize your professional documents</p>
+                    <h1 class="text-slate-900 text-3xl font-black tracking-tight">{{ UI.my_resumes }}</h1>
+                    <p class="text-slate-500 text-sm">{{ UI.manage_documents }}</p>
                 </div>
                 <!-- New Resume Button -->
                 <a href="{% url 'resume:selection_page' %}" class="flex min-w-[140px] items-center justify-center gap-2 rounded-lg h-11 px-6 bg-primary text-white text-sm font-bold tracking-wide hover:bg-primary-hover transition-all shadow-lg shadow-primary/20">
                     <span class="material-symbols-outlined">add</span>
-                    <span class="truncate">New Resume</span>
+                    <span class="truncate">{{ UI.new_resume }}</span>
                 </a>
             </div>
 
@@ -223,10 +223,10 @@
                     <div class="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm mb-4">
                         <span class="material-symbols-outlined text-slate-400 text-3xl">post_add</span>
                     </div>
-                    <h3 class="text-lg font-bold text-slate-900 mb-1">No resumes yet</h3>
-                    <p class="text-slate-500 mb-6 max-w-xs">Create your first professional resume in minutes with our AI tools.</p>
+                    <h3 class="text-lg font-bold text-slate-900 mb-1">{{ UI.no_resumes }}</h3>
+                    <p class="text-slate-500 mb-6 max-w-xs">{{ UI.no_resumes_hint }}</p>
                     <a href="{% url 'resume:selection_page' %}" class="px-6 py-2.5 bg-primary text-white rounded-lg font-bold hover:bg-primary-hover transition-colors shadow-sm">
-                        Create New Resume
+                        {{ UI.create_new_resume }}
                     </a>
                 </div>
             {% endif %}
@@ -262,13 +262,13 @@
                 
                 <!-- Modal Footer -->
                 <div class="flex gap-3 p-6 pt-4 border-t border-slate-100">
-                    <button onclick="hideConfirmModal()" 
+                    <button onclick="hideConfirmModal()"
                             class="flex-1 px-4 py-2.5 rounded-lg border border-slate-200 text-slate-600 font-medium text-sm hover:bg-slate-50 transition-colors">
-                        Cancel
+                        {{ UI.modal_cancel }}
                     </button>
                     <button id="modalConfirmBtn" onclick="confirmAction()"
                             class="flex-1 px-4 py-2.5 rounded-lg font-medium text-sm text-white transition-colors">
-                        Confirm
+                        {{ UI.modal_confirm }}
                     </button>
                 </div>
             </div>
@@ -296,20 +296,20 @@
             icon: 'content_copy',
             iconBg: 'bg-blue-100',
             iconColor: 'text-blue-600',
-            title: 'Duplicate Resume',
+            title: '{{ UI.modal_duplicate_title }}',
             subtitle: '',
-            message: 'A copy of this resume will be created. You will be redirected to edit the new copy.',
-            btnText: 'Duplicate',
+            message: '{{ UI.modal_duplicate_msg }}',
+            btnText: '{{ UI.btn_duplicate }}',
             btnClass: 'bg-primary hover:bg-primary-hover'
         },
         delete: {
             icon: 'delete',
             iconBg: 'bg-red-100',
             iconColor: 'text-red-600',
-            title: 'Delete Resume',
+            title: '{{ UI.modal_delete_title }}',
             subtitle: '',
-            message: 'This resume will be permanently deleted. This action cannot be undone.',
-            btnText: 'Delete',
+            message: '{{ UI.modal_delete_msg }}',
+            btnText: '{{ UI.btn_delete }}',
             btnClass: 'bg-red-500 hover:bg-red-600'
         }
     };

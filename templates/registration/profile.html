@@ -240,6 +240,30 @@
             </div>
             {% endif %}
 
+            <!-- Interface Language Card -->
+            <div class="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 shadow-sm mb-6">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
+                        <span class="material-symbols-outlined text-primary">language</span>
+                    </div>
+                    <div>
+                        <h2 class="text-slate-900 text-lg font-bold">{{ UI.language_setting }}</h2>
+                        <p class="text-slate-500 text-sm">{{ UI.language_hint }}</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button id="btn-lang-en" onclick="setLanguage('en')"
+                            class="px-4 py-2 rounded-lg text-sm font-semibold transition-all {% if ui_lang == 'en' %}bg-primary text-white shadow-sm{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
+                        🇬🇧 English
+                    </button>
+                    <button id="btn-lang-tr" onclick="setLanguage('tr')"
+                            class="px-4 py-2 rounded-lg text-sm font-semibold transition-all {% if ui_lang == 'tr' %}bg-primary text-white shadow-sm{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
+                        🇹🇷 Türkçe
+                    </button>
+                    <span id="lang-saved-msg" class="text-green-600 text-sm font-medium hidden ml-2">{{ UI.language_saved }}</span>
+                </div>
+            </div>
+
             <!-- Dashboard Mode Card -->
             <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-6">
                 <div class="px-6 py-4 border-b border-slate-100 bg-slate-50">
@@ -381,6 +405,18 @@
 <script>
 function getCsrfToken() {
     return document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith('csrftoken='))?.split('=')[1] || '';
+}
+
+async function setLanguage(lang) {
+    const res = await fetch("{% url 'resume:toggle_ui_language' %}", {
+        method: 'POST',
+        headers: {'X-CSRFToken': getCsrfToken(), 'Content-Type': 'application/json'},
+        body: JSON.stringify({language: lang}),
+    });
+    if (res.ok) {
+        // Reload to apply new translations
+        window.location.reload();
+    }
 }
 
 async function setUiMode(mode) {

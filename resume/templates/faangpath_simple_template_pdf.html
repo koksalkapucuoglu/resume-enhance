@@ -458,7 +458,7 @@
                 <h2 class="section-header">SKILLS</h2>
                 <hr class="section-line">
                 <div class="skills-content">
-                    {{ user_data.skills }}
+                    {{ user_data.skills|join:", " }}
                 </div>
             </section>
             {% endif %}

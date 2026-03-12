@@ -2,6 +2,7 @@ import subprocess
 import pathlib
 import logging
 
+
 class TexToPdfConverter:
     def __init__(self, tex_file_path: pathlib.Path):
         """
@@ -38,8 +39,7 @@ class TexToPdfConverter:
     def _check_tex_file_exists(self):
         """Check if the .tex file exists."""
         if not self.tex_file_path.is_file():
-            raise FileNotFoundError(
-                f"The file {self.tex_file_path} doesn't exist!")
+            raise FileNotFoundError(f"The file {self.tex_file_path} doesn't exist!")
 
     def _remove_existing_pdf(self):
         """Remove existing PDF file if it exists."""
@@ -52,24 +52,25 @@ class TexToPdfConverter:
             "pdflatex",
             # "-interaction=batchmode",
             "-interaction=nonstopmode",  # get more output and dont stop at errors
-            "-output-directory", str(self.output_directory),
-            # "-quiet",
-            str(self.tex_file_path)
+            "-output-directory",
+            str(self.output_directory),
+            # "-quiet",
+            str(self.tex_file_path),
         ]
         logging.info(f"Running command: {' '.join(command)}")
         logging.info(f"Running pdflatex for: {self.tex_file_path}")
         try:
             result = subprocess.run(
                 command,
-                # check=True,
-                check=False, # Changed to False to capture errors
+                # check=True,
+                check=False,  # Changed to False to capture errors
                 cwd=self.output_directory,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True, # For readable output
-                errors='replace' # Replace invalid chars instead of failing
+                text=True,  # For readable output
+                errors="replace",  # Replace invalid chars instead of failing
             )
-            
+
             logging.info(f"Return code: {result.returncode}")
             logging.info(f"stdout: {result.stdout}")
             logging.info(f"stderr: {result.stderr}")
@@ -78,11 +79,13 @@ class TexToPdfConverter:
                 # Check for log file
                 log_path = self.tex_file_path.with_suffix(".log")
                 if log_path.exists():
-                    with open(log_path, 'r', errors='replace') as f:
+                    with open(log_path, "r", errors="replace") as f:
                         log_content = f.read()
                         logging.error(f"PDFLaTeX log file content: {log_content}")
-                
-                logging.warning(f"PDFLaTeX completed with warnings/errors (code {result.returncode}), checking if PDF was still created")
+
+                logging.warning(
+                    f"PDFLaTeX completed with warnings/errors (code {result.returncode}), checking if PDF was still created"
+                )
                 # raise RuntimeError( f"Failed to render PDF (return code {result.returncode}): {result.stderr}")
         except Exception as e:
             logging.exception(f"Exception running pdflatex: {e}")
@@ -92,10 +95,13 @@ class TexToPdfConverter:
         """Ensure the PDF file was successfully created."""
         if not self.pdf_file_path.is_file():
             raise RuntimeError(
-                f"PDF file was not created as expected: {self.pdf_file_path}")
+                f"PDF file was not created as expected: {self.pdf_file_path}"
+            )
         else:
             pdf_size = self.pdf_file_path.stat().st_size
-            logging.info(f"PDF file created: {self.pdf_file_path} (Size: {pdf_size} bytes)")
+            logging.info(
+                f"PDF file created: {self.pdf_file_path} (Size: {pdf_size} bytes)"
+            )
             if pdf_size < 100:
                 logging.warning(f"PDF file suspiciously small: {pdf_size} bytes")
 
@@ -111,8 +117,10 @@ class TexToPdfConverter:
 
     def __str__(self) -> str:
         """Return a string representation of the TexToPdfConverter instance."""
-        return (f"TexToPdfConverter(\n"
-                f"  tex_file_path={self.tex_file_path},\n"
-                f"  output_directory={self.output_directory},\n"
-                f"  pdf_file_path={self.pdf_file_path}\n"
-                f")")
+        return (
+            f"TexToPdfConverter(\n"
+            f"  tex_file_path={self.tex_file_path},\n"
+            f"  output_directory={self.output_directory},\n"
+            f"  pdf_file_path={self.pdf_file_path}\n"
+            f")"
+        )

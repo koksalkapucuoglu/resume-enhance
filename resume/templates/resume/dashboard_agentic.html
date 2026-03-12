@@ -73,12 +73,12 @@
             <div class="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
                 <button id="btn-standard" onclick="switchMode('standard')"
                         class="px-2 sm:px-3 py-1.5 rounded-md text-xs font-semibold transition-all text-slate-500 hover:text-slate-700">
-                    Standard
+                    {{ UI.mode_standard }}
                 </button>
                 <button id="btn-agentic" onclick="switchMode('agentic')"
                         class="px-2 sm:px-3 py-1.5 rounded-md text-xs font-semibold transition-all bg-primary text-white shadow-sm">
                     <span class="material-symbols-outlined !text-[14px] align-middle">auto_awesome</span>
-                    Agentic
+                    {{ UI.mode_agentic }}
                 </button>
             </div>
             <a href="{% url 'profile' %}" class="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold border border-slate-300 hover:bg-primary hover:text-white hover:border-primary transition-all text-sm" title="Profile">
@@ -86,7 +86,7 @@
             </a>
             <a href="{% url 'logout' %}" class="flex items-center gap-1 text-slate-500 text-sm font-medium hover:text-red-500 transition-colors">
                 <span class="material-symbols-outlined text-lg">logout</span>
-                <span class="hidden sm:inline text-xs">Logout</span>
+                <span class="hidden sm:inline text-xs">{{ UI.logout }}</span>
             </a>
         </div>
     </header>
@@ -125,7 +125,7 @@
             <!-- Active Resume Indicator -->
             <div id="active-resume-bar" class="hidden px-4 py-2 bg-primary/5 border-t border-primary/20 flex items-center gap-2 text-xs">
                 <span class="material-symbols-outlined !text-[14px] text-primary">edit_note</span>
-                <span class="text-primary font-medium">Editing:</span>
+                <span class="text-primary font-medium">{{ UI.active_resume_label }}</span>
                 <span id="active-resume-label" class="text-primary font-semibold truncate flex-1 max-w-[60vw] lg:max-w-none"></span>
                 <button onclick="clearActiveResume()"
                         class="text-slate-400 hover:text-slate-600 ml-auto flex-shrink-0 transition-colors"
@@ -138,23 +138,23 @@
             <div class="px-4 py-2 border-t border-slate-100 flex overflow-x-auto gap-2 scrollbar-hide">
                 <button onclick="sendQuickAction('list_resumes')"
                         class="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition-colors flex items-center gap-1 flex-shrink-0">
-                    <span class="material-symbols-outlined !text-[14px]">list</span>List Resumes
+                    <span class="material-symbols-outlined !text-[14px]">list</span>{{ UI.quick_list }}
                 </button>
                 <button onclick="sendQuickAction('check_quota')"
                         class="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition-colors flex items-center gap-1 flex-shrink-0">
-                    <span class="material-symbols-outlined !text-[14px]">speed</span>My Limits
+                    <span class="material-symbols-outlined !text-[14px]">speed</span>{{ UI.quick_limits }}
                 </button>
                 <button onclick="sendQuickAction('create_blank_resume')"
                         class="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition-colors flex items-center gap-1 flex-shrink-0">
-                    <span class="material-symbols-outlined !text-[14px]">add</span>New Resume
+                    <span class="material-symbols-outlined !text-[14px]">add</span>{{ UI.quick_new }}
                 </button>
                 <button onclick="sendQuickAction('upload_resume')"
                         class="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition-colors flex items-center gap-1 flex-shrink-0">
-                    <span class="material-symbols-outlined !text-[14px]">upload_file</span>Upload PDF
+                    <span class="material-symbols-outlined !text-[14px]">upload_file</span>{{ UI.quick_upload }}
                 </button>
                 <button onclick="sendQuickAction('help')"
                         class="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition-colors flex items-center gap-1 flex-shrink-0">
-                    <span class="material-symbols-outlined !text-[14px]">help</span>Help
+                    <span class="material-symbols-outlined !text-[14px]">help</span>{{ UI.quick_help }}
                 </button>
             </div>
 
@@ -162,7 +162,7 @@
             <div class="px-4 py-3 border-t border-slate-200 bg-white">
                 <div class="flex items-end gap-2">
                     <textarea id="chat-input" rows="1"
-                              placeholder="Type a message or command..."
+                              placeholder="{{ UI.chat_placeholder }}"
                               class="flex-1 resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all leading-relaxed max-h-32 overflow-y-auto"
                               onkeydown="handleInputKeydown(event)"
                               oninput="autoResizeTextarea(this)"></textarea>
@@ -182,15 +182,15 @@
                 <div class="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-4">
                     <span class="material-symbols-outlined text-slate-400 text-3xl">chat_bubble</span>
                 </div>
-                <h3 class="text-slate-700 font-semibold mb-2">Context Panel</h3>
-                <p class="text-slate-400 text-sm max-w-xs">Resume previews, lists, and quota info will appear here as you chat.</p>
+                <h3 class="text-slate-700 font-semibold mb-2">{{ UI.context_default_title }}</h3>
+                <p class="text-slate-400 text-sm max-w-xs">{{ UI.context_default_hint }}</p>
             </div>
 
             <!-- Resume List Panel -->
             <div id="context-resume-list" class="hidden flex-col flex-1 overflow-hidden">
                 <div class="px-4 py-3 border-b border-slate-200 bg-white flex items-center gap-2">
                     <span class="material-symbols-outlined text-slate-500">description</span>
-                    <h3 class="font-semibold text-slate-700 text-sm">Your Resumes</h3>
+                    <h3 class="font-semibold text-slate-700 text-sm">{{ UI.context_resumes_title }}</h3>
                 </div>
                 <div id="resume-list-content" class="flex-1 overflow-y-auto p-4 space-y-2 chat-scroll"></div>
             </div>
@@ -200,7 +200,7 @@
                 <div class="px-4 py-3 border-b border-slate-200 bg-white flex items-center justify-between">
                     <div class="flex items-center gap-2">
                         <span class="material-symbols-outlined text-slate-500">preview</span>
-                        <h3 id="preview-title" class="font-semibold text-slate-700 text-sm truncate max-w-[160px]">Preview</h3>
+                        <h3 id="preview-title" class="font-semibold text-slate-700 text-sm truncate max-w-[160px]">{{ UI.context_preview_title }}</h3>
                     </div>
                     <div class="flex gap-1">
                         <a id="preview-edit-btn" href="#" target="_blank"
@@ -233,7 +233,7 @@
             <div id="context-quota" class="hidden flex-col p-4 gap-4">
                 <div class="flex items-center gap-2 pb-3 border-b border-slate-200">
                     <span class="material-symbols-outlined text-slate-500">speed</span>
-                    <h3 class="font-semibold text-slate-700 text-sm">Usage Limits</h3>
+                    <h3 class="font-semibold text-slate-700 text-sm">{{ UI.context_quota_title }}</h3>
                 </div>
                 <div id="quota-content" class="space-y-4"></div>
             </div>
@@ -254,11 +254,11 @@
                     <div class="flex gap-3">
                         <button onclick="cancelConfirm()"
                                 class="flex-1 py-2 rounded-lg border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors">
-                            Cancel
+                            {{ UI.context_confirm_cancel }}
                         </button>
                         <button id="confirm-action-btn" onclick="executeConfirm()"
                                 class="flex-1 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm font-semibold transition-colors">
-                            Delete
+                            {{ UI.context_confirm_delete }}
                         </button>
                     </div>
                 </div>
@@ -303,6 +303,8 @@ let activeResumeName = null;
 let mobileActiveTab = 'chat';
 const CSRF_TOKEN = '{{ csrf_token }}';
 const PROACTIVE_SUGGESTIONS = {{ proactive_suggestions|default:"[]"|safe }};
+const BADGE_MODERN = "{{ UI.badge_modern }}";
+const BADGE_CLASSIC = "{{ UI.badge_classic }}";
 
 // ---------------------------------------------------------------------------
 // localStorage keys
@@ -336,12 +338,9 @@ function persistBuilderState() {
 // Init
 // ---------------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', () => {
-    const lang = navigator.language.startsWith('tr') ? 'tr' : 'en';
-    const welcomeMessages = {
-        en: "Hello! I'm your ResuStack assistant. I can list your resumes, show previews, download PDFs, analyze strength, and help you create or edit them.\n\nTip: Select a resume first, then describe any changes you want — in plain language!",
-        tr: "Merhaba! ResuStack asistaniyim. Resume'larinizi listeleyebilir, onizleme gosterebilir, PDF indirebilir, guc analizi yapabilir ve duzenlemenize yardimci olabilirim.\n\nIpucu: Once bir resume secin, sonra istediginiz degisiklikleri dogal dille soyleyin!",
-    };
-    document.getElementById('welcome-bubble').innerHTML = formatMessage(welcomeMessages[lang] || welcomeMessages.en);
+    const lang = "{{ ui_lang }}";
+    const welcomeMsg = `{{ UI.welcome_msg|escapejs }}`;
+    document.getElementById('welcome-bubble').innerHTML = formatMessage(welcomeMsg);
 
     // Restore active resume from localStorage
     try {
@@ -543,15 +542,16 @@ async function sendMessage(text) {
     input.focus();
 }
 
+const quickActionLabels = {
+    list_resumes: '{{ UI.quick_list }} resumes',
+    check_quota: '{{ UI.quick_limits }}',
+    create_blank_resume: '{{ UI.quick_new }}',
+    upload_resume: '{{ UI.quick_upload }}',
+    help: '{{ UI.quick_help }}',
+};
+
 function sendQuickAction(intentLabel) {
-    const labels = {
-        list_resumes: 'List my resumes',
-        check_quota: 'Show my limits',
-        create_blank_resume: 'Create a new resume',
-        upload_resume: 'Upload a PDF resume',
-        help: 'Help',
-    };
-    sendMessage(labels[intentLabel] || intentLabel);
+    sendMessage(quickActionLabels[intentLabel] || intentLabel);
 }
 
 // ---------------------------------------------------------------------------
@@ -564,6 +564,7 @@ function handleResponse(data) {
         case 'chat':
             appendMessageAnimated('bot', msg);
             if (data.data_type === 'resume_list' && data.data) {
+                appendResumeCardsToChat(data.data);
                 renderResumeListPanel(data.data);
                 showContextBadge();
             } else if (data.data_type === 'quota' && data.data) {
@@ -687,6 +688,29 @@ function hideAllContextPanels() {
     });
 }
 
+function appendResumeCardsToChat(resumes) {
+    if (!resumes || resumes.length === 0) return;
+    const container = document.getElementById('chat-messages');
+    const div = document.createElement('div');
+    div.className = 'ml-9 mt-1.5 flex flex-col gap-1.5';
+    div.innerHTML = resumes.map(r => {
+        const safeName = escHtml(r.display_name || r.title || `Resume ${r.id}`);
+        const tpl = r.template_selector || 'faangpath-simple';
+        const badgeColor = tpl === 'modern-sidebar' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700';
+        const badgeLabel = tpl === 'modern-sidebar' ? BADGE_MODERN : BADGE_CLASSIC;
+        return `<div class="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 hover:bg-white hover:shadow-sm transition-all cursor-pointer"
+                     data-resume-id="${r.id}" data-resume-name="${safeName}"
+                     onclick="selectResumeFromCard(this)">
+            <span class="material-symbols-outlined !text-[15px] text-primary flex-shrink-0">description</span>
+            <span class="text-sm font-medium text-slate-800 truncate flex-1">${safeName}</span>
+            <span class="text-[10px] px-1.5 py-0.5 rounded-full ${badgeColor} font-medium flex-shrink-0">${badgeLabel}</span>
+            <span class="text-[10px] text-slate-400 flex-shrink-0">${r.updated_at}</span>
+        </div>`;
+    }).join('');
+    container.appendChild(div);
+    scrollToBottom();
+}
+
 function renderResumeListPanel(resumes) {
     hideAllContextPanels();
     const panel = document.getElementById('context-resume-list');
@@ -703,7 +727,7 @@ function renderResumeListPanel(resumes) {
         const safeName = escHtml(r.display_name || r.title);
         const tpl = r.template_selector || 'faangpath-simple';
         const badgeColor = tpl === 'modern-sidebar' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700';
-        const badgeLabel = tpl === 'modern-sidebar' ? 'Modern' : 'Classic';
+        const badgeLabel = tpl === 'modern-sidebar' ? BADGE_MODERN : BADGE_CLASSIC;
         return `
         <div class="resume-mini-card group ${isActive ? 'active-card' : ''}"
              data-resume-id="${r.id}"

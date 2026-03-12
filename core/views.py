@@ -1,6 +1,7 @@
 """
 Authentication views for user signup and profile.
 """
+
 from django import forms
 from django.conf import settings
 from django.contrib import messages
@@ -15,21 +16,21 @@ from django.views import View
 
 class SignupForm(UserCreationForm):
     """Custom signup form with email field."""
+
     email = forms.EmailField(
         required=True,
-        widget=forms.EmailInput(attrs={
-            'class': 'form-input',
-            'placeholder': 'you@example.com'
-        })
+        widget=forms.EmailInput(
+            attrs={"class": "form-input", "placeholder": "you@example.com"}
+        ),
     )
-    
+
     class Meta:
         model = User
-        fields = ('username', 'email', 'password1', 'password2')
-    
+        fields = ("username", "email", "password1", "password2")
+
     def save(self, commit=True):
         user = super().save(commit=False)
-        user.email = self.cleaned_data['email']
+        user.email = self.cleaned_data["email"]
         if commit:
             user.save()
         return user
@@ -37,27 +38,27 @@ class SignupForm(UserCreationForm):
 
 class SignupView(View):
     """User registration view."""
-    
+
     def get(self, request):
         """Display signup form."""
         if request.user.is_authenticated:
-            return redirect('resume:index')
-        
+            return redirect("resume:index")
+
         form = SignupForm()
-        return render(request, 'registration/signup.html', {'form': form})
-    
+        return render(request, "registration/signup.html", {"form": form})
+
     def post(self, request):
         """Process signup form."""
         form = SignupForm(request.POST)
         if form.is_valid():
             user = form.save()
             login(request, user)  # Auto-login after signup
-            return redirect('resume:index')
-        
-        return render(request, 'registration/signup.html', {'form': form})
+            return redirect("resume:index")
+
+        return render(request, "registration/signup.html", {"form": form})
 
 
-@method_decorator(login_required, name='dispatch')
+@method_decorator(login_required, name="dispatch")
 class ProfileView(View):
     """User profile view with password change."""
 
@@ -66,20 +67,38 @@ class ProfileView(View):
         profile = request.user.profile
         limits = settings.FREE_TIER_LIMITS
         return {
-            'import_percent': int((profile.import_count / limits['import_count']) * 100) if limits['import_count'] > 0 else 0,
-            'enhance_percent': int((profile.enhance_count / limits['enhance_count']) * 100) if limits['enhance_count'] > 0 else 0,
-            'download_percent': int((profile.download_count / limits['download_count']) * 100) if limits['download_count'] > 0 else 0,
-            'resume_percent': int((request.user.resumes.count() / limits['resume_count']) * 100) if limits['resume_count'] > 0 else 0,
+            "import_percent": int((profile.import_count / limits["import_count"]) * 100)
+            if limits["import_count"] > 0
+            else 0,
+            "enhance_percent": int(
+                (profile.enhance_count / limits["enhance_count"]) * 100
+            )
+            if limits["enhance_count"] > 0
+            else 0,
+            "download_percent": int(
+                (profile.download_count / limits["download_count"]) * 100
+            )
+            if limits["download_count"] > 0
+            else 0,
+            "resume_percent": int(
+                (request.user.resumes.count() / limits["resume_count"]) * 100
+            )
+            if limits["resume_count"] > 0
+            else 0,
         }
 
     def get(self, request):
         """Display profile page."""
         password_form = PasswordChangeForm(request.user)
-        return render(request, 'registration/profile.html', {
-            'password_form': password_form,
-            'settings': settings,
-            'quota_percentages': self._get_quota_percentages(request),
-        })
+        return render(
+            request,
+            "registration/profile.html",
+            {
+                "password_form": password_form,
+                "settings": settings,
+                "quota_percentages": self._get_quota_percentages(request),
+            },
+        )
 
     def post(self, request):
         """Handle password change."""
@@ -89,11 +108,15 @@ class ProfileView(View):
             user = password_form.save()
             # Keep user logged in after password change
             update_session_auth_hash(request, user)
-            messages.success(request, 'Your password has been changed successfully!')
-            return redirect('profile')
+            messages.success(request, "Your password has been changed successfully!")
+            return redirect("profile")
 
-        return render(request, 'registration/profile.html', {
-            'password_form': password_form,
-            'settings': settings,
-            'quota_percentages': self._get_quota_percentages(request),
-        })
+        return render(
+            request,
+            "registration/profile.html",
+            {
+                "password_form": password_form,
+                "settings": settings,
+                "quota_percentages": self._get_quota_percentages(request),
+            },
+        )
