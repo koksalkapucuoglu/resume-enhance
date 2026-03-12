@@ -15,16 +15,18 @@ from django.views.decorators.http import require_http_methods
 from django.views.generic import ListView, TemplateView
 from PyPDF2 import PdfReader
 
-from resume.forms import (
-    UserInfoForm, EducationForm, ExperienceForm, ProjectForm
-)
+from resume.forms import UserInfoForm, EducationForm, ExperienceForm, ProjectForm
 from resume.openai_engine import (
     enhance_resume_experience,
     enhance_project_description,
     extract_resume_data,
     extract_linkedin_resume_data,
 )
-from resume.services.pdf_service import ResumePdfService, PdfGenerationError, resume_pdf_service
+from resume.services.pdf_service import (
+    ResumePdfService,
+    PdfGenerationError,
+    resume_pdf_service,
+)
 from resume.models import Resume
 
 logger = logging.getLogger(__name__)
@@ -34,11 +36,54 @@ ExperienceFormSet = formset_factory(ExperienceForm, extra=0)
 ProjectFormSet = formset_factory(ProjectForm, extra=0)
 
 
+def _normalize_skills(skills) -> list:
+    """Normalize skills to a list regardless of input format.
+
+    Accepts a comma-separated string (from form CharField) or a list (from JSON).
+    Returns a list of non-empty, stripped skill strings.
+    """
+    if isinstance(skills, list):
+        return [s.strip() for s in skills if str(s).strip()]
+    if isinstance(skills, str):
+        return [s.strip() for s in skills.split(",") if s.strip()]
+    return []
+
+
+def _auto_title_from_content(content: dict, prefix: str = "") -> str:
+    """Generate a descriptive resume title from parsed content.
+
+    Prefers most recent job title + company (e.g. 'Software Engineer at Google').
+    Falls back to full name or a generic dated label.
+    """
+    experiences = content.get("experience", [])
+    if experiences:
+        exp = experiences[0]
+        job_title = exp.get("title", "").strip()
+        company = exp.get("company", "").strip()
+        if job_title and company:
+            base = f"{job_title} at {company}"
+        elif job_title:
+            base = job_title
+        else:
+            base = ""
+        if base:
+            return f"{prefix} — {base}" if prefix else base
+
+    full_name = content.get("user_info", {}).get("full_name", "").strip()
+    if full_name:
+        label = f"{prefix} — {full_name}" if prefix else full_name
+        return f"{label} · {datetime.now().strftime('%b %Y')}"
+
+    label = prefix or "Resume"
+    return f"{label} · {datetime.now().strftime('%b %Y')}"
+
+
 def landing_page(request):
     """Landing page for anonymous and logged-in users."""
     if request.user.is_authenticated:
-        return redirect('resume:dashboard')
+        return redirect("resume:dashboard")
     return render(request, "index.html")
+
 
 @login_required
 def selection_page(request):
@@ -52,50 +97,69 @@ class DashboardView(LoginRequiredMixin, ListView):
     ordering = ["-updated_at"]
 
     def get_template_names(self):
-        if self.request.user.profile.ui_mode == 'agentic':
-            return ['resume/dashboard_agentic.html']
-        return ['resume/dashboard.html']
+        if self.request.user.profile.ui_mode == "agentic":
+            return ["resume/dashboard_agentic.html"]
+        return ["resume/dashboard.html"]
 
     def get_queryset(self):
         return Resume.objects.filter(user=self.request.user).order_by("-updated_at")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['settings'] = settings
+        context["settings"] = settings
 
         # Proactive suggestions for agentic dashboard
-        if self.request.user.profile.ui_mode == 'agentic':
+        if self.request.user.profile.ui_mode == "agentic":
             suggestions = []
             resumes = list(self.get_queryset())
             if not resumes:
-                suggestions.append({
-                    'message': "Get started by creating your first resume!",
-                    'message_tr': "İlk resume'unuzu oluşturarak başlayın!",
-                    'chips': ['Create new resume', 'Upload PDF'],
-                    'chips_tr': ['Yeni resume oluştur', 'PDF yükle'],
-                })
+                suggestions.append(
+                    {
+                        "message": "Get started by creating your first resume!",
+                        "message_tr": "İlk resume'unuzu oluşturarak başlayın!",
+                        "chips": ["Create new resume", "Upload PDF"],
+                        "chips_tr": ["Yeni resume oluştur", "PDF yükle"],
+                    }
+                )
             else:
                 from django.utils import timezone
+
                 for r in resumes[:3]:
                     days_old = (timezone.now() - r.updated_at).days
                     if days_old > 90:
                         months = days_old // 30
-                        suggestions.append({
-                            'message': f"**{r.display_name}** hasn't been updated in {months} month{'s' if months != 1 else ''}. Want to refresh it?",
-                            'message_tr': f"**{r.display_name}** {months} aydır güncellenmedi. Yenilemek ister misiniz?",
-                            'chips': [f'Preview resume {r.id}', f'Analyze resume {r.id}'],
-                            'chips_tr': [f'Resume {r.id}\'yi önizle', f'Resume {r.id}\'yi analiz et'],
-                        })
+                        suggestions.append(
+                            {
+                                "message": f"**{r.display_name}** hasn't been updated in {months} month{'s' if months != 1 else ''}. Want to refresh it?",
+                                "message_tr": f"**{r.display_name}** {months} aydır güncellenmedi. Yenilemek ister misiniz?",
+                                "chips": [
+                                    f"Preview resume {r.id}",
+                                    f"Analyze resume {r.id}",
+                                ],
+                                "chips_tr": [
+                                    f"Resume {r.id}'yi önizle",
+                                    f"Resume {r.id}'yi analiz et",
+                                ],
+                            }
+                        )
                     content = r.content or {}
-                    skills = content.get('user_info', {}).get('skills', [])
+                    skills = content.get("user_info", {}).get("skills", [])
                     if not skills:
-                        suggestions.append({
-                            'message': f"**{r.display_name}** has no skills listed. Adding skills helps ATS matching!",
-                            'message_tr': f"**{r.display_name}** için yetenek eklenmemiş. Yetenek eklemek ATS eşleşmesine yardımcı olur!",
-                            'chips': [f'Edit resume {r.id}', f'Analyze resume {r.id}'],
-                            'chips_tr': [f'Resume {r.id}\'yi düzenle', f'Resume {r.id}\'yi analiz et'],
-                        })
-            context['proactive_suggestions'] = json.dumps(suggestions[:3])
+                        suggestions.append(
+                            {
+                                "message": f"**{r.display_name}** has no skills listed. Adding skills helps ATS matching!",
+                                "message_tr": f"**{r.display_name}** için yetenek eklenmemiş. Yetenek eklemek ATS eşleşmesine yardımcı olur!",
+                                "chips": [
+                                    f"Edit resume {r.id}",
+                                    f"Analyze resume {r.id}",
+                                ],
+                                "chips_tr": [
+                                    f"Resume {r.id}'yi düzenle",
+                                    f"Resume {r.id}'yi analiz et",
+                                ],
+                            }
+                        )
+            context["proactive_suggestions"] = json.dumps(suggestions[:3])
         return context
 
 
@@ -110,7 +174,10 @@ def duplicate_resume(request, pk):
     # QUOTA: Check resume creation limit
     profile = request.user.profile
     if not profile.can_create_resume():
-        messages.error(request, f"Resume limit reached. Free plan allows {settings.FREE_TIER_LIMITS['resume_count']} resumes. Upgrade to Pro for unlimited resumes.")
+        messages.error(
+            request,
+            f"Resume limit reached. Free plan allows {settings.FREE_TIER_LIMITS['resume_count']} resumes. Upgrade to Pro for unlimited resumes.",
+        )
         return redirect("resume:dashboard")
 
     try:
@@ -120,7 +187,7 @@ def duplicate_resume(request, pk):
         new_resume = Resume.objects.create(
             user=request.user,
             title=f"{original_resume.title} (Copy)",
-            content=original_resume.content.copy()  # Deep copy the JSON content
+            content=original_resume.content.copy(),  # Deep copy the JSON content
         )
 
         messages.success(request, "Resume duplicated successfully!")
@@ -142,13 +209,16 @@ def delete_resume(request, pk):
         resume = Resume.objects.get(pk=pk, user=request.user)
         resume_name = resume.display_name
         resume.delete()
-        
+
         messages.success(request, f"'{resume_name}' has been deleted successfully.")
         return redirect("resume:dashboard")
-        
+
     except Resume.DoesNotExist:
-        messages.error(request, "Resume not found or you don't have permission to delete it.")
+        messages.error(
+            request, "Resume not found or you don't have permission to delete it."
+        )
         return redirect("resume:dashboard")
+
 
 def get_init_values_for_resume_form():
     """
@@ -274,13 +344,13 @@ def populate_formsets_from_extracted_json(extracted_json):
             return date_value
         if isinstance(date_value, str):
             # Handle formats like "2020-05", "2020", etc.
-            year_str = date_value.split('-')[0] if '-' in date_value else date_value
+            year_str = date_value.split("-")[0] if "-" in date_value else date_value
             try:
                 return int(year_str)
             except (ValueError, TypeError):
                 return None
         return None
-    
+
     education_initial = [
         {
             "school": edu.get("school", ""),
@@ -300,15 +370,17 @@ def populate_formsets_from_extracted_json(extracted_json):
         desc = exp.get("description", "")
         if isinstance(desc, list):
             desc = "\n\n".join(desc)  # Double newline for visual spacing
-        
-        experience_initial.append({
-            "title": exp.get("title", ""),
-            "company": exp.get("company", ""),
-            "start_date": exp.get("start_date", ""),
-            "end_date": exp.get("end_date", ""),
-            "current_role": exp.get("current_role", False),
-            "description": desc,
-        })
+
+        experience_initial.append(
+            {
+                "title": exp.get("title", ""),
+                "company": exp.get("company", ""),
+                "start_date": exp.get("start_date", ""),
+                "end_date": exp.get("end_date", ""),
+                "current_role": exp.get("current_role", False),
+                "description": desc,
+            }
+        )
     experience_formset = ExperienceFormSet(
         initial=experience_initial, prefix="experience"
     )
@@ -331,6 +403,7 @@ def populate_formsets_from_extracted_json(extracted_json):
         "project_formset": project_formset,
     }
 
+
 def clean_data_for_json(data):
     """
     Recursively converts date/datetime objects to strings for JSON serialization.
@@ -349,6 +422,7 @@ class ResumeFormView(TemplateView):
     Handle the display and processing of a resume form.
     Source: Database (Resume model)
     """
+
     template_name = "resume_form.html"
 
     def get_object(self):
@@ -369,6 +443,7 @@ class ResumeFormView(TemplateView):
             context = populate_formsets_from_extracted_json(resume.content)
             context["resume_id"] = resume.pk
             context["saved_template"] = resume.template_selector
+            context["saved_title"] = resume.title
         else:
             # Fallback for "Create New" flow without upload
             context = get_init_values_for_resume_form()
@@ -401,21 +476,23 @@ class ResumeFormView(TemplateView):
                 experience_data.append(cleaned_data)
         return experience_data
 
-    
-    def _prepare_resume_context(self, user_form, education_formset, experience_formset, project_formset):
+    def _prepare_resume_context(
+        self, user_form, education_formset, experience_formset, project_formset
+    ):
         """
         Prepare context data for resume generation.
-        
+
         Args:
             user_form: User information form
             education_formset: Education formset
-            experience_formset: Experience formset  
+            experience_formset: Experience formset
             project_formset: Project formset
-            
+
         Returns:
             dict: Context data for resume generation
         """
-        user_data = user_form.cleaned_data
+        user_data = dict(user_form.cleaned_data)
+        user_data["skills"] = _normalize_skills(user_data.get("skills", []))
         education_data = [
             form.cleaned_data for form in education_formset if form.cleaned_data
         ]
@@ -468,28 +545,28 @@ class ResumeFormView(TemplateView):
     def _generate_pdf_file(self, context):
         """
         Generate PDF file using WeasyPrint.
-        
+
         Args:
             context: Resume data context
-            
+
         Returns:
             HttpResponse: PDF file response
         """
         try:
             # Get template selector from request
-            template_selector = self.request.POST.get('template', 'faangpath-simple')
-            
+            template_selector = self.request.POST.get("template", "faangpath-simple")
+
             resume_pdf_service = ResumePdfService()
             pdf_bytes = resume_pdf_service.generate_resume_pdf(
                 resume_data=context,
                 template_selector=template_selector,
-                request=self.request
+                request=self.request,
             )
-            
+
             response = HttpResponse(pdf_bytes, content_type="application/pdf")
             response["Content-Disposition"] = 'inline; filename="resume.pdf"'
             return response
-            
+
         except PdfGenerationError as e:
             messages.error(self.request, f"Failed to generate PDF: {str(e)}")
             raise
@@ -510,7 +587,7 @@ class ResumeFormView(TemplateView):
             if not profile.can_create_resume():
                 error_msg = f"Resume limit reached. Free plan allows {settings.FREE_TIER_LIMITS['resume_count']} resumes. Upgrade to Pro for unlimited resumes."
                 # AJAX request - return JSON, else redirect
-                if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                if self.request.headers.get("X-Requested-With") == "XMLHttpRequest":
                     return JsonResponse({"error": error_msg}, status=403)
                 messages.error(self.request, error_msg)
                 return redirect("resume:dashboard")
@@ -523,12 +600,14 @@ class ResumeFormView(TemplateView):
         # Validate all forms and formsets
         # If any form is invalid, re-render the form with errors
         # and do not proceed to PDF generation
-        if not all([
-            user_form.is_valid(),
-            education_formset.is_valid(),
-            experience_formset.is_valid(),
-            project_formset.is_valid()
-        ]):
+        if not all(
+            [
+                user_form.is_valid(),
+                education_formset.is_valid(),
+                experience_formset.is_valid(),
+                project_formset.is_valid(),
+            ]
+        ):
             if not user_form.is_valid():
                 messages.error(self.request, "User information section has errors.")
             if not education_formset.is_valid():
@@ -548,17 +627,28 @@ class ResumeFormView(TemplateView):
 
         # Prepare resume content from forms
         updated_content = {
-            "user_info": clean_data_for_json({
-                "full_name": user_form.cleaned_data.get("full_name"),
-                "email": user_form.cleaned_data.get("email"),
-                "phone": user_form.cleaned_data.get("phone"),
-                "github": user_form.cleaned_data.get("github"),
-                "linkedin": user_form.cleaned_data.get("linkedin"),
-                "skills": [s.strip() for s in user_form.cleaned_data.get("skills", "").split(",")],
-            }),
-            "education": clean_data_for_json([f.cleaned_data for f in education_formset if f.cleaned_data]),
-            "experience": clean_data_for_json(self._split_experience_description(experience_formset)),
-            "projects_and_publications": clean_data_for_json([f.cleaned_data for f in project_formset if f.cleaned_data]),
+            "user_info": clean_data_for_json(
+                {
+                    "full_name": user_form.cleaned_data.get("full_name"),
+                    "email": user_form.cleaned_data.get("email"),
+                    "phone": user_form.cleaned_data.get("phone"),
+                    "github": user_form.cleaned_data.get("github"),
+                    "linkedin": user_form.cleaned_data.get("linkedin"),
+                    "skills": [
+                        s.strip()
+                        for s in user_form.cleaned_data.get("skills", "").split(",")
+                    ],
+                }
+            ),
+            "education": clean_data_for_json(
+                [f.cleaned_data for f in education_formset if f.cleaned_data]
+            ),
+            "experience": clean_data_for_json(
+                self._split_experience_description(experience_formset)
+            ),
+            "projects_and_publications": clean_data_for_json(
+                [f.cleaned_data for f in project_formset if f.cleaned_data]
+            ),
         }
 
         # Determine export format and action BEFORE saving resume
@@ -569,7 +659,10 @@ class ResumeFormView(TemplateView):
         if export_format == "pdf" and form_action != "save_only":
             profile = self.request.user.profile
             if not profile.can_download():
-                messages.error(self.request, "Monthly PDF download limit reached. Free plan allows 5 downloads per month.")
+                messages.error(
+                    self.request,
+                    "Monthly PDF download limit reached. Free plan allows 5 downloads per month.",
+                )
                 # Re-render form instead of PDF
                 context_data = {
                     "user_form": user_form,
@@ -582,13 +675,16 @@ class ResumeFormView(TemplateView):
                 return self.render_to_response(context_data)
 
         # NOW save/update resume after all quota checks pass
-        template_selector = self.request.POST.get('template', 'faangpath-simple')
+        template_selector = self.request.POST.get("template", "faangpath-simple")
+        resume_title = self.request.POST.get("resume_title", "").strip()
         if pk:
             try:
                 # SECURITY: Filter by user to prevent IDOR on save
                 resume = Resume.objects.get(pk=pk, user=self.request.user)
                 resume.content = updated_content
                 resume.template_selector = template_selector
+                if resume_title:
+                    resume.title = resume_title
                 resume.save()
             except Resume.DoesNotExist:
                 # Should not happen typically
@@ -597,20 +693,22 @@ class ResumeFormView(TemplateView):
             # Create a new resume if editing from scratch (no pk)
             resume = Resume.objects.create(
                 user=self.request.user,
-                title=f"New Resume {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                title=resume_title or _auto_title_from_content(updated_content),
                 content=updated_content,
                 template_selector=template_selector,
             )
             # Store pk in kwargs for subsequent actions
-            self.kwargs['pk'] = resume.pk
+            self.kwargs["pk"] = resume.pk
 
         # Check if this is a save-only request (AJAX)
         if form_action == "save_only":
-            return JsonResponse({
-                "status": "saved",
-                "message": "Resume saved successfully",
-                "resume_id": self.kwargs.get('pk')
-            })
+            return JsonResponse(
+                {
+                    "status": "saved",
+                    "message": "Resume saved successfully",
+                    "resume_id": self.kwargs.get("pk"),
+                }
+            )
 
         # Prepare resume context
         context = self._prepare_resume_context(
@@ -641,7 +739,7 @@ class ResumeFormView(TemplateView):
                 "project_formset": project_formset,
             }
             if self.kwargs.get("pk"):
-                 context["resume_id"] = self.kwargs.get("pk")
+                context["resume_id"] = self.kwargs.get("pk")
             return self.render_to_response(context)
 
 
@@ -672,7 +770,7 @@ def get_field_value(request, prefix, field):
     return form_index, field_value
 
 
-def enhance_field(request, prefix, field, enhance_function, language="English"):
+def enhance_field(request, prefix, field, enhance_function):
     """
     Enhances the specified field based on given enhancement function.
 
@@ -681,21 +779,20 @@ def enhance_field(request, prefix, field, enhance_function, language="English"):
         prefix (str): Prefix to identify the formset (e.g., 'experience', 'project').
         field (str): Field name to enhance (e.g., 'description').
         enhance_function (func): Function that performs enhancement on the field's text.
-        language (str): Language for AI output (default: "English").
 
     Returns:
         HttpResponse: Rendered HTML or error message.
     """
     form_index, field_value = get_field_value(request, prefix=prefix, field=field)
     if form_index and field_value:
-        enhanced_text = enhance_function(field_value, language=language)
-        
+        enhanced_text = enhance_function(field_value)
+
         # Format with double newlines for better readability
         # If GPT returns single-newline separated bullets, convert to double
-        if enhanced_text and '\n' in enhanced_text:
-            lines = [line.strip() for line in enhanced_text.split('\n') if line.strip()]
-            enhanced_text = '\n\n'.join(lines)
-        
+        if enhanced_text and "\n" in enhanced_text:
+            lines = [line.strip() for line in enhanced_text.split("\n") if line.strip()]
+            enhanced_text = "\n\n".join(lines)
+
         description_html = f"""
         <textarea name="{prefix}-{form_index}-{field}" cols="40" rows="10" 
         class="textarea form-control" id="id_{prefix}-{form_index}-{field}">{enhanced_text}</textarea>
@@ -703,18 +800,6 @@ def enhance_field(request, prefix, field, enhance_function, language="English"):
         return HttpResponse(description_html)
 
     return HttpResponse({"error": "Invalid request"}, status=400)
-
-
-def _get_resume_language(request):
-    """Extracts the resume language from the POST request's resume_id."""
-    resume_id = request.POST.get("resume_id")
-    if resume_id:
-        try:
-            resume = Resume.objects.get(pk=resume_id, user=request.user)
-            return resume.content.get("language", "English")
-        except Resume.DoesNotExist:
-            pass
-    return "English"
 
 
 @login_required
@@ -725,16 +810,14 @@ def enhance_experience(request):
     if not profile.can_enhance():
         return HttpResponse(
             '<p class="text-red-500">Monthly AI enhancement limit reached. Free plan allows 10 enhancements per month.</p>',
-            status=403
+            status=403,
         )
 
-    language = _get_resume_language(request)
     response = enhance_field(
         request,
         prefix="experience",
         field="description",
         enhance_function=enhance_resume_experience,
-        language=language,
     )
 
     # QUOTA: Increment enhance counter on success
@@ -753,16 +836,14 @@ def enhance_project(request):
     if not profile.can_enhance():
         return HttpResponse(
             '<p class="text-red-500">Monthly AI enhancement limit reached. Free plan allows 10 enhancements per month.</p>',
-            status=403
+            status=403,
         )
 
-    language = _get_resume_language(request)
     response = enhance_field(
         request,
         prefix="project",
         field="description",
         enhance_function=enhance_project_description,
-        language=language,
     )
 
     # QUOTA: Increment enhance counter on success
@@ -825,7 +906,8 @@ def preview_resume_form(request):
             and experience_formset.is_valid()
             and project_formset.is_valid()
         ):
-            user_data = user_form.cleaned_data
+            user_data = dict(user_form.cleaned_data)
+            user_data["skills"] = _normalize_skills(user_data.get("skills", []))
             education_data = [
                 form.cleaned_data for form in education_formset if form.cleaned_data
             ]
@@ -841,16 +923,18 @@ def preview_resume_form(request):
                 "project_data": project_data,
                 "generation_date": datetime.now().strftime("%Y-%m-%d"),
             }
-            
+
             # Use the same template as PDF generation for consistency
-            template_selector = request.POST.get('template', 'faangpath-simple')
-            template_name = settings.TEMPLATE_SELECTOR_HTML_MAP.get(template_selector, 'faangpath_simple_template_pdf.html')
-            
+            template_selector = request.POST.get("template", "faangpath-simple")
+            template_name = settings.TEMPLATE_SELECTOR_HTML_MAP.get(
+                template_selector, "faangpath_simple_template_pdf.html"
+            )
+
             rendered_html = render(
                 request, template_name=template_name, context=context
             ).content.decode("utf-8")
             return HttpResponse(rendered_html)
-        
+
         errors = {}
         if user_form.errors:
             errors["user_form"] = user_form.errors
@@ -864,7 +948,9 @@ def preview_resume_form(request):
         if project_errors:
             errors["project_formset"] = project_errors
 
-        return JsonResponse({"error": "Invalid request", "form_errors": errors}, status=400)
+        return JsonResponse(
+            {"error": "Invalid request", "form_errors": errors}, status=400
+        )
 
 
 @login_required
@@ -873,11 +959,21 @@ def upload_cv(request):
         # QUOTA: Check resume creation limit (PDF upload with AI parsing counts toward resume limit)
         profile = request.user.profile
         if not profile.can_create_resume():
-            return JsonResponse({"error": f"Resume limit reached. Free plan allows {settings.FREE_TIER_LIMITS['resume_count']} resumes. Upgrade to Pro for unlimited resumes."}, status=403)
+            return JsonResponse(
+                {
+                    "error": f"Resume limit reached. Free plan allows {settings.FREE_TIER_LIMITS['resume_count']} resumes. Upgrade to Pro for unlimited resumes."
+                },
+                status=403,
+            )
 
         # QUOTA: Check import limit
         if not profile.can_import():
-            return JsonResponse({"error": "Monthly PDF import limit reached. Free plan allows 2 imports per month."}, status=403)
+            return JsonResponse(
+                {
+                    "error": "Monthly PDF import limit reached. Free plan allows 2 imports per month."
+                },
+                status=403,
+            )
 
         cv_file = request.FILES.get("cv_file")
         if not cv_file:
@@ -890,35 +986,43 @@ def upload_cv(request):
 
         # SECURITY: File size limit (5MB)
         if cv_file.size > 5 * 1024 * 1024:
-            return JsonResponse({"error": "File too large. Maximum size is 5MB."}, status=400)
+            return JsonResponse(
+                {"error": "File too large. Maximum size is 5MB."}, status=400
+            )
 
         # Extract data from the PDF
         reader = PdfReader(cv_file)
-        extracted_text = " ".join(
-            (page.extract_text() or "") for page in reader.pages
-        )
+        extracted_text = " ".join((page.extract_text() or "") for page in reader.pages)
 
         # Guard: minimum text length before calling OpenAI
         if len(extracted_text.strip()) < 50:
             return JsonResponse(
-                {"error": "Could not extract enough text from this PDF. Please ensure it contains readable text (not a scanned image)."},
+                {
+                    "error": "Could not extract enough text from this PDF. Please ensure it contains readable text (not a scanned image)."
+                },
                 status=422,
             )
-        
+
         start_time = datetime.now()
         extracted_json_string = extract_resume_data(extracted_text)
         logger.info("OpenAI API response time: %s", datetime.now() - start_time)
 
         # Check for API Errors
-        if extracted_json_string.startswith("OpenAI API") or extracted_json_string.startswith("Error:"):
-            return JsonResponse({"error": f"AI Service Error: {extracted_json_string}"}, status=503)
+        if extracted_json_string.startswith(
+            "OpenAI API"
+        ) or extracted_json_string.startswith("Error:"):
+            return JsonResponse(
+                {"error": f"AI Service Error: {extracted_json_string}"}, status=503
+            )
 
         # Clean up JSON string (remove markdown code blocks)
         if "```json" in extracted_json_string:
-            extracted_json_string = extracted_json_string.split("```json")[1].split("```")[0].strip()
+            extracted_json_string = (
+                extracted_json_string.split("```json")[1].split("```")[0].strip()
+            )
         elif "```" in extracted_json_string:
-             extracted_json_string = extracted_json_string.split("```")[1].strip()
-        
+            extracted_json_string = extracted_json_string.split("```")[1].strip()
+
         extracted_json_string = extracted_json_string.strip()
 
         try:
@@ -927,15 +1031,19 @@ def upload_cv(request):
             # Check for parse failure from validation layer
             if extracted_json.get("parse_error"):
                 return JsonResponse(
-                    {"error": extracted_json.get("message", "Could not extract resume data.")},
+                    {
+                        "error": extracted_json.get(
+                            "message", "Could not extract resume data."
+                        )
+                    },
                     status=422,
                 )
 
             # Save to Database instead of Session
             resume = Resume.objects.create(
                 user=request.user,
-                title=f"Uploaded Resume {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-                content=extracted_json
+                title=_auto_title_from_content(extracted_json),
+                content=extracted_json,
             )
 
             # QUOTA: Increment counters
@@ -959,11 +1067,21 @@ def upload_linkedin_cv(request):
         # QUOTA: Check resume creation limit (PDF upload with AI parsing counts toward resume limit)
         profile = request.user.profile
         if not profile.can_create_resume():
-            return JsonResponse({"error": f"Resume limit reached. Free plan allows {settings.FREE_TIER_LIMITS['resume_count']} resumes. Upgrade to Pro for unlimited resumes."}, status=403)
+            return JsonResponse(
+                {
+                    "error": f"Resume limit reached. Free plan allows {settings.FREE_TIER_LIMITS['resume_count']} resumes. Upgrade to Pro for unlimited resumes."
+                },
+                status=403,
+            )
 
         # QUOTA: Check import limit
         if not profile.can_import():
-            return JsonResponse({"error": "Monthly PDF import limit reached. Free plan allows 2 imports per month."}, status=403)
+            return JsonResponse(
+                {
+                    "error": "Monthly PDF import limit reached. Free plan allows 2 imports per month."
+                },
+                status=403,
+            )
 
         linkedin_file = request.FILES["linkedin_file"]
         logger.info("LinkedIn file uploaded: %s", linkedin_file.name)
@@ -973,33 +1091,41 @@ def upload_linkedin_cv(request):
 
         # SECURITY: File size limit (5MB)
         if linkedin_file.size > 5 * 1024 * 1024:
-            return JsonResponse({"error": "File too large. Maximum size is 5MB."}, status=400)
+            return JsonResponse(
+                {"error": "File too large. Maximum size is 5MB."}, status=400
+            )
 
         reader = PdfReader(linkedin_file)
-        extracted_text = " ".join(
-            (page.extract_text() or "") for page in reader.pages
-        )
+        extracted_text = " ".join((page.extract_text() or "") for page in reader.pages)
 
         # Guard: minimum text length before calling OpenAI
         if len(extracted_text.strip()) < 50:
             return JsonResponse(
-                {"error": "Could not extract enough text from this PDF. Please ensure it contains readable text (not a scanned image)."},
+                {
+                    "error": "Could not extract enough text from this PDF. Please ensure it contains readable text (not a scanned image)."
+                },
                 status=422,
             )
-        
+
         start_time = datetime.now()
         extracted_json_string = extract_linkedin_resume_data(extracted_text)
         logger.info("OpenAI API response time: %s", datetime.now() - start_time)
 
         # Check for API Errors
-        if extracted_json_string.startswith("OpenAI API") or extracted_json_string.startswith("Error:"):
-            return JsonResponse({"error": f"AI Service Error: {extracted_json_string}"}, status=503)
+        if extracted_json_string.startswith(
+            "OpenAI API"
+        ) or extracted_json_string.startswith("Error:"):
+            return JsonResponse(
+                {"error": f"AI Service Error: {extracted_json_string}"}, status=503
+            )
 
         # Clean up JSON string (remove markdown code blocks)
         if "```json" in extracted_json_string:
-            extracted_json_string = extracted_json_string.split("```json")[1].split("```")[0].strip()
+            extracted_json_string = (
+                extracted_json_string.split("```json")[1].split("```")[0].strip()
+            )
         elif "```" in extracted_json_string:
-             extracted_json_string = extracted_json_string.split("```")[1].strip()
+            extracted_json_string = extracted_json_string.split("```")[1].strip()
 
         extracted_json_string = extracted_json_string.strip()
 
@@ -1009,8 +1135,8 @@ def upload_linkedin_cv(request):
             # Save to Database
             resume = Resume.objects.create(
                 user=request.user,
-                title=f"LinkedIn Profile {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-                content=extracted_json
+                title=_auto_title_from_content(extracted_json, prefix="LinkedIn"),
+                content=extracted_json,
             )
 
             # QUOTA: Increment import counter
@@ -1041,7 +1167,10 @@ def download_resume_pdf(request, pk):
     # QUOTA: Check download limit
     profile = request.user.profile
     if not profile.can_download():
-        messages.error(request, "Monthly PDF download limit reached. Free plan allows 5 downloads per month.")
+        messages.error(
+            request,
+            "Monthly PDF download limit reached. Free plan allows 5 downloads per month.",
+        )
         return redirect("resume:dashboard")
 
     from django.core.validators import URLValidator
@@ -1049,11 +1178,11 @@ def download_resume_pdf(request, pk):
     from .forms import _normalize_url
 
     content = resume.content
-    
+
     # Validate URLs to provide consistent behavior with Edit page
     val = URLValidator()
     validation_failures = []
-    
+
     user_info = content.get("user_info", {})
     for field_name in ["github", "linkedin"]:
         url_val = user_info.get(field_name)
@@ -1062,8 +1191,10 @@ def download_resume_pdf(request, pk):
             try:
                 val(url_val)
             except ValidationError:
-                validation_failures.append(f"Invalid {field_name.title()} URL: {url_val}")
-                
+                validation_failures.append(
+                    f"Invalid {field_name.title()} URL: {url_val}"
+                )
+
     for i, project in enumerate(content.get("projects_and_publications", []), start=1):
         plink = project.get("link")
         if plink:
@@ -1072,11 +1203,14 @@ def download_resume_pdf(request, pk):
                 val(plink)
             except ValidationError:
                 validation_failures.append(f"Project #{i} has an invalid URL: {plink}")
-                
+
     if validation_failures:
         for err in validation_failures:
             messages.error(request, err)
-        messages.error(request, "Please edit your resume to fix these link errors before downloading.")
+        messages.error(
+            request,
+            "Please edit your resume to fix these link errors before downloading.",
+        )
         return redirect("resume:dashboard")
 
     try:
@@ -1107,11 +1241,14 @@ def download_resume_pdf(request, pk):
             template_selector=resume.template_selector,
             request=request,
         )
-        raw_name = resume.owner_name or 'resume'
-        tr_map = str.maketrans('şıöüğçŞİÖÜĞÇ', 'siougcSIOUGC')
+        raw_name = resume.owner_name or "resume"
+        tr_map = str.maketrans("şıöüğçŞİÖÜĞÇ", "siougcSIOUGC")
         safe_name = raw_name.translate(tr_map)
-        safe_name = "".join(c if c.isascii() and (c.isalnum() or c in '-_. ') else '_' for c in safe_name)
-        filename = safe_name.replace(' ', '_') + f'_{resume.pk}.pdf'
+        safe_name = "".join(
+            c if c.isascii() and (c.isalnum() or c in "-_. ") else "_"
+            for c in safe_name
+        )
+        filename = safe_name.replace(" ", "_") + f"_{resume.pk}.pdf"
         response = HttpResponse(pdf_bytes, content_type="application/pdf")
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
 
@@ -1137,18 +1274,20 @@ def test_faangpath_template(request):
         project_formset = ProjectFormSet(request.POST, prefix="project")
 
         # Validate all forms and formsets
-        if all([
-            user_form.is_valid(),
-            education_formset.is_valid(),
-            experience_formset.is_valid(),
-            project_formset.is_valid()
-        ]):
+        if all(
+            [
+                user_form.is_valid(),
+                education_formset.is_valid(),
+                experience_formset.is_valid(),
+                project_formset.is_valid(),
+            ]
+        ):
             # Prepare context data for template
             user_data = user_form.cleaned_data
             education_data = [
                 form.cleaned_data for form in education_formset if form.cleaned_data
             ]
-            
+
             # Split experience descriptions into lists
             experience_data = []
             for form in experience_formset:
@@ -1157,11 +1296,14 @@ def test_faangpath_template(request):
                     cleaned_data["description"] = list(
                         filter(
                             None,
-                            map(str.strip, cleaned_data.get("description", "").split("\n")),
+                            map(
+                                str.strip,
+                                cleaned_data.get("description", "").split("\n"),
+                            ),
                         )
                     )
                     experience_data.append(cleaned_data)
-            
+
             project_data = [
                 form.cleaned_data for form in project_formset if form.cleaned_data
             ]
@@ -1173,11 +1315,11 @@ def test_faangpath_template(request):
                 "project_data": project_data,
                 "generation_date": datetime.now().strftime("%Y-%m-%d"),
             }
-            
+
             return render(request, "faangpath_simple_template_pdf.html", context)
         else:
             messages.error(request, "Please correct the errors in the form.")
-    
+
     # If GET request or form validation failed, show the form
     context = get_init_values_for_resume_form()
     return render(request, "resume_form.html", context)
@@ -1186,6 +1328,7 @@ def test_faangpath_template(request):
 # ---------------------------------------------------------------------------
 # Agentic dashboard — preview saved resume
 # ---------------------------------------------------------------------------
+
 
 @login_required
 @xframe_options_sameorigin
@@ -1207,7 +1350,9 @@ def preview_saved_resume(request, pk):
         exp_copy = dict(exp)
         desc = exp_copy.get("description", [])
         if isinstance(desc, str):
-            exp_copy["description"] = [line for line in desc.split("\n") if line.strip()]
+            exp_copy["description"] = [
+                line for line in desc.split("\n") if line.strip()
+            ]
         experience_data.append(exp_copy)
 
     context = {
@@ -1227,6 +1372,7 @@ def preview_saved_resume(request, pk):
 # Agentic dashboard — chat endpoint
 # ---------------------------------------------------------------------------
 
+
 @login_required
 @require_http_methods(["POST"])
 def agent_chat(request):
@@ -1241,13 +1387,16 @@ def agent_chat(request):
     rate_cfg = settings.AGENT_CHAT_RATE_LIMIT
     rate_key = f"agent_rate_{request.user.id}"
     request_count = cache.get(rate_key, 0)
-    if request_count >= rate_cfg['max_requests']:
-        return JsonResponse({
-            "type": "chat",
-            "message": "Too many requests. Please wait a moment before sending another message.",
-            "rate_limited": True,
-        }, status=429)
-    cache.set(rate_key, request_count + 1, rate_cfg['window_seconds'])
+    if request_count >= rate_cfg["max_requests"]:
+        return JsonResponse(
+            {
+                "type": "chat",
+                "message": "Too many requests. Please wait a moment before sending another message.",
+                "rate_limited": True,
+            },
+            status=429,
+        )
+    cache.set(rate_key, request_count + 1, rate_cfg["window_seconds"])
 
     try:
         data = json.loads(request.body)
@@ -1273,10 +1422,10 @@ def agent_chat(request):
 
     # Check agent message quota BEFORE processing (saves LLM cost)
     if not profile.can_send_agent_message():
-        lang = 'tr' if any(c in message for c in 'çğıöşüÇĞİÖŞÜ') else 'en'
+        lang = "tr" if any(c in message for c in "çğıöşüÇĞİÖŞÜ") else "en"
         msg = {
-            'en': "You've reached your monthly chat message limit (10). Upgrade to Pro for unlimited usage.",
-            'tr': "Aylık sohbet mesajı limitinize (10) ulaştınız. Sınırsız kullanım için Pro'ya geçin.",
+            "en": "You've reached your monthly chat message limit (10). Upgrade to Pro for unlimited usage.",
+            "tr": "Aylık sohbet mesajı limitinize (10) ulaştınız. Sınırsız kullanım için Pro'ya geçin.",
         }.get(lang)
         return JsonResponse({"type": "chat", "message": msg, "quota_exceeded": True})
 
@@ -1298,8 +1447,12 @@ def agent_chat(request):
         "active_resume_id": active_resume_id,
         "quota": {
             "import_remaining": max(0, limits["import_count"] - profile.import_count),
-            "enhance_remaining": max(0, limits["enhance_count"] - profile.enhance_count),
-            "download_remaining": max(0, limits["download_count"] - profile.download_count),
+            "enhance_remaining": max(
+                0, limits["enhance_count"] - profile.enhance_count
+            ),
+            "download_remaining": max(
+                0, limits["download_count"] - profile.download_count
+            ),
             "resume_count": request.user.resumes.count(),
             "resume_limit": limits["resume_count"],
             "is_pro": profile.is_pro(),
@@ -1310,7 +1463,9 @@ def agent_chat(request):
     if builder_state and builder_state.get("mode") == "build":
         result = agent_service.handle_builder_step(message, builder_state, request.user)
     else:
-        classified = agent_service.classify_intent(message, context, active_resume=active_resume)
+        classified = agent_service.classify_intent(
+            message, context, active_resume=active_resume
+        )
         lang = classified.get("lang", "en")
         llm_msg = classified.pop("llm_message", None)
         result = agent_service.execute_intent(
@@ -1327,7 +1482,12 @@ def agent_chat(request):
 
     # Propagate active_resume_id to frontend so it stays in sync.
     # For modify_resume / preview, update the active resume to the one that was acted on.
-    if result.get("type") in ("modify_resume", "preview", "analyze_resume", "switch_template") and result.get("resume_id"):
+    if result.get("type") in (
+        "modify_resume",
+        "preview",
+        "analyze_resume",
+        "switch_template",
+    ) and result.get("resume_id"):
         result["active_resume_id"] = result["resume_id"]
     elif active_resume_id and result.get("type") not in ("redirect", "multi_step"):
         # Keep existing active resume unless we're navigating away
@@ -1335,7 +1495,7 @@ def agent_chat(request):
 
     # Increment agent message counter AFTER successful processing
     profile.agent_message_count += 1
-    profile.save(update_fields=['agent_message_count'])
+    profile.save(update_fields=["agent_message_count"])
 
     return JsonResponse({**result, "user_message": message})
 
@@ -1343,6 +1503,7 @@ def agent_chat(request):
 # ---------------------------------------------------------------------------
 # Agentic dashboard — toggle UI mode
 # ---------------------------------------------------------------------------
+
 
 @login_required
 @require_http_methods(["POST"])
@@ -1364,3 +1525,24 @@ def toggle_agent_mode(request):
     profile.ui_mode = mode
     profile.save(update_fields=["ui_mode"])
     return JsonResponse({"success": True, "mode": profile.ui_mode})
+
+
+@login_required
+@require_http_methods(["POST"])
+def toggle_ui_language(request):
+    """
+    POST body: {language: 'en' | 'tr'}
+    Returns:   {status: 'ok', language: str}
+    """
+    import json as _json
+    try:
+        body = _json.loads(request.body)
+        lang = body.get("language", "en")
+    except (ValueError, KeyError):
+        lang = "en"
+    if lang not in ("en", "tr"):
+        lang = "en"
+    profile = request.user.profile
+    profile.ui_language = lang
+    profile.save(update_fields=["ui_language"])
+    return JsonResponse({"status": "ok", "language": lang})

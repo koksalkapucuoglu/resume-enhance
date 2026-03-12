@@ -170,7 +170,7 @@
         
         <div class="flex flex-1 justify-end gap-4 md:gap-8">
             <nav class="hidden md:flex items-center gap-6">
-                <a class="text-slate-500 text-sm font-medium hover:text-primary transition-colors" href="{% url 'resume:dashboard' %}">Dashboard</a>
+                <a class="text-slate-500 text-sm font-medium hover:text-primary transition-colors" href="{% url 'resume:dashboard' %}">{{ UI.dashboard }}</a>
             </nav>
             
             <!-- Action Buttons -->
@@ -178,7 +178,7 @@
                 <!-- Unsaved Indicator -->
                 <span id="unsavedIndicator" class="hidden text-amber-600 text-sm font-medium flex items-center gap-1">
                     <span class="material-symbols-outlined text-base">edit</span>
-                    Unsaved changes
+                    {{ UI.unsaved_changes }}
                 </span>
                 
                 <!-- Save Button -->
@@ -187,7 +187,7 @@
                         onclick="saveChanges()"
                         class="flex items-center gap-2 px-3 sm:px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-all shadow-md shadow-green-600/20">
                     <span class="material-symbols-outlined text-lg">save</span>
-                    <span class="hidden sm:inline">Save</span>
+                    <span class="hidden sm:inline">{{ UI.btn_save }}</span>
                 </button>
                 
                 
@@ -197,7 +197,7 @@
                         onclick="submitForm('pdf', false, true)"
                         class="flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-primary rounded-lg hover:bg-primary-hover transition-all shadow-md shadow-primary/20">
                     <span class="material-symbols-outlined text-lg">download</span>
-                    Download PDF
+                    {{ UI.btn_download_pdf }}
                 </button>
                 
                 <!-- User Avatar & Logout -->
@@ -220,8 +220,8 @@
 
     <!-- Page Title & Messages (Outside split pane) -->
     <div class="w-full px-3 md:px-4 pt-4 pb-3">
-        <h1 class="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Resume Editor</h1>
-        <p class="text-slate-500 text-sm mt-1">Fill in your details and let AI enhance your resume</p>
+        <h1 class="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">{{ UI.form_title }}</h1>
+        <p class="text-slate-500 text-sm mt-1">{{ UI.form_subtitle }}</p>
 
         <!-- Messages -->
         {% if messages %}
@@ -252,23 +252,33 @@
                 {% csrf_token %}
                 <input type="hidden" name="template" id="selected-template" value="{{ saved_template|default:'faangpath-simple' }}">
 
+                <!-- Resume Title -->
+                <div class="flex items-center gap-2 mb-4 group">
+                    <span class="material-symbols-outlined text-slate-400 text-[18px] flex-shrink-0">edit_note</span>
+                    <input type="text" name="resume_title" id="resume-title"
+                           value="{{ saved_title|default:'' }}"
+                           placeholder="{{ UI.title_placeholder }}"
+                           maxlength="255"
+                           class="flex-1 text-sm font-medium text-slate-700 bg-transparent border-0 border-b border-transparent hover:border-slate-300 focus:border-primary focus:outline-none focus:ring-0 placeholder-slate-400 py-0.5 transition-colors">
+                </div>
+
                 <!-- Tab Navigation -->
                 <nav class="flex gap-1 mb-6 bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
                     <button type="button" class="form-section-tab active flex-1 min-w-[100px] px-4 py-2.5 text-sm font-medium rounded-lg transition-all" data-section="personal-info">
                         <span class="material-symbols-outlined text-lg align-middle mr-1">person</span>
-                        Personal
+                        {{ UI.tab_personal }}
                     </button>
                     <button type="button" class="form-section-tab flex-1 min-w-[100px] px-4 py-2.5 text-sm font-medium rounded-lg transition-all" data-section="experience">
                         <span class="material-symbols-outlined text-lg align-middle mr-1">work</span>
-                        Experience
+                        {{ UI.tab_experience }}
                     </button>
                     <button type="button" class="form-section-tab flex-1 min-w-[100px] px-4 py-2.5 text-sm font-medium rounded-lg transition-all" data-section="education">
                         <span class="material-symbols-outlined text-lg align-middle mr-1">school</span>
-                        Education
+                        {{ UI.tab_education }}
                     </button>
                     <button type="button" class="form-section-tab flex-1 min-w-[100px] px-4 py-2.5 text-sm font-medium rounded-lg transition-all" data-section="projects">
                         <span class="material-symbols-outlined text-lg align-middle mr-1">code</span>
-                        Projects
+                        {{ UI.tab_projects }}
                     </button>
                 </nav>
 
@@ -277,7 +287,7 @@
                     <div class="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 shadow-sm">
                         <h2 class="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
                             <span class="material-symbols-outlined text-primary">badge</span>
-                            Personal Information
+                            {{ UI.section_personal }}
                         </h2>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                             <div>{{ user_form.full_name|as_crispy_field }}</div>
@@ -315,18 +325,18 @@
                                     hx-swap="outerHTML"
                                     hx-indicator=".my-indicator">
                                     <span class="material-symbols-outlined text-lg">auto_awesome</span>
-                                    AI Enhance
+                                    {{ UI.btn_ai_enhance }}
                                 </button>
                                 <button type="button" class="remove-experience flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-all">
                                     <span class="material-symbols-outlined text-lg">delete</span>
-                                    Remove
+                                    {{ UI.btn_remove }}
                                 </button>
                             </div>
                         </div>
                         {% endfor %}
                         <button type="button" id="add-experience" class="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-medium hover:border-primary hover:text-primary hover:bg-primary/5 transition-all flex items-center justify-center gap-2">
                             <span class="material-symbols-outlined">add</span>
-                            Add Experience
+                            {{ UI.btn_add_experience }}
                         </button>
                     </div>
                 </section>
@@ -347,14 +357,14 @@
                             <div class="flex items-center justify-end gap-3 mt-4 pt-4 border-t border-slate-100">
                                 <button type="button" class="remove-education flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-all">
                                     <span class="material-symbols-outlined text-lg">delete</span>
-                                    Remove
+                                    {{ UI.btn_remove }}
                                 </button>
                             </div>
                         </div>
                         {% endfor %}
                         <button type="button" id="add-education" class="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-medium hover:border-primary hover:text-primary hover:bg-primary/5 transition-all flex items-center justify-center gap-2">
                             <span class="material-symbols-outlined">add</span>
-                            Add Education
+                            {{ UI.btn_add_education }}
                         </button>
                     </div>
                 </section>
@@ -384,18 +394,18 @@
                                     hx-swap="outerHTML"
                                     hx-indicator=".my-indicator">
                                     <span class="material-symbols-outlined text-lg">auto_awesome</span>
-                                    AI Enhance
+                                    {{ UI.btn_ai_enhance }}
                                 </button>
                                 <button type="button" class="remove-project flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-all">
                                     <span class="material-symbols-outlined text-lg">delete</span>
-                                    Remove
+                                    {{ UI.btn_remove }}
                                 </button>
                             </div>
                         </div>
                         {% endfor %}
                         <button type="button" id="add-project" class="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-500 font-medium hover:border-primary hover:text-primary hover:bg-primary/5 transition-all flex items-center justify-center gap-2">
                             <span class="material-symbols-outlined">add</span>
-                            Add Project
+                            {{ UI.btn_add_project }}
                         </button>
                     </div>
                 </section>
@@ -412,7 +422,7 @@
                     <button type="button" id="template-toggle" onclick="toggleTemplateSection()"
                             class="w-full flex items-center justify-between px-5 py-3 text-left hover:bg-slate-50 transition-colors">
                         <div>
-                            <h2 class="text-base font-semibold text-slate-800">Choose Template</h2>
+                            <h2 class="text-base font-semibold text-slate-800">{{ UI.choose_template }}</h2>
                             <p class="text-xs text-slate-500 mt-0.5">Select a layout for your resume</p>
                         </div>
                         <span id="template-chevron" class="material-symbols-outlined text-slate-400 transition-transform duration-200">
@@ -578,7 +588,7 @@
             <div class="flex items-center justify-end gap-3 mt-4 pt-4 border-t border-slate-100">
                 <button type="button" class="remove-education flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-all">
                     <span class="material-symbols-outlined text-lg">delete</span>
-                    Remove
+                    {{ UI.btn_remove }}
                 </button>
             </div>
         </div>
@@ -609,7 +619,7 @@
                 </button>
                 <button type="button" class="remove-experience flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-all">
                     <span class="material-symbols-outlined text-lg">delete</span>
-                    Remove
+                    {{ UI.btn_remove }}
                 </button>
             </div>
         </div>
@@ -640,7 +650,7 @@
                 </button>
                 <button type="button" class="remove-project flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-all">
                     <span class="material-symbols-outlined text-lg">delete</span>
-                    Remove
+                    {{ UI.btn_remove }}
                 </button>
             </div>
         </div>

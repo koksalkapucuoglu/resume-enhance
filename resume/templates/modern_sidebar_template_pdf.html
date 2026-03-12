@@ -426,15 +426,9 @@
                 <div class="sidebar-section">
                     <h2 class="section-title">Skills</h2>
                     <ul class="skills-list">
-                        {% if user_data.skills is iterable and user_data.skills|length > 0 %}
-                            {% for skill in user_data.skills %}
-                                {% if skill %}
-                                <li>{{ skill }}</li>
-                                {% endif %}
-                            {% endfor %}
-                        {% else %}
-                        <li>{{ user_data.skills }}</li>
-                        {% endif %}
+                        {% for skill in user_data.skills %}
+                            {% if skill %}<li>{{ skill }}</li>{% endif %}
+                        {% endfor %}
                     </ul>
                 </div>
                 {% endif %}

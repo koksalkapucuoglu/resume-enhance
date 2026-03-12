@@ -9,6 +9,7 @@ https://docs.djangoproject.com/en/4.1/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.1/ref/settings/
 """
+
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -26,21 +27,25 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-c5nvx+&pyo^uhbi7!jd+t1s5i@q_r595i%e)2v^1xb@in3w832')
+SECRET_KEY = os.environ.get(
+    "SECRET_KEY", "django-insecure-c5nvx+&pyo^uhbi7!jd+t1s5i@q_r595i%e)2v^1xb@in3w832"
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
+DEBUG = os.environ.get("DEBUG", "True").lower() == "true"
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
+ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "*").split(",")
 
-CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', 'https://resustackapp.com,https://www.resustackapp.com').split(',')
+CSRF_TRUSTED_ORIGINS = os.environ.get(
+    "CSRF_TRUSTED_ORIGINS", "https://resustackapp.com,https://www.resustackapp.com"
+).split(",")
 
 if not DEBUG:
     # Tell Django to trust the X-Forwarded-Proto header that comes from the proxy
-    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     # Force SSL redirect
     SECURE_SSL_REDIRECT = True
-    
+
     # Mark cookies as secure
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
@@ -49,49 +54,50 @@ if not DEBUG:
 # Application definition
 
 INSTALLED_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    'core',
-    'resume',
-    'crispy_forms',
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    "core",
+    "resume",
+    "crispy_forms",
     "crispy_bootstrap4",
-    'rest_framework',
+    "rest_framework",
 ]
 
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware', # Add WhiteNoise
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",  # Add WhiteNoise
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-ROOT_URLCONF = 'core.urls'
+ROOT_URLCONF = "core.urls"
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'templates'],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [BASE_DIR / "templates"],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+                "resume.context_processors.ui_translations",
             ],
         },
     },
 ]
 
-WSGI_APPLICATION = 'core.wsgi.application'
+WSGI_APPLICATION = "core.wsgi.application"
 
 
 # Database
@@ -99,24 +105,24 @@ WSGI_APPLICATION = 'core.wsgi.application'
 
 
 # Construct Database Configuration from Environment Variables
-DB_NAME = os.environ.get('POSTGRES_DB', 'postgres')
-DB_USER = os.environ.get('POSTGRES_USER', 'postgres')
-DB_PASSWORD = os.environ.get('POSTGRES_PASSWORD', 'postgres')
-DB_HOST = os.environ.get('POSTGRES_HOST', 'db')
-DB_PORT = os.environ.get('POSTGRES_PORT', '5432')
+DB_NAME = os.environ.get("POSTGRES_DB", "postgres")
+DB_USER = os.environ.get("POSTGRES_USER", "postgres")
+DB_PASSWORD = os.environ.get("POSTGRES_PASSWORD", "postgres")
+DB_HOST = os.environ.get("POSTGRES_HOST", "db")
+DB_PORT = os.environ.get("POSTGRES_PORT", "5432")
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': DB_NAME,
-        'USER': DB_USER,
-        'PASSWORD': DB_PASSWORD,
-        'HOST': DB_HOST,
-        'PORT': DB_PORT,
-        'CONN_MAX_AGE': 600,
-        'OPTIONS': {
-            'sslmode': 'disable',  # Explicitly disable SSL for Docker internal network
-        }
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": DB_NAME,
+        "USER": DB_USER,
+        "PASSWORD": DB_PASSWORD,
+        "HOST": DB_HOST,
+        "PORT": DB_PORT,
+        "CONN_MAX_AGE": 600,
+        "OPTIONS": {
+            "sslmode": "disable",  # Explicitly disable SSL for Docker internal network
+        },
     }
 }
 
@@ -126,16 +132,16 @@ DATABASES = {
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
 
@@ -143,9 +149,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/4.1/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = "UTC"
 
 USE_I18N = True
 
@@ -156,80 +162,79 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/4.1/howto/static-files/
 
 
-STATIC_URL = 'static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
-STATICFILES_DIRS = [BASE_DIR / 'static']
+STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_STORAGE = "whitenoise.storage.CompressedStaticFilesStorage"
+STATICFILES_DIRS = [BASE_DIR / "static"]
 
 # Media Files (Uploads)
-MEDIA_URL = 'media/'
-MEDIA_ROOT = BASE_DIR / 'mediafiles'
+MEDIA_URL = "media/"
+MEDIA_ROOT = BASE_DIR / "mediafiles"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.1/ref/settings/#default-auto-field
 
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Authentication
-LOGIN_URL = '/accounts/login/'  # Custom login page
-LOGIN_REDIRECT_URL = '/dashboard/'  # Redirect to dashboard after login
-LOGOUT_REDIRECT_URL = '/accounts/login/'  # Redirect to login after logout
+LOGIN_URL = "/accounts/login/"  # Custom login page
+LOGIN_REDIRECT_URL = "/dashboard/"  # Redirect to dashboard after login
+LOGOUT_REDIRECT_URL = "/accounts/login/"  # Redirect to login after logout
 
 # Email Configuration
 # For development: emails are printed to console
-# EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-# DEFAULT_FROM_EMAIL = 'ResuStack <noreply@resustack.com>'
+# EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+# DEFAULT_FROM_EMAIL = 'ResuStack <noreply@resustack.com>'
 
 # For production with SMTP (uncomment and configure):
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = "smtp.gmail.com"
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER')
-EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD')
-
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD")
 
 
 # Logging Configuration
 LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'verbose': {
-            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
-            'style': '{',
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{levelname} {asctime} {module} {process:d} {thread:d} {message}",
+            "style": "{",
         },
-        'simple': {
-            'format': '{levelname} {message}',
-            'style': '{',
-        },
-    },
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-            'formatter': 'verbose',
+        "simple": {
+            "format": "{levelname} {message}",
+            "style": "{",
         },
     },
-    'loggers': {
-        'resume.services': {
-            'handlers': ['console'],
-            'level': 'INFO',
-            'propagate': False,
-        },
-        'weasyprint': {
-            'handlers': ['console'],
-            'level': 'WARNING',
-            'propagate': False,
-        },
-        'fontTools': {
-            'handlers': ['console'],
-            'level': 'WARNING',
-            'propagate': False,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
         },
     },
-    'root': {
-        'handlers': ['console'],
-        'level': 'INFO',
+    "loggers": {
+        "resume.services": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "weasyprint": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "fontTools": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
     },
 }
 
@@ -237,9 +242,9 @@ CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap4"
 
 CRISPY_TEMPLATE_PACK = "bootstrap4"
 
-OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
-# TODO: Convert to template selector map (faangpath-simple: faangpath_simple_template.tex, cls)
+# TODO: Convert to template selector map (faangpath-simple: faangpath_simple_template.tex, cls)
 # LATEX_SETTINGS = {
 #     'TEMPLATE_DIR': BASE_DIR / 'latex_renderer' / 'templates',
 #     'TEMP_DIR': BASE_DIR / 'latex_renderer' / 'templates' / 'temp_latex_files',
@@ -258,37 +263,37 @@ OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY')
 
 
 TEMPLATE_SELECTOR_HTML_MAP = {
-    'faangpath-simple': 'faangpath_simple_template_pdf.html',
-    'modern-sidebar': 'modern_sidebar_template_pdf.html',
+    "faangpath-simple": "faangpath_simple_template_pdf.html",
+    "modern-sidebar": "modern_sidebar_template_pdf.html",
 }
 
 # PDF Generation Settings
 PDF_SETTINGS = {
-    'ENGINE': 'weasyprint',
-    'CSS_FILE': BASE_DIR / 'resume' / 'templates' / 'resume_pdf_styles.css',
-    'ENABLE_LOGGING': True,
-    'FONT_CONFIG': True,
+    "ENGINE": "weasyprint",
+    "CSS_FILE": BASE_DIR / "resume" / "templates" / "resume_pdf_styles.css",
+    "ENABLE_LOGGING": True,
+    "FONT_CONFIG": True,
 }
 
 # Subscription Tier Limits
 FREE_TIER_LIMITS = {
-    'import_count': 2,        # Monthly PDF imports
-    'enhance_count': 10,      # Monthly AI enhancements (experience + project combined)
-    'download_count': 5,      # Monthly PDF downloads
-    'resume_count': 3,        # Total resume count (not monthly)
-    'agent_message_count': 10, # Monthly agent chat messages
+    "import_count": 2,  # Monthly PDF imports
+    "enhance_count": 10,  # Monthly AI enhancements (experience + project combined)
+    "download_count": 5,  # Monthly PDF downloads
+    "resume_count": 3,  # Total resume count (not monthly)
+    "agent_message_count": 10,  # Monthly agent chat messages
 }
 
 # Agent Chat Rate Limiting
 AGENT_CHAT_RATE_LIMIT = {
-    'max_requests': 20,       # Maximum requests per window
-    'window_seconds': 60,     # Time window in seconds
+    "max_requests": 20,  # Maximum requests per window
+    "window_seconds": 60,  # Time window in seconds
 }
 
 # Cache backend (required for rate limiting)
 CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        'LOCATION': 'resustack-cache',
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "resustack-cache",
     }
 }

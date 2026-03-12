@@ -4,6 +4,7 @@ Resume API Views using Django REST Framework.
 These ViewSets provide CRUD operations for Resume model
 via REST API endpoints for mobile and frontend apps.
 """
+
 import json
 import logging
 
@@ -28,7 +29,7 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
     """
     Custom permission to only allow owners of a resume to edit it.
     """
-    
+
     def has_object_permission(self, request, view, obj):
         # Read permissions are allowed only for authenticated users who own the object
         # For MVP, we don't allow public read access
@@ -38,7 +39,7 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
 class ResumeViewSet(viewsets.ModelViewSet):
     """
     API endpoint for Resume CRUD operations.
-    
+
     list: GET /api/v1/resumes/ - List all resumes for current user
     create: POST /api/v1/resumes/ - Create a new resume
     retrieve: GET /api/v1/resumes/{id}/ - Get resume detail
@@ -46,36 +47,40 @@ class ResumeViewSet(viewsets.ModelViewSet):
     partial_update: PATCH /api/v1/resumes/{id}/ - Partial update
     destroy: DELETE /api/v1/resumes/{id}/ - Delete resume
     """
+
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
-    
+
     def get_queryset(self):
         """Return only resumes belonging to the current user."""
-        return Resume.objects.filter(user=self.request.user).order_by('-updated_at')
-    
+        return Resume.objects.filter(user=self.request.user).order_by("-updated_at")
+
     def get_serializer_class(self):
         """Return appropriate serializer based on action."""
-        if self.action == 'list':
+        if self.action == "list":
             return ResumeListSerializer
-        elif self.action == 'create':
+        elif self.action == "create":
             return ResumeCreateSerializer
         return ResumeDetailSerializer
-    
+
     def create(self, request, *args, **kwargs):
         """Override create to check quota before creating resume."""
         from django.conf import settings
+
         profile = request.user.profile
         if not profile.can_create_resume():
             return Response(
-                {"error": f"Resume limit reached. Free plan allows {settings.FREE_TIER_LIMITS['resume_count']} resumes. Upgrade to Pro for unlimited resumes."},
-                status=status.HTTP_403_FORBIDDEN
+                {
+                    "error": f"Resume limit reached. Free plan allows {settings.FREE_TIER_LIMITS['resume_count']} resumes. Upgrade to Pro for unlimited resumes."
+                },
+                status=status.HTTP_403_FORBIDDEN,
             )
         return super().create(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         """Set the user to current user when creating."""
         serializer.save(user=self.request.user)
-    
-    @action(detail=True, methods=['post'])
+
+    @action(detail=True, methods=["post"])
     def duplicate(self, request, pk=None):
         """
         Duplicate an existing resume.
@@ -86,15 +91,17 @@ class ResumeViewSet(viewsets.ModelViewSet):
         profile = request.user.profile
         if not profile.can_create_resume():
             return Response(
-                {"error": "Resume limit reached. Free plan allows 3 resumes. Upgrade to Pro for unlimited resumes."},
-                status=status.HTTP_403_FORBIDDEN
+                {
+                    "error": "Resume limit reached. Free plan allows 3 resumes. Upgrade to Pro for unlimited resumes."
+                },
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         resume = self.get_object()
         new_resume = Resume.objects.create(
             user=request.user,
             title=f"{resume.title} (Copy)",
-            content=resume.content.copy()
+            content=resume.content.copy(),
         )
         serializer = ResumeDetailSerializer(new_resume)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -113,7 +120,9 @@ def submit_feedback(request):
         Feedback.objects.create(
             user=request.user if request.user.is_authenticated else None,
             message=message[:2000],
-            rating=rating if isinstance(rating, int) and rating in range(1, 6) else None,
+            rating=rating
+            if isinstance(rating, int) and rating in range(1, 6)
+            else None,
             page=page[:100],
         )
         return JsonResponse({"success": True})

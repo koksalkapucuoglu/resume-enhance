@@ -41,8 +41,8 @@ def send_openai_message(
             "model": model,
             "messages": [
                 {"role": "system", "content": meta_prompt},
-                {"role": "user", "content": user_message}
-            ]
+                {"role": "user", "content": user_message},
+            ],
         }
 
         if is_json:
@@ -54,7 +54,7 @@ def send_openai_message(
 
         response = client.chat.completions.create(**kwargs, timeout=90)
 
-        if hasattr(response, 'usage'):
+        if hasattr(response, "usage"):
             logger.info("OpenAI Usage: %s", response.usage)
 
         return response.choices[0].message.content
@@ -68,13 +68,14 @@ def send_openai_message(
 
 
 # TODO Convert class based structure
-def enhance_resume_experience(user_message: str, language: str = "English"):
+def enhance_resume_experience(user_message: str, language: str = None):
     """
     Enhances work experience descriptions to be suitable for a resume in the STAR format.
 
     Parameters:
         user_message (str): The user's work experience description(s) to be improved.
-        language (str): The language to use for enhanced output (default: "English").
+        language (str): Deprecated parameter, kept for backward compatibility. Language is
+                        auto-detected from input text.
 
     Returns:
         str: The STAR-enhanced, resume-ready work experience description(s).
@@ -82,8 +83,8 @@ def enhance_resume_experience(user_message: str, language: str = "English"):
 
     meta_prompt = f"""
     Act as a professional resume experience enhancer.
-    IMPORTANT: You MUST respond in {language}.
-    
+    Respond in the same language as the input text.
+
     I will provide work experience descriptions. Your task:
     
     1. SPLIT into separate bullet points:
@@ -115,18 +116,22 @@ def enhance_resume_experience(user_message: str, language: str = "English"):
     """.strip()
 
     return send_openai_message(
-        user_message=user_message, meta_prompt=meta_prompt, model="gpt-4o-mini",
-        temperature=0.7, max_tokens=1500,
+        user_message=user_message,
+        meta_prompt=meta_prompt,
+        model="gpt-4o-mini",
+        temperature=0.7,
+        max_tokens=1500,
     )
 
 
-def enhance_project_description(user_message: str, language: str = "English"):
+def enhance_project_description(user_message: str, language: str = None):
     """
     Enhances project description to be suitable for a resume in the STAR format.
 
     Parameters:
         user_message (str): The user's project description to be improved.
-        language (str): The language to use for enhanced output (default: "English").
+        language (str): Deprecated parameter, kept for backward compatibility. Language is
+                        auto-detected from input text.
 
     Returns:
         str: The STAR-enhanced, resume-ready project description.
@@ -134,8 +139,8 @@ def enhance_project_description(user_message: str, language: str = "English"):
 
     meta_prompt = f"""
     Act as a professional project description enhancer for resumes.
-    IMPORTANT: You MUST respond in {language}.
-    
+    Respond in the same language as the input text.
+
     I will provide project descriptions. Your task:
     
     1. ANALYZE the content:
@@ -164,9 +169,13 @@ def enhance_project_description(user_message: str, language: str = "English"):
     """.strip()
 
     return send_openai_message(
-        user_message=user_message, meta_prompt=meta_prompt, model="gpt-4o-mini",
-        temperature=0.7, max_tokens=1500,
+        user_message=user_message,
+        meta_prompt=meta_prompt,
+        model="gpt-4o-mini",
+        temperature=0.7,
+        max_tokens=1500,
     )
+
 
 def extract_resume_data(user_message: str):
     """
@@ -262,26 +271,34 @@ def extract_resume_data(user_message: str):
     """.strip()
 
     result = send_openai_message(
-        user_message=user_message, meta_prompt=meta_prompt, model="gpt-4o-mini",
-        is_json=True, temperature=0, max_tokens=6000,
+        user_message=user_message,
+        meta_prompt=meta_prompt,
+        model="gpt-4o-mini",
+        is_json=True,
+        temperature=0,
+        max_tokens=6000,
     )
 
     # Validation: check for empty/corrupted PDF parse failure
     try:
         import json as _json
+
         parsed = _json.loads(result)
         has_name = bool(parsed.get("user_info", {}).get("full_name", "").strip())
         has_experience = bool(parsed.get("experience"))
         if not has_name and not has_experience:
-            return _json.dumps({
-                "parse_error": True,
-                "message": "Could not extract resume data. Please ensure the PDF contains readable text."
-            })
+            return _json.dumps(
+                {
+                    "parse_error": True,
+                    "message": "Could not extract resume data. Please ensure the PDF contains readable text.",
+                }
+            )
     except (ValueError, TypeError):
         # If result isn't valid JSON at all, it's likely an API error string — pass through
         pass
 
     return result
+
 
 def extract_linkedin_resume_data(user_message: str):
     """
@@ -363,6 +380,10 @@ def extract_linkedin_resume_data(user_message: str):
     """.strip()
 
     return send_openai_message(
-        user_message=user_message, meta_prompt=meta_prompt, model="gpt-4o-mini",
-        is_json=True, temperature=0, max_tokens=6000,
+        user_message=user_message,
+        meta_prompt=meta_prompt,
+        model="gpt-4o-mini",
+        is_json=True,
+        temperature=0,
+        max_tokens=6000,
     )
