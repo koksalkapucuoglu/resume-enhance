@@ -62,6 +62,40 @@ class DashboardView(LoginRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['settings'] = settings
+
+        # Proactive suggestions for agentic dashboard
+        if self.request.user.profile.ui_mode == 'agentic':
+            suggestions = []
+            resumes = list(self.get_queryset())
+            if not resumes:
+                suggestions.append({
+                    'message': "Get started by creating your first resume!",
+                    'message_tr': "İlk resume'unuzu oluşturarak başlayın!",
+                    'chips': ['Create new resume', 'Upload PDF'],
+                    'chips_tr': ['Yeni resume oluştur', 'PDF yükle'],
+                })
+            else:
+                from django.utils import timezone
+                for r in resumes[:3]:
+                    days_old = (timezone.now() - r.updated_at).days
+                    if days_old > 90:
+                        months = days_old // 30
+                        suggestions.append({
+                            'message': f"**{r.display_name}** hasn't been updated in {months} month{'s' if months != 1 else ''}. Want to refresh it?",
+                            'message_tr': f"**{r.display_name}** {months} aydır güncellenmedi. Yenilemek ister misiniz?",
+                            'chips': [f'Preview resume {r.id}', f'Analyze resume {r.id}'],
+                            'chips_tr': [f'Resume {r.id}\'yi önizle', f'Resume {r.id}\'yi analiz et'],
+                        })
+                    content = r.content or {}
+                    skills = content.get('user_info', {}).get('skills', [])
+                    if not skills:
+                        suggestions.append({
+                            'message': f"**{r.display_name}** has no skills listed. Adding skills helps ATS matching!",
+                            'message_tr': f"**{r.display_name}** için yetenek eklenmemiş. Yetenek eklemek ATS eşleşmesine yardımcı olur!",
+                            'chips': [f'Edit resume {r.id}', f'Analyze resume {r.id}'],
+                            'chips_tr': [f'Resume {r.id}\'yi düzenle', f'Resume {r.id}\'yi analiz et'],
+                        })
+            context['proactive_suggestions'] = json.dumps(suggestions[:3])
         return context
 
 
@@ -1200,7 +1234,20 @@ def agent_chat(request):
     JSON in:  {message, history, builder_state, active_resume_id}
     JSON out: {type, message, ...extra fields, active_resume_id?}
     """
+    from django.core.cache import cache
     from resume.services.agent_service import agent_service
+
+    # Rate limiting
+    rate_cfg = settings.AGENT_CHAT_RATE_LIMIT
+    rate_key = f"agent_rate_{request.user.id}"
+    request_count = cache.get(rate_key, 0)
+    if request_count >= rate_cfg['max_requests']:
+        return JsonResponse({
+            "type": "chat",
+            "message": "Too many requests. Please wait a moment before sending another message.",
+            "rate_limited": True,
+        }, status=429)
+    cache.set(rate_key, request_count + 1, rate_cfg['window_seconds'])
 
     try:
         data = json.loads(request.body)
@@ -1280,7 +1327,7 @@ def agent_chat(request):
 
     # Propagate active_resume_id to frontend so it stays in sync.
     # For modify_resume / preview, update the active resume to the one that was acted on.
-    if result.get("type") in ("modify_resume", "preview") and result.get("resume_id"):
+    if result.get("type") in ("modify_resume", "preview", "analyze_resume", "switch_template") and result.get("resume_id"):
         result["active_resume_id"] = result["resume_id"]
     elif active_resume_id and result.get("type") not in ("redirect", "multi_step"):
         # Keep existing active resume unless we're navigating away

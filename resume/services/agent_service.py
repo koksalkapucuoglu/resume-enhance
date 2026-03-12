@@ -43,6 +43,9 @@ TOOL_CATALOG = [
     {"intent": "edit_resume", "description": "Open the resume editor for a resume", "params": ["resume_id"]},
     {"intent": "modify_resume", "description": "Apply natural-language edits to resume content: update fields, add/remove entries (experience, education, skills, projects), rewrite descriptions, optimize for a role, etc.", "params": ["resume_id"]},
     {"intent": "switch_template", "description": "Switch the resume template/layout (faangpath-simple or modern-sidebar)", "params": ["resume_id", "template"]},
+    {"intent": "analyze_resume", "description": "Analyze and score a resume's strength with feedback and suggestions", "params": ["resume_id"]},
+    {"intent": "find_resume", "description": "Search resumes by content — skills, companies, job titles, keywords", "params": ["query"]},
+    {"intent": "compare_resumes", "description": "Compare two resumes side by side, highlighting differences and strengths", "params": ["resume_id_1", "resume_id_2"]},
     {"intent": "help", "description": "Show available commands and how to use the assistant"},
     {"intent": "clarify", "description": "Ask the user to clarify their request"},
 ]
@@ -116,6 +119,9 @@ class AgentService:
             'edit_resume': lambda: self._exec_edit_resume(user, params, lang),
             'modify_resume': lambda: self._exec_modify_resume(user, params, lang, user_message, active_resume),
             'switch_template': lambda: self._exec_switch_template(user, params, lang, active_resume),
+            'analyze_resume': lambda: self._exec_analyze_resume(user, params, lang, active_resume),
+            'find_resume': lambda: self._exec_find_resume(user, params, lang),
+            'compare_resumes': lambda: self._exec_compare_resumes(user, params, lang),
             'help': lambda: self._exec_help(lang),
         }
         handler = handler_map.get(intent)
@@ -286,7 +292,11 @@ Rules:
             count = len(data)
             msg = (f"{count} resume'unuz var:" if lang == 'tr'
                    else f"You have {count} resume{'s' if count != 1 else ''}:")
-        return {'type': 'chat', 'message': msg, 'data': data, 'data_type': 'resume_list'}
+        quick_replies = (['Preview first resume', 'Analyze resume', 'Create new']
+                         if lang == 'en' else
+                         ['İlk resume\'u önizle', 'Resume\'u analiz et', 'Yeni oluştur'])
+        return {'type': 'chat', 'message': msg, 'data': data, 'data_type': 'resume_list',
+                'quick_replies': quick_replies if data else None}
 
     def _exec_get_resume_details(self, user, params: dict, lang: str) -> dict:
         resume = self._resolve_resume(user, params)
@@ -322,11 +332,15 @@ Rules:
             'en': f"Showing preview of **{resume.display_name}**.",
             'tr': f"**{resume.display_name}** onizlemesi sagda gosteriliyor.",
         }.get(lang, f"Previewing resume {resume.id}.")
+        quick_replies = (['Analyze this resume', 'Download PDF', 'Edit in form']
+                         if lang == 'en' else
+                         ['Bu resume\'u analiz et', 'PDF indir', 'Formda düzenle'])
         return {
             'type': 'preview',
             'resume_id': resume.id,
             'resume_name': resume.display_name,
             'message': msg,
+            'quick_replies': quick_replies,
         }
 
     def _exec_download_resume(self, user, params: dict, lang: str) -> dict:
@@ -525,21 +539,47 @@ Respond ONLY with valid JSON:
             max_tokens=4000,
         )
 
-        try:
-            parsed = json.loads(result)
-            modified = parsed.get('modified_resume')
-            if modified and isinstance(modified, dict):
-                resume.content = modified
-                resume.save(update_fields=['content', 'updated_at'])
-                return {
-                    'type': 'modify_resume',
-                    'resume_id': resume.id,
-                    'resume_name': resume.display_name,
-                    'message': parsed.get('response_message', 'Changes applied.'),
-                    'changes_summary': parsed.get('changes_summary', ''),
-                }
-        except (ValueError, TypeError) as e:
-            logger.warning("modify_resume LLM parse error: %s | result: %s", e, result[:200])
+        validated = self._validate_modify_result(result)
+        if validated:
+            resume.content = validated['modified_resume']
+            resume.save(update_fields=['content', 'updated_at'])
+            quick_replies = (['Preview changes', 'More changes', 'Download PDF']
+                             if lang == 'en' else
+                             ['Değişiklikleri önizle', 'Daha fazla değişiklik', 'PDF indir'])
+            return {
+                'type': 'modify_resume',
+                'resume_id': resume.id,
+                'resume_name': resume.display_name,
+                'message': validated.get('response_message', 'Changes applied.'),
+                'changes_summary': validated.get('changes_summary', ''),
+                'quick_replies': quick_replies,
+            }
+
+        # Retry once with simpler prompt
+        logger.info("modify_resume: first attempt failed, retrying with simpler prompt")
+        retry_prompt = f"""Modify this resume JSON as instructed. Return ONLY valid JSON with key "modified_resume" containing the full resume.
+Current resume: {resume_json}
+User request: {user_message}"""
+        retry_result = send_openai_message(
+            user_message=retry_prompt,
+            meta_prompt="Return valid JSON with modified_resume key.",
+            is_json=True, temperature=0.2, max_tokens=4000,
+        )
+        validated = self._validate_modify_result(retry_result)
+        if validated:
+            resume.content = validated['modified_resume']
+            resume.save(update_fields=['content', 'updated_at'])
+            quick_replies = (['Preview changes', 'More changes', 'Download PDF']
+                             if lang == 'en' else
+                             ['Değişiklikleri önizle', 'Daha fazla değişiklik', 'PDF indir'])
+            return {
+                'type': 'modify_resume',
+                'resume_id': resume.id,
+                'resume_name': resume.display_name,
+                'message': validated.get('response_message', 'Changes applied.'),
+                'changes_summary': validated.get('changes_summary', ''),
+                'quick_replies': quick_replies,
+            }
 
         msg = {
             'en': "Sorry, I couldn't apply those changes. Please try rephrasing.",
@@ -575,11 +615,20 @@ Respond ONLY with valid JSON:
         template_key = self.TEMPLATE_ALIASES.get(requested)
 
         if not template_key:
-            opts_tr = "Hangi sablonu kullanmak istersiniz?\n- **faangpath-simple** (klasik, tek sutun)\n- **modern-sidebar** (modern, iki sutun)"
-            opts_en = "Which template would you like?\n- **faangpath-simple** (classic, single column)\n- **modern-sidebar** (modern, two columns)"
+            msg = {
+                'tr': "Hangi şablonu kullanmak istersiniz?",
+                'en': "Which template would you like?",
+            }.get(lang, "Pick a template:")
             return {
-                'type': 'chat',
-                'message': opts_tr if lang == 'tr' else opts_en,
+                'type': 'template_picker',
+                'resume_id': resume.id if resume else None,
+                'message': msg,
+                'templates': [
+                    {'key': 'faangpath-simple', 'name': 'FAANGPath Simple',
+                     'description': 'Classic single-column layout' if lang == 'en' else 'Klasik tek sütun düzeni'},
+                    {'key': 'modern-sidebar', 'name': 'Modern Sidebar',
+                     'description': 'Two-column layout with sidebar' if lang == 'en' else 'Kenar çubuklu iki sütun düzeni'},
+                ],
             }
 
         resume.template_selector = template_key
@@ -601,6 +650,238 @@ Respond ONLY with valid JSON:
             'message': msg,
         }
 
+    def _exec_analyze_resume(self, user, params: dict, lang: str, active_resume=None) -> dict:
+        """Analyze and score a resume's strength with feedback and suggestions."""
+        resume = self._resolve_resume(user, params) or active_resume
+        if not resume:
+            resume = Resume.objects.filter(user=user).order_by('-updated_at').first()
+        if not resume:
+            return self._resume_not_found(lang, params)
+
+        resume_json = json.dumps(resume.content, ensure_ascii=False, indent=2)
+        system_prompt = f"""You are a professional resume reviewer. Analyze the following resume JSON and provide a detailed scoring.
+
+RESUME:
+{resume_json}
+
+Respond ONLY with valid JSON in this exact format:
+{{
+  "overall_score": <number 0-100>,
+  "categories": [
+    {{"name": "Content Completeness", "score": <0-20>, "max": 20, "feedback": "..."}},
+    {{"name": "Impact Language", "score": <0-20>, "max": 20, "feedback": "..."}},
+    {{"name": "Formatting & Structure", "score": <0-20>, "max": 20, "feedback": "..."}},
+    {{"name": "Skills Coverage", "score": <0-20>, "max": 20, "feedback": "..."}},
+    {{"name": "ATS Friendliness", "score": <0-20>, "max": 20, "feedback": "..."}}
+  ],
+  "top_suggestions": ["suggestion 1", "suggestion 2", "suggestion 3"],
+  "response_message": "Brief summary message {'in Turkish' if lang == 'tr' else 'in English'}"
+}}
+
+Rules:
+- Be honest but constructive in feedback
+- Respond in {'Turkish' if lang == 'tr' else 'English'}
+- overall_score should equal sum of category scores
+- Each category feedback should be 1-2 sentences"""
+
+        result = send_openai_message(
+            user_message="Analyze this resume",
+            meta_prompt=system_prompt,
+            is_json=True,
+            temperature=0.3,
+            max_tokens=2000,
+        )
+
+        try:
+            parsed = json.loads(result)
+            analysis = {
+                'overall_score': parsed.get('overall_score', 0),
+                'categories': parsed.get('categories', []),
+                'top_suggestions': parsed.get('top_suggestions', []),
+            }
+            msg = parsed.get('response_message', 'Analysis complete.')
+            quick_replies = (['Improve this resume', 'Switch template', 'Download PDF']
+                             if lang == 'en' else
+                             ['Bu resume\'u iyileştir', 'Şablon değiştir', 'PDF indir'])
+            return {
+                'type': 'analyze_resume',
+                'resume_id': resume.id,
+                'resume_name': resume.display_name,
+                'message': msg,
+                'analysis': analysis,
+                'quick_replies': quick_replies,
+            }
+        except (ValueError, TypeError) as e:
+            logger.warning("analyze_resume LLM parse error: %s", e)
+            msg = {
+                'en': "Sorry, I couldn't analyze this resume. Please try again.",
+                'tr': "Üzgünüm, bu resume'u analiz edemedim. Lütfen tekrar deneyin.",
+            }.get(lang, "Analysis failed.")
+            return {'type': 'chat', 'message': msg}
+
+    def _exec_find_resume(self, user, params: dict, lang: str) -> dict:
+        """Search resumes by content — skills, companies, job titles, keywords."""
+        query = (params.get('query') or '').lower().strip()
+        if not query:
+            msg = {
+                'en': "What would you like to search for? (e.g., 'Python', 'Google', 'Senior Engineer')",
+                'tr': "Ne aramak istersiniz? (örn. 'Python', 'Google', 'Kıdemli Mühendis')",
+            }.get(lang, "What to search?")
+            return {'type': 'chat', 'message': msg}
+
+        resumes = list(Resume.objects.filter(user=user).order_by('-updated_at'))
+        matches = []
+
+        for r in resumes:
+            content = r.content or {}
+            searchable_parts = []
+
+            # user_info fields
+            user_info = content.get('user_info', {})
+            searchable_parts.extend([
+                str(s).lower() for s in user_info.get('skills', [])
+            ])
+            searchable_parts.append(user_info.get('full_name', '').lower())
+
+            # experience fields
+            for exp in content.get('experience', []):
+                searchable_parts.append(exp.get('company', '').lower())
+                searchable_parts.append(exp.get('title', '').lower())
+                desc = exp.get('description', [])
+                if isinstance(desc, list):
+                    searchable_parts.extend([d.lower() for d in desc if isinstance(d, str)])
+                elif isinstance(desc, str):
+                    searchable_parts.append(desc.lower())
+
+            # education fields
+            for edu in content.get('education', []):
+                searchable_parts.append(edu.get('school', '').lower())
+                searchable_parts.append(edu.get('field_of_study', '').lower())
+                searchable_parts.append(edu.get('degree', '').lower())
+
+            # projects
+            for proj in content.get('projects_and_publications', []):
+                searchable_parts.append(proj.get('name', '').lower())
+                searchable_parts.append(proj.get('description', '').lower())
+
+            combined = ' '.join(searchable_parts)
+            if query in combined:
+                matches.append({
+                    'id': r.id,
+                    'display_name': r.display_name,
+                    'owner_name': r.owner_name,
+                    'updated_at': r.updated_at.strftime('%Y-%m-%d'),
+                    'template_selector': r.template_selector,
+                })
+
+        if not matches:
+            msg = {
+                'en': f"No resumes found matching '{query}'.",
+                'tr': f"'{query}' ile eşleşen resume bulunamadı.",
+            }.get(lang, "No matches.")
+            return {'type': 'chat', 'message': msg}
+
+        count = len(matches)
+        msg = {
+            'en': f"Found {count} resume{'s' if count != 1 else ''} matching '{query}':",
+            'tr': f"'{query}' ile eşleşen {count} resume bulundu:",
+        }.get(lang, f"Found {count}.")
+        return {'type': 'chat', 'message': msg, 'data': matches, 'data_type': 'resume_list'}
+
+    def _exec_compare_resumes(self, user, params: dict, lang: str) -> dict:
+        """Compare two resumes side by side."""
+        rid1 = params.get('resume_id_1')
+        rid2 = params.get('resume_id_2')
+
+        if not rid1 or not rid2:
+            msg = {
+                'en': "I need two resumes to compare. Please specify both, e.g., 'Compare resume 1 and resume 2'.",
+                'tr': "Karşılaştırma için iki resume gerekiyor. Lütfen ikisini de belirtin, örn. 'Resume 1 ve resume 2'yi karşılaştır'.",
+            }.get(lang, "Specify two resumes.")
+            return {'type': 'chat', 'message': msg}
+
+        try:
+            resume1 = Resume.objects.get(pk=rid1, user=user)
+            resume2 = Resume.objects.get(pk=rid2, user=user)
+        except Resume.DoesNotExist:
+            msg = {
+                'en': "One or both resumes not found. Please check the IDs.",
+                'tr': "Resume'lardan biri veya her ikisi bulunamadı. Lütfen ID'leri kontrol edin.",
+            }.get(lang, "Resume not found.")
+            return {'type': 'chat', 'message': msg}
+
+        r1_json = json.dumps(resume1.content, ensure_ascii=False, indent=2)
+        r2_json = json.dumps(resume2.content, ensure_ascii=False, indent=2)
+
+        system_prompt = f"""You are a professional resume reviewer. Compare these two resumes and provide analysis.
+
+RESUME 1 (ID: {resume1.id}, "{resume1.display_name}"):
+{r1_json}
+
+RESUME 2 (ID: {resume2.id}, "{resume2.display_name}"):
+{r2_json}
+
+Respond ONLY with valid JSON:
+{{
+  "comparison_summary": "Brief 1-2 sentence overall comparison",
+  "resume_1_strengths": ["strength 1", "strength 2"],
+  "resume_2_strengths": ["strength 1", "strength 2"],
+  "key_differences": ["difference 1", "difference 2", "difference 3"],
+  "recommendation": "Which is stronger and why"
+}}
+
+Respond in {'Turkish' if lang == 'tr' else 'English'}."""
+
+        result = send_openai_message(
+            user_message="Compare these two resumes",
+            meta_prompt=system_prompt,
+            is_json=True,
+            temperature=0.3,
+            max_tokens=2000,
+        )
+
+        try:
+            parsed = json.loads(result)
+            name1 = resume1.display_name
+            name2 = resume2.display_name
+
+            lines = [f"**{parsed.get('comparison_summary', '')}**\n"]
+
+            r1_strengths = parsed.get('resume_1_strengths', [])
+            if r1_strengths:
+                lines.append(f"**{name1} — Strengths:**")
+                for s in r1_strengths:
+                    lines.append(f"- {s}")
+                lines.append("")
+
+            r2_strengths = parsed.get('resume_2_strengths', [])
+            if r2_strengths:
+                lines.append(f"**{name2} — Strengths:**")
+                for s in r2_strengths:
+                    lines.append(f"- {s}")
+                lines.append("")
+
+            diffs = parsed.get('key_differences', [])
+            if diffs:
+                lines.append("**Key Differences:**" if lang == 'en' else "**Temel Farklar:**")
+                for d in diffs:
+                    lines.append(f"- {d}")
+                lines.append("")
+
+            rec = parsed.get('recommendation', '')
+            if rec:
+                label = "Recommendation" if lang == 'en' else "Öneri"
+                lines.append(f"**{label}:** {rec}")
+
+            return {'type': 'chat', 'message': '\n'.join(lines)}
+        except (ValueError, TypeError) as e:
+            logger.warning("compare_resumes LLM parse error: %s", e)
+            msg = {
+                'en': "Sorry, I couldn't compare these resumes. Please try again.",
+                'tr': "Üzgünüm, resume'ları karşılaştıramadım. Lütfen tekrar deneyin.",
+            }.get(lang, "Comparison failed.")
+            return {'type': 'chat', 'message': msg}
+
     def _exec_help(self, lang: str) -> dict:
         if lang == 'tr':
             msg = ("Merhaba! ResuStack asistaninim. Sunlari yapabilirim:\n\n"
@@ -610,6 +891,9 @@ Respond ONLY with valid JSON:
                    "- **Resume X'i sil** — resume'u silin\n"
                    "- **Resume X'i kopyala** — cogaltin\n"
                    "- **Resume X'i duzenle** — editoru acin\n"
+                   "- **Resume X'i analiz et** — guc analizi ve puan goruntuleyin\n"
+                   "- **Resume'larda ara** — icerik bazli arama (yetenek, sirket, pozisyon)\n"
+                   "- **Resume X ve Y'yi karsilastir** — iki resume'u yan yana karsilastirin\n"
                    "- **Yeni resume olustur** — sifirdan baslayin\n"
                    "- **PDF yukle** — mevcut CV'nizi yukleyin\n"
                    "- **Limitlerimi goster** — kota durumunuzu gorun\n\n"
@@ -625,13 +909,19 @@ Respond ONLY with valid JSON:
                    "- **Delete resume X** — remove it\n"
                    "- **Duplicate resume X** — make a copy\n"
                    "- **Edit resume X** — open in editor\n"
+                   "- **Analyze resume X** — get a strength score and suggestions\n"
+                   "- **Find resumes with Y** — search by skill, company, or keyword\n"
+                   "- **Compare resume X and Y** — side-by-side comparison\n"
                    "- **Create new resume** — start from scratch\n"
                    "- **Upload PDF** — import an existing CV\n"
                    "- **Show my limits** — check your quota\n\n"
                    "**To edit a resume:** Select one (preview/load), then give instructions in plain language:\n"
                    "_'Update my last experience', 'Add AWS experience', 'Rewrite for DevOps roles'_\n\n"
                    "Replace X with a resume number or name.")
-        return {'type': 'chat', 'message': msg}
+        quick_replies = (['List resumes', 'Check quota', 'Upload PDF']
+                         if lang == 'en' else
+                         ['Resume\'ları listele', 'Kotayı kontrol et', 'PDF yükle'])
+        return {'type': 'chat', 'message': msg, 'quick_replies': quick_replies}
 
     def _exec_clarify(self, lang: str) -> dict:
         msg = {
@@ -643,6 +933,27 @@ Respond ONLY with valid JSON:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _validate_modify_result(self, result: str):
+        """Validate and normalize LLM modify result. Returns parsed dict or None."""
+        try:
+            parsed = json.loads(result)
+            modified = parsed.get('modified_resume')
+            if not modified or not isinstance(modified, dict):
+                logger.warning("modify_resume: missing or invalid modified_resume key")
+                return None
+            if 'user_info' not in modified:
+                logger.warning("modify_resume: missing user_info in modified resume")
+                return None
+            # Normalize experience descriptions: string → list
+            for exp in modified.get('experience', []):
+                desc = exp.get('description')
+                if isinstance(desc, str):
+                    exp['description'] = [d.strip() for d in desc.split('\n') if d.strip()]
+            return parsed
+        except (ValueError, TypeError) as e:
+            logger.warning("modify_resume parse error: %s | result: %s", e, result[:200])
+            return None
 
     def _resolve_resume(self, user, params: dict):
         resume_id = params.get('resume_id')

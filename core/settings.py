@@ -278,3 +278,17 @@ FREE_TIER_LIMITS = {
     'resume_count': 3,        # Total resume count (not monthly)
     'agent_message_count': 10, # Monthly agent chat messages
 }
+
+# Agent Chat Rate Limiting
+AGENT_CHAT_RATE_LIMIT = {
+    'max_requests': 20,       # Maximum requests per window
+    'window_seconds': 60,     # Time window in seconds
+}
+
+# Cache backend (required for rate limiting)
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'resustack-cache',
+    }
+}

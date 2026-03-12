@@ -3,7 +3,7 @@
 <html class="light" lang="en">
 <head>
 <meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport"/>
 <title>Dashboard (Agentic) - ResuStack</title>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
@@ -38,6 +38,9 @@
     .bubble-user {
         @apply bg-primary text-white rounded-2xl rounded-tr-sm px-4 py-3 max-w-[85%] text-sm leading-relaxed ml-auto;
     }
+    .bubble-error {
+        @apply bg-red-50 border border-red-200 text-red-800 rounded-2xl rounded-tl-sm px-4 py-3 max-w-[85%] text-sm leading-relaxed shadow-sm;
+    }
     @keyframes dot-bounce {
         0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-6px)}
     }
@@ -47,6 +50,8 @@
     .chat-scroll::-webkit-scrollbar{width:4px;}
     .chat-scroll::-webkit-scrollbar-track{background:transparent;}
     .chat-scroll::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:2px;}
+    .scrollbar-hide::-webkit-scrollbar{display:none;}
+    .scrollbar-hide{-ms-overflow-style:none;scrollbar-width:none;}
     .resume-mini-card {
         @apply flex items-center gap-3 p-3 rounded-lg border border-slate-200 bg-slate-50 hover:bg-white hover:shadow-sm transition-all cursor-pointer;
     }
@@ -62,16 +67,16 @@
     <header class="flex items-center justify-between whitespace-nowrap border-b border-slate-200 bg-white px-4 md:px-8 py-3 z-10 flex-shrink-0">
         <div class="flex items-center gap-3">
             <img src="{% static 'img/resustack_logo.png' %}" alt="ResuStack Logo" class="h-7 w-auto object-contain"/>
-            <h2 class="text-slate-900 text-xl font-bold tracking-tight">ResuStack</h2>
+            <h2 class="text-slate-900 text-xl font-bold tracking-tight hidden sm:block">ResuStack</h2>
         </div>
-        <div class="flex items-center gap-3">
-            <div class="flex items-center gap-2 bg-slate-100 rounded-lg p-1">
+        <div class="flex items-center gap-2 sm:gap-3">
+            <div class="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
                 <button id="btn-standard" onclick="switchMode('standard')"
-                        class="px-3 py-1.5 rounded-md text-xs font-semibold transition-all text-slate-500 hover:text-slate-700">
+                        class="px-2 sm:px-3 py-1.5 rounded-md text-xs font-semibold transition-all text-slate-500 hover:text-slate-700">
                     Standard
                 </button>
                 <button id="btn-agentic" onclick="switchMode('agentic')"
-                        class="px-3 py-1.5 rounded-md text-xs font-semibold transition-all bg-primary text-white shadow-sm">
+                        class="px-2 sm:px-3 py-1.5 rounded-md text-xs font-semibold transition-all bg-primary text-white shadow-sm">
                     <span class="material-symbols-outlined !text-[14px] align-middle">auto_awesome</span>
                     Agentic
                 </button>
@@ -86,11 +91,24 @@
         </div>
     </header>
 
+    <!-- Mobile Tab Bar -->
+    <div id="mobile-tab-bar" class="lg:hidden flex border-b border-slate-200 bg-white flex-shrink-0">
+        <button id="mobile-tab-chat" onclick="switchMobileTab('chat')"
+                class="flex-1 py-2.5 text-xs font-semibold text-center border-b-2 border-primary text-primary transition-all">
+            <span class="material-symbols-outlined !text-[16px] align-middle mr-1">chat</span>Chat
+        </button>
+        <button id="mobile-tab-context" onclick="switchMobileTab('context')"
+                class="flex-1 py-2.5 text-xs font-semibold text-center border-b-2 border-transparent text-slate-500 transition-all relative">
+            <span class="material-symbols-outlined !text-[16px] align-middle mr-1">dashboard</span>Context
+            <span id="context-badge" class="hidden absolute top-1 right-1/4 w-2 h-2 bg-primary rounded-full"></span>
+        </button>
+    </div>
+
     <!-- Main Split Pane -->
     <div class="flex flex-1 overflow-hidden">
 
-        <!-- LEFT: Chat Panel (60%) -->
-        <div class="flex flex-col w-full lg:w-3/5 border-r border-slate-200 bg-white">
+        <!-- LEFT: Chat Panel (60% on lg, full on mobile) -->
+        <div id="chat-panel" class="flex flex-col w-full lg:w-3/5 border-r border-slate-200 bg-white">
 
             <!-- Chat Messages -->
             <div id="chat-messages" class="chat-scroll flex-1 overflow-y-auto px-4 py-4 space-y-4">
@@ -98,15 +116,17 @@
                     <div class="w-7 h-7 rounded-full bg-primary flex items-center justify-center flex-shrink-0 mt-0.5">
                         <span class="material-symbols-outlined !text-[14px] text-white">auto_awesome</span>
                     </div>
-                    <div class="bubble-bot" id="welcome-bubble">Loading...</div>
+                    <div>
+                        <div class="bubble-bot" id="welcome-bubble">Loading...</div>
+                    </div>
                 </div>
             </div>
 
-            <!-- Active Resume Indicator (visible when a resume is selected) -->
+            <!-- Active Resume Indicator -->
             <div id="active-resume-bar" class="hidden px-4 py-2 bg-primary/5 border-t border-primary/20 flex items-center gap-2 text-xs">
                 <span class="material-symbols-outlined !text-[14px] text-primary">edit_note</span>
                 <span class="text-primary font-medium">Editing:</span>
-                <span id="active-resume-label" class="text-primary font-semibold truncate flex-1"></span>
+                <span id="active-resume-label" class="text-primary font-semibold truncate flex-1 max-w-[60vw] lg:max-w-none"></span>
                 <button onclick="clearActiveResume()"
                         class="text-slate-400 hover:text-slate-600 ml-auto flex-shrink-0 transition-colors"
                         title="Clear active resume">
@@ -115,25 +135,25 @@
             </div>
 
             <!-- Quick Actions -->
-            <div class="px-4 py-2 border-t border-slate-100 flex flex-wrap gap-2">
+            <div class="px-4 py-2 border-t border-slate-100 flex overflow-x-auto gap-2 scrollbar-hide">
                 <button onclick="sendQuickAction('list_resumes')"
-                        class="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition-colors flex items-center gap-1">
+                        class="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition-colors flex items-center gap-1 flex-shrink-0">
                     <span class="material-symbols-outlined !text-[14px]">list</span>List Resumes
                 </button>
                 <button onclick="sendQuickAction('check_quota')"
-                        class="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition-colors flex items-center gap-1">
+                        class="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition-colors flex items-center gap-1 flex-shrink-0">
                     <span class="material-symbols-outlined !text-[14px]">speed</span>My Limits
                 </button>
                 <button onclick="sendQuickAction('create_blank_resume')"
-                        class="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition-colors flex items-center gap-1">
+                        class="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition-colors flex items-center gap-1 flex-shrink-0">
                     <span class="material-symbols-outlined !text-[14px]">add</span>New Resume
                 </button>
                 <button onclick="sendQuickAction('upload_resume')"
-                        class="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition-colors flex items-center gap-1">
+                        class="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition-colors flex items-center gap-1 flex-shrink-0">
                     <span class="material-symbols-outlined !text-[14px]">upload_file</span>Upload PDF
                 </button>
                 <button onclick="sendQuickAction('help')"
-                        class="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition-colors flex items-center gap-1">
+                        class="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition-colors flex items-center gap-1 flex-shrink-0">
                     <span class="material-symbols-outlined !text-[14px]">help</span>Help
                 </button>
             </div>
@@ -154,8 +174,8 @@
             </div>
         </div>
 
-        <!-- RIGHT: Context Panel (40%) — desktop only -->
-        <div id="context-panel" class="hidden lg:flex flex-col w-2/5 bg-slate-50 overflow-hidden">
+        <!-- RIGHT: Context Panel (40% on lg, hidden on mobile unless context tab active) -->
+        <div id="context-panel" class="hidden lg:flex flex-col w-full lg:w-2/5 bg-slate-50 overflow-hidden">
 
             <!-- Default state -->
             <div id="context-default" class="flex flex-col items-center justify-center flex-1 text-center px-8">
@@ -243,7 +263,30 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Analysis Panel -->
+            <div id="context-analysis" class="hidden flex-col flex-1 overflow-hidden">
+                <div class="px-4 py-3 border-b border-slate-200 bg-white flex items-center gap-2">
+                    <span class="material-symbols-outlined text-slate-500">analytics</span>
+                    <h3 class="font-semibold text-slate-700 text-sm">Resume Analysis</h3>
+                </div>
+                <div id="analysis-content" class="flex-1 overflow-y-auto p-4 space-y-4 chat-scroll"></div>
+            </div>
         </div>
+    </div>
+</div>
+
+<!-- Mobile Preview Modal -->
+<div id="preview-modal-mobile" class="lg:hidden fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/50" onclick="closeMobilePreview()"></div>
+    <div class="absolute inset-2 top-12 bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-slate-200">
+            <h3 class="font-semibold text-slate-700 text-sm">Preview</h3>
+            <button onclick="closeMobilePreview()" class="p-1 rounded-md text-slate-400 hover:text-slate-600">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+        <iframe id="preview-iframe-mobile" class="flex-1 border-0" src="about:blank"></iframe>
     </div>
 </div>
 
@@ -255,9 +298,39 @@ let conversationHistory = [];
 let builderState = null;
 let pendingConfirm = null;
 let isSending = false;
-let activeResumeId = null;      // currently selected resume
-let activeResumeName = null;    // display name of active resume
+let activeResumeId = null;
+let activeResumeName = null;
+let mobileActiveTab = 'chat';
 const CSRF_TOKEN = '{{ csrf_token }}';
+const PROACTIVE_SUGGESTIONS = {{ proactive_suggestions|default:"[]"|safe }};
+
+// ---------------------------------------------------------------------------
+// localStorage keys
+// ---------------------------------------------------------------------------
+const LS_ACTIVE = 'resustack_active_resume';
+const LS_CHAT = 'resustack_chat';
+const LS_BUILDER = 'resustack_builder';
+
+function persistChat() {
+    const sliced = conversationHistory.slice(-50);
+    try { localStorage.setItem(LS_CHAT, JSON.stringify(sliced)); } catch(e) {}
+}
+
+function persistActiveResume() {
+    if (activeResumeId) {
+        try { localStorage.setItem(LS_ACTIVE, JSON.stringify({id: activeResumeId, name: activeResumeName})); } catch(e) {}
+    } else {
+        localStorage.removeItem(LS_ACTIVE);
+    }
+}
+
+function persistBuilderState() {
+    if (builderState) {
+        try { localStorage.setItem(LS_BUILDER, JSON.stringify(builderState)); } catch(e) {}
+    } else {
+        localStorage.removeItem(LS_BUILDER);
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Init
@@ -265,11 +338,56 @@ const CSRF_TOKEN = '{{ csrf_token }}';
 document.addEventListener('DOMContentLoaded', () => {
     const lang = navigator.language.startsWith('tr') ? 'tr' : 'en';
     const welcomeMessages = {
-        en: "Hello! I'm your ResuStack assistant. I can list your resumes, show previews, download PDFs, and help you create or edit them.\n\nTip: Select a resume first, then describe any changes you want — in plain language!",
-        tr: "Merhaba! ResuStack asistaniyim. Resume'larinizi listeleyebilir, onizleme gosterebilir, PDF indirebilir ve duzenlemenize yardimci olabilirim.\n\nIpucu: Once bir resume secin, sonra istediginiz degisiklikleri dogal dille soyleyin!",
+        en: "Hello! I'm your ResuStack assistant. I can list your resumes, show previews, download PDFs, analyze strength, and help you create or edit them.\n\nTip: Select a resume first, then describe any changes you want — in plain language!",
+        tr: "Merhaba! ResuStack asistaniyim. Resume'larinizi listeleyebilir, onizleme gosterebilir, PDF indirebilir, guc analizi yapabilir ve duzenlemenize yardimci olabilirim.\n\nIpucu: Once bir resume secin, sonra istediginiz degisiklikleri dogal dille soyleyin!",
     };
     document.getElementById('welcome-bubble').innerHTML = formatMessage(welcomeMessages[lang] || welcomeMessages.en);
+
+    // Restore active resume from localStorage
+    try {
+        const stored = JSON.parse(localStorage.getItem(LS_ACTIVE));
+        if (stored && stored.id) {
+            setActiveResume(stored.id, stored.name);
+            loadPreviewPanel(stored.id, stored.name);
+        }
+    } catch(e) { localStorage.removeItem(LS_ACTIVE); }
+
+    // Restore chat history from localStorage
+    try {
+        const storedChat = JSON.parse(localStorage.getItem(LS_CHAT));
+        if (storedChat && Array.isArray(storedChat) && storedChat.length > 0) {
+            conversationHistory = storedChat;
+            storedChat.forEach(entry => {
+                if (entry.role === 'user') appendMessage('user', entry.content, false, entry.timestamp);
+                else if (entry.role === 'assistant') appendMessage('bot', entry.content, false, entry.timestamp);
+            });
+        }
+    } catch(e) { localStorage.removeItem(LS_CHAT); }
+
+    // Restore builder state
+    try {
+        const storedBuilder = JSON.parse(localStorage.getItem(LS_BUILDER));
+        if (storedBuilder && storedBuilder.mode === 'build') builderState = storedBuilder;
+    } catch(e) { localStorage.removeItem(LS_BUILDER); }
+
     document.getElementById('chat-input').focus();
+
+    // Proactive suggestions (show once per session)
+    if (PROACTIVE_SUGGESTIONS.length > 0 && !sessionStorage.getItem('resustack_proactive_shown')) {
+        setTimeout(() => {
+            const suggestion = PROACTIVE_SUGGESTIONS[0];
+            const msg = lang === 'tr' ? (suggestion.message_tr || suggestion.message) : suggestion.message;
+            const chips = lang === 'tr' ? (suggestion.chips_tr || suggestion.chips) : suggestion.chips;
+            appendMessage('bot', msg);
+            if (chips && chips.length) renderQuickChips(chips);
+            sessionStorage.setItem('resustack_proactive_shown', 'true');
+        }, 1000);
+    }
+
+    // Mobile keyboard resize handling
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', () => scrollToBottom());
+    }
 });
 
 // ---------------------------------------------------------------------------
@@ -287,18 +405,57 @@ async function switchMode(mode) {
 }
 
 // ---------------------------------------------------------------------------
+// Mobile tab switching
+// ---------------------------------------------------------------------------
+function switchMobileTab(tab) {
+    mobileActiveTab = tab;
+    const chatPanel = document.getElementById('chat-panel');
+    const contextPanel = document.getElementById('context-panel');
+    const tabChat = document.getElementById('mobile-tab-chat');
+    const tabContext = document.getElementById('mobile-tab-context');
+    const badge = document.getElementById('context-badge');
+
+    if (tab === 'chat') {
+        chatPanel.classList.remove('hidden');
+        chatPanel.classList.add('flex');
+        contextPanel.classList.add('hidden');
+        contextPanel.classList.remove('flex');
+        tabChat.classList.add('border-primary', 'text-primary');
+        tabChat.classList.remove('border-transparent', 'text-slate-500');
+        tabContext.classList.remove('border-primary', 'text-primary');
+        tabContext.classList.add('border-transparent', 'text-slate-500');
+    } else {
+        chatPanel.classList.add('hidden');
+        chatPanel.classList.remove('flex');
+        contextPanel.classList.remove('hidden');
+        contextPanel.classList.add('flex');
+        tabContext.classList.add('border-primary', 'text-primary');
+        tabContext.classList.remove('border-transparent', 'text-slate-500');
+        tabChat.classList.remove('border-primary', 'text-primary');
+        tabChat.classList.add('border-transparent', 'text-slate-500');
+        badge.classList.add('hidden');
+    }
+}
+
+function showContextBadge() {
+    if (mobileActiveTab === 'chat') {
+        document.getElementById('context-badge').classList.remove('hidden');
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Active resume management
 // ---------------------------------------------------------------------------
 function setActiveResume(id, name) {
     activeResumeId = id;
     activeResumeName = name;
+    persistActiveResume();
     const bar = document.getElementById('active-resume-bar');
     const label = document.getElementById('active-resume-label');
     if (id) {
         label.textContent = name || `Resume ${id}`;
         bar.classList.remove('hidden');
         bar.classList.add('flex');
-        // Highlight active card in resume list if visible
         document.querySelectorAll('.resume-mini-card').forEach(el => {
             el.classList.toggle('active-card', el.dataset.resumeId == id);
         });
@@ -314,12 +471,30 @@ function clearActiveResume() {
 }
 
 // ---------------------------------------------------------------------------
+// Clear chat
+// ---------------------------------------------------------------------------
+function clearChat() {
+    conversationHistory = [];
+    builderState = null;
+    localStorage.removeItem(LS_CHAT);
+    localStorage.removeItem(LS_BUILDER);
+    const container = document.getElementById('chat-messages');
+    // Keep only the welcome bubble
+    const welcome = container.firstElementChild;
+    container.innerHTML = '';
+    if (welcome) container.appendChild(welcome);
+}
+
+// ---------------------------------------------------------------------------
 // Send message
 // ---------------------------------------------------------------------------
 async function sendMessage(text) {
     const input = document.getElementById('chat-input');
     const msg = (text !== undefined ? text : input.value).trim();
     if (!msg || isSending) return;
+
+    // Remove any existing quick chips
+    removeAllChips();
 
     isSending = true;
     if (text === undefined) { input.value = ''; autoResizeTextarea(input); }
@@ -340,8 +515,10 @@ async function sendMessage(text) {
         });
         const data = await resp.json();
 
-        conversationHistory.push({role: 'user', content: msg});
-        conversationHistory.push({role: 'assistant', content: data.message || ''});
+        const now = new Date().toISOString();
+        conversationHistory.push({role: 'user', content: msg, timestamp: now});
+        conversationHistory.push({role: 'assistant', content: data.message || '', timestamp: now});
+        persistChat();
 
         // Sync active resume from response
         if (data.active_resume_id) {
@@ -349,10 +526,16 @@ async function sendMessage(text) {
         }
 
         hideTyping();
-        handleResponse(data);
+
+        // Handle quota / rate limit / error
+        if (data.quota_exceeded || data.rate_limited || data.error) {
+            appendMessage('bot', data.message || data.error || 'An error occurred.', true);
+        } else {
+            handleResponse(data);
+        }
     } catch (err) {
         hideTyping();
-        appendMessage('bot', 'Error connecting to assistant. Please try again.');
+        appendMessage('bot', 'Error connecting to assistant. Please try again.', true);
     }
 
     isSending = false;
@@ -376,64 +559,114 @@ function sendQuickAction(intentLabel) {
 // ---------------------------------------------------------------------------
 function handleResponse(data) {
     const msg = data.message || '';
-    appendMessage('bot', msg);
 
     switch (data.type) {
         case 'chat':
+            appendMessageAnimated('bot', msg);
             if (data.data_type === 'resume_list' && data.data) {
                 renderResumeListPanel(data.data);
+                showContextBadge();
             } else if (data.data_type === 'quota' && data.data) {
                 renderQuotaPanel(data.data);
+                showContextBadge();
             } else {
-                // Keep current context panel if preview is shown
                 if (!activeResumeId) showContextDefault();
             }
             break;
 
         case 'preview':
+            appendMessage('bot', msg);
             setActiveResume(data.resume_id, data.resume_name);
             loadPreviewPanel(data.resume_id, data.resume_name);
+            showContextBadge();
             break;
 
         case 'modify_resume':
-            // Changes were saved — refresh the preview
+            appendMessage('bot', msg);
             setActiveResume(data.resume_id, data.resume_name || activeResumeName);
             refreshPreviewAfterModify(data.resume_id, data.resume_name);
+            showContextBadge();
             break;
 
         case 'switch_template':
-            // Template changed — set active resume and refresh preview
+            appendMessage('bot', msg);
             setActiveResume(data.resume_id, data.resume_name || activeResumeName);
             refreshPreviewAfterModify(data.resume_id, data.resume_name);
+            showContextBadge();
+            break;
+
+        case 'template_picker':
+            appendMessage('bot', msg);
+            renderTemplatePicker(data.templates);
+            break;
+
+        case 'analyze_resume':
+            appendMessage('bot', msg);
+            setActiveResume(data.resume_id, data.resume_name || activeResumeName);
+            renderAnalysisPanel(data.analysis);
+            showContextBadge();
             break;
 
         case 'download':
+            appendMessage('bot', msg);
             triggerDownload(data.download_url, data.filename);
             break;
 
         case 'redirect':
+            appendMessage('bot', msg);
             builderState = null;
+            persistBuilderState();
             setTimeout(() => { window.location.href = data.url; }, 800);
             break;
 
         case 'create_choice':
+            appendMessage('bot', msg);
             renderCreateChoice(data.choices);
             if (!activeResumeId) showContextDefault();
             break;
 
         case 'confirm':
+            appendMessage('bot', msg);
             pendingConfirm = {action: data.action, params: data.params};
             showConfirmPanel(data);
+            showContextBadge();
             break;
 
         case 'multi_step':
+            appendMessage('bot', msg);
             builderState = data.session_data;
+            persistBuilderState();
             if (!activeResumeId) showContextDefault();
             break;
 
         default:
+            appendMessage('bot', msg);
             if (!activeResumeId) showContextDefault();
     }
+
+    // Quick reply chips
+    if (data.quick_replies && data.quick_replies.length > 0) {
+        renderQuickChips(data.quick_replies);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Quick reply chips
+// ---------------------------------------------------------------------------
+function renderQuickChips(chips) {
+    const container = document.getElementById('chat-messages');
+    const div = document.createElement('div');
+    div.className = 'flex flex-wrap gap-1.5 ml-9 mt-1.5 quick-chips';
+    div.innerHTML = chips.map(text =>
+        `<button onclick="sendMessage('${escHtml(text)}')"
+                class="px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors">${escHtml(text)}</button>`
+    ).join('');
+    container.appendChild(div);
+    scrollToBottom();
+}
+
+function removeAllChips() {
+    document.querySelectorAll('.quick-chips').forEach(el => el.remove());
 }
 
 // ---------------------------------------------------------------------------
@@ -447,7 +680,7 @@ function showContextDefault() {
 
 function hideAllContextPanels() {
     ['context-default','context-resume-list','context-preview',
-     'context-quota','context-confirm'].forEach(id => {
+     'context-quota','context-confirm','context-analysis'].forEach(id => {
         const el = document.getElementById(id);
         el.classList.add('hidden');
         el.classList.remove('flex');
@@ -468,6 +701,9 @@ function renderResumeListPanel(resumes) {
     container.innerHTML = resumes.map(r => {
         const isActive = activeResumeId && r.id == activeResumeId;
         const safeName = escHtml(r.display_name || r.title);
+        const tpl = r.template_selector || 'faangpath-simple';
+        const badgeColor = tpl === 'modern-sidebar' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700';
+        const badgeLabel = tpl === 'modern-sidebar' ? 'Modern' : 'Classic';
         return `
         <div class="resume-mini-card group ${isActive ? 'active-card' : ''}"
              data-resume-id="${r.id}"
@@ -477,7 +713,10 @@ function renderResumeListPanel(resumes) {
                 <span class="material-symbols-outlined !text-[18px] text-primary">description</span>
             </div>
             <div class="flex-1 min-w-0">
-                <p class="text-sm font-semibold text-slate-800 truncate">${safeName}</p>
+                <div class="flex items-center gap-2">
+                    <p class="text-sm font-semibold text-slate-800 truncate">${safeName}</p>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded-full ${badgeColor} font-medium flex-shrink-0">${badgeLabel}</span>
+                </div>
                 <p class="text-xs text-slate-400">ID ${r.id} &middot; ${r.updated_at}</p>
             </div>
             <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -526,20 +765,19 @@ function loadPreviewPanel(resumeId, title) {
 
     const iframe = document.getElementById('context-iframe');
     iframe.src = `/resume/${resumeId}/preview/`;
+
+    // Handle deleted resume (iframe error)
+    iframe.onerror = () => { clearActiveResume(); };
 }
 
 function refreshPreview() {
     if (!activeResumeId) return;
     const iframe = document.getElementById('context-iframe');
-    // Force reload by toggling src
-    const src = `/resume/${activeResumeId}/preview/?t=${Date.now()}`;
-    iframe.src = src;
+    iframe.src = `/resume/${activeResumeId}/preview/?t=${Date.now()}`;
 }
 
 function refreshPreviewAfterModify(resumeId, resumeName) {
-    // Show the preview panel (or refresh if already shown)
     loadPreviewPanel(resumeId, resumeName || `Resume ${resumeId}`);
-    // Show brief loading indicator
     const loading = document.getElementById('preview-loading');
     if (loading) {
         loading.classList.remove('hidden');
@@ -636,45 +874,238 @@ async function executeConfirm() {
                 method: 'POST',
                 headers: {'X-CSRFToken': CSRF_TOKEN},
             });
-            // Clear active resume if it was deleted
             if (activeResumeId == params.resume_id) clearActiveResume();
             else showContextDefault();
             appendMessage('bot', 'Resume deleted successfully.');
         } catch {
-            appendMessage('bot', 'Error deleting resume.');
+            appendMessage('bot', 'Error deleting resume.', true);
             showContextDefault();
         }
     }
 }
 
-function triggerDownload(url, filename) {
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename || 'resume.pdf';
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+// ---------------------------------------------------------------------------
+// Analysis panel
+// ---------------------------------------------------------------------------
+function renderAnalysisPanel(analysis) {
+    hideAllContextPanels();
+    const panel = document.getElementById('context-analysis');
+    panel.classList.remove('hidden');
+    panel.classList.add('flex');
+
+    const score = analysis.overall_score || 0;
+    const scoreColor = score >= 80 ? 'text-green-600' : score >= 60 ? 'text-yellow-600' : 'text-red-600';
+    const scoreBg = score >= 80 ? 'bg-green-50 border-green-200' : score >= 60 ? 'bg-yellow-50 border-yellow-200' : 'bg-red-50 border-red-200';
+
+    let html = `
+        <div class="${scoreBg} border rounded-xl p-4 text-center">
+            <p class="text-4xl font-bold ${scoreColor}">${score}</p>
+            <p class="text-xs text-slate-500 mt-1">Overall Score / 100</p>
+        </div>`;
+
+    const categories = analysis.categories || [];
+    if (categories.length) {
+        html += '<div class="space-y-3">';
+        categories.forEach(cat => {
+            const pct = Math.round((cat.score / cat.max) * 100);
+            const barColor = pct >= 80 ? 'bg-green-500' : pct >= 60 ? 'bg-yellow-500' : 'bg-red-500';
+            html += `
+            <div>
+                <div class="flex justify-between text-xs font-medium text-slate-600 mb-1">
+                    <span>${escHtml(cat.name)}</span><span>${cat.score}/${cat.max}</span>
+                </div>
+                <div class="w-full bg-slate-200 rounded-full h-2">
+                    <div class="${barColor} h-2 rounded-full transition-all" style="width:${pct}%"></div>
+                </div>
+                <p class="text-xs text-slate-500 mt-1">${escHtml(cat.feedback || '')}</p>
+            </div>`;
+        });
+        html += '</div>';
+    }
+
+    const suggestions = analysis.top_suggestions || [];
+    if (suggestions.length) {
+        html += '<div class="bg-white border border-slate-200 rounded-xl p-3"><h4 class="text-xs font-semibold text-slate-700 mb-2">Top Suggestions</h4><ul class="space-y-1">';
+        suggestions.forEach(s => {
+            html += `<li class="text-xs text-slate-600 flex items-start gap-1.5"><span class="material-symbols-outlined !text-[14px] text-primary mt-0.5 flex-shrink-0">lightbulb</span>${escHtml(s)}</li>`;
+        });
+        html += '</ul></div>';
+    }
+
+    document.getElementById('analysis-content').innerHTML = html;
+}
+
+// ---------------------------------------------------------------------------
+// Template picker (inline chat cards)
+// ---------------------------------------------------------------------------
+function renderTemplatePicker(templates) {
+    const container = document.getElementById('chat-messages');
+    const div = document.createElement('div');
+    div.className = 'flex items-start gap-2';
+    div.innerHTML = `
+        <div class="w-7 h-7 rounded-full bg-primary flex items-center justify-center flex-shrink-0 mt-0.5">
+            <span class="material-symbols-outlined !text-[14px] text-white">auto_awesome</span>
+        </div>
+        <div class="flex gap-3 max-w-[85%]">
+            ${templates.map(t => `
+                <button onclick="sendMessage('Switch to ${t.key}')"
+                        class="flex flex-col items-center p-3 rounded-xl border-2 border-slate-200 hover:border-primary hover:bg-primary/5 transition-all w-36">
+                    <div class="w-full h-16 rounded-lg bg-slate-100 mb-2 flex items-center justify-center overflow-hidden">
+                        ${t.key === 'modern-sidebar' ?
+                            '<div class="flex w-full h-full"><div class="w-1/3 bg-slate-300"></div><div class="w-2/3 p-1 space-y-1"><div class="h-1.5 bg-slate-300 rounded w-3/4"></div><div class="h-1 bg-slate-200 rounded w-full"></div><div class="h-1 bg-slate-200 rounded w-5/6"></div></div></div>' :
+                            '<div class="w-full h-full p-1.5 space-y-1"><div class="h-1.5 bg-slate-300 rounded w-1/2 mx-auto"></div><div class="h-1 bg-slate-200 rounded w-3/4 mx-auto"></div><div class="h-1 bg-slate-200 rounded w-full"></div><div class="h-1 bg-slate-200 rounded w-5/6"></div></div>'
+                        }
+                    </div>
+                    <p class="text-xs font-semibold text-slate-700">${escHtml(t.name)}</p>
+                    <p class="text-[10px] text-slate-400 mt-0.5 text-center">${escHtml(t.description)}</p>
+                </button>
+            `).join('')}
+        </div>`;
+    container.appendChild(div);
+    scrollToBottom();
+}
+
+// ---------------------------------------------------------------------------
+// Mobile preview modal
+// ---------------------------------------------------------------------------
+function openMobilePreview(resumeId) {
+    const modal = document.getElementById('preview-modal-mobile');
+    const iframe = document.getElementById('preview-iframe-mobile');
+    iframe.src = `/resume/${resumeId}/preview/`;
+    modal.classList.remove('hidden');
+}
+
+function closeMobilePreview() {
+    const modal = document.getElementById('preview-modal-mobile');
+    modal.classList.add('hidden');
+    document.getElementById('preview-iframe-mobile').src = 'about:blank';
+}
+
+// ---------------------------------------------------------------------------
+// Download with Blob (reliable filename)
+// ---------------------------------------------------------------------------
+async function triggerDownload(url, filename) {
+    try {
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error('Download failed');
+        const blob = await resp.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = filename || 'resume.pdf';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+    } catch {
+        // Fallback to simple link
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename || 'resume.pdf';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
 }
 
 // ---------------------------------------------------------------------------
 // Chat UI helpers
 // ---------------------------------------------------------------------------
-function appendMessage(role, text) {
+function appendMessage(role, text, isError, timestamp) {
+    if (!text) return;
     const container = document.getElementById('chat-messages');
     const div = document.createElement('div');
     div.className = 'flex items-start gap-2' + (role === 'user' ? ' justify-end' : '');
+
+    const ts = timestamp ? new Date(timestamp) : new Date();
+    const timeStr = ts.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+
     if (role === 'bot') {
+        const bubbleClass = isError ? 'bubble-error' : 'bubble-bot';
         div.innerHTML = `
-            <div class="w-7 h-7 rounded-full bg-primary flex items-center justify-center flex-shrink-0 mt-0.5">
-                <span class="material-symbols-outlined !text-[14px] text-white">auto_awesome</span>
+            <div class="w-7 h-7 rounded-full ${isError ? 'bg-red-500' : 'bg-primary'} flex items-center justify-center flex-shrink-0 mt-0.5">
+                <span class="material-symbols-outlined !text-[14px] text-white">${isError ? 'error' : 'auto_awesome'}</span>
             </div>
-            <div class="bubble-bot">${formatMessage(text)}</div>`;
+            <div>
+                <div class="${bubbleClass}">${formatMessage(text)}</div>
+                <span class="text-[10px] text-slate-400 mt-0.5 block">${timeStr}</span>
+                ${isError ? `<button onclick="retryLastMessage()" class="text-[10px] text-red-600 hover:text-red-800 mt-1 flex items-center gap-0.5"><span class="material-symbols-outlined !text-[12px]">refresh</span>Retry</button>` : ''}
+            </div>`;
     } else {
-        div.innerHTML = `<div class="bubble-user">${escHtml(text)}</div>`;
+        div.innerHTML = `<div>
+            <div class="bubble-user">${escHtml(text)}</div>
+            <span class="text-[10px] text-slate-400 mt-0.5 block text-right">${timeStr}</span>
+        </div>`;
     }
     container.appendChild(div);
     scrollToBottom();
+}
+
+function appendMessageAnimated(role, text, isError) {
+    if (!text) return;
+    const container = document.getElementById('chat-messages');
+    const div = document.createElement('div');
+    div.className = 'flex items-start gap-2';
+
+    const ts = new Date();
+    const timeStr = ts.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+
+    const bubbleDiv = document.createElement('div');
+    bubbleDiv.className = 'bubble-bot';
+    bubbleDiv.style.minHeight = '1.5em';
+
+    const timeSpan = document.createElement('span');
+    timeSpan.className = 'text-[10px] text-slate-400 mt-0.5 block';
+    timeSpan.textContent = timeStr;
+
+    const wrapper = document.createElement('div');
+    wrapper.appendChild(bubbleDiv);
+    wrapper.appendChild(timeSpan);
+
+    div.innerHTML = `<div class="w-7 h-7 rounded-full bg-primary flex items-center justify-center flex-shrink-0 mt-0.5">
+        <span class="material-symbols-outlined !text-[14px] text-white">auto_awesome</span>
+    </div>`;
+    div.appendChild(wrapper);
+    container.appendChild(div);
+
+    // Typing animation
+    const formatted = formatMessage(text);
+    let charIndex = 0;
+    const plainChars = text.length;
+    const speed = Math.max(10, Math.min(30, 2000 / plainChars)); // adaptive speed
+    let completed = false;
+
+    function completeNow() {
+        if (completed) return;
+        completed = true;
+        bubbleDiv.innerHTML = formatted;
+        scrollToBottom();
+    }
+
+    // Click to complete
+    bubbleDiv.addEventListener('click', completeNow);
+
+    // Input to complete
+    const inputListener = () => { completeNow(); document.getElementById('chat-input').removeEventListener('input', inputListener); };
+    document.getElementById('chat-input').addEventListener('input', inputListener);
+
+    const interval = setInterval(() => {
+        if (completed) { clearInterval(interval); return; }
+        charIndex += 3;
+        if (charIndex >= text.length) {
+            completeNow();
+            clearInterval(interval);
+            document.getElementById('chat-input').removeEventListener('input', inputListener);
+        } else {
+            bubbleDiv.innerHTML = formatMessage(text.slice(0, charIndex)) + '<span class="animate-pulse">|</span>';
+            scrollToBottom();
+        }
+    }, speed);
+}
+
+function retryLastMessage() {
+    const lastUserMsg = [...conversationHistory].reverse().find(m => m.role === 'user');
+    if (lastUserMsg) sendMessage(lastUserMsg.content);
 }
 
 function showTyping() {
