@@ -193,39 +193,82 @@
     <!-- How it Works Section -->
     <section id="how-it-works" class="py-24 md:py-32 bg-background-light/50">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
+            <div class="text-center mb-20">
+                <h2 class="text-3xl md:text-5xl font-black text-slate-900 mb-6">How it Works</h2>
+                <p class="text-slate-500 text-lg max-w-2xl mx-auto font-medium">From blank page to job-ready resume in minutes — your way.</p>
+            </div>
+
+            <!-- Step 1 -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center mb-32">
+                <div>
+                    <div class="flex items-center gap-4 mb-6">
+                        <div class="w-12 h-12 rounded-full bg-primary text-white font-black flex items-center justify-center shadow-lg shadow-primary/30 flex-shrink-0">1</div>
+                        <h4 class="text-2xl font-bold text-slate-900">Choose Your Starting Point</h4>
+                    </div>
+                    <p class="text-slate-500 text-lg leading-relaxed">Upload a PDF, sync from LinkedIn, or start from a blank slate. Our AI handles the initial heavy lifting — extracting your experience, education, and skills automatically.</p>
+                </div>
                 <div class="relative">
                     <div class="absolute -inset-4 bg-primary/10 rounded-[2.5rem] blur-xl"></div>
-                    <img src="/static/screenshots/Screenshot 2026-02-06 at 00.23.12.png" alt="How it works" class="relative rounded-3xl shadow-2xl border border-white"/>
+                    <img src="/static/screenshots/dashboard.png" alt="Choose your starting point" class="relative rounded-3xl shadow-2xl border border-white w-full"/>
                 </div>
+            </div>
+
+            <!-- Step 2 -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center mb-32">
+                <div class="order-2 lg:order-1 relative">
+                    <div class="absolute -inset-4 bg-primary/10 rounded-[2.5rem] blur-xl"></div>
+                    <img src="/static/screenshots/resume_editor_new.png" alt="Enhance with AI" class="relative rounded-3xl shadow-2xl border border-white w-full"/>
+                </div>
+                <div class="order-1 lg:order-2">
+                    <div class="flex items-center gap-4 mb-6">
+                        <div class="w-12 h-12 rounded-full bg-primary text-white font-black flex items-center justify-center shadow-lg shadow-primary/30 flex-shrink-0">2</div>
+                        <h4 class="text-2xl font-bold text-slate-900">Enhance with AI</h4>
+                    </div>
+                    <p class="text-slate-500 text-lg leading-relaxed">Use the split-pane editor to refine your details. One-click AI enhancement rewrites your experience descriptions into impactful bullet points — while the live preview updates instantly on the right.</p>
+                </div>
+            </div>
+
+            <!-- Step 3 — Agentic -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center mb-32">
                 <div>
-                    <h2 class="text-3xl md:text-5xl font-black text-slate-900 mb-12">How it Works</h2>
-                    <div class="space-y-12">
-                        <!-- Step 1 -->
-                        <div class="flex gap-6">
-                            <div class="flex-shrink-0 w-12 h-12 rounded-full bg-primary text-white font-black flex items-center justify-center shadow-lg shadow-primary/30">1</div>
-                            <div>
-                                <h4 class="text-xl font-bold text-slate-900 mb-2">Choose Your Starting Point</h4>
-                                <p class="text-slate-500">Upload a PDF, sync from LinkedIn, or start from a blank slate. Our AI handles the initial heavy lifting.</p>
-                            </div>
-                        </div>
-                        <!-- Step 2 -->
-                        <div class="flex gap-6">
-                            <div class="flex-shrink-0 w-12 h-12 rounded-full bg-primary text-white font-black flex items-center justify-center shadow-lg shadow-primary/30">2</div>
-                            <div>
-                                <h4 class="text-xl font-bold text-slate-900 mb-2">Enhance with AI</h4>
-                                <p class="text-slate-500">Use our editor to tweak your details. One-click AI enhancement for experience descriptions and skill extraction.</p>
-                            </div>
-                        </div>
-                        <!-- Step 3 -->
-                        <div class="flex gap-6">
-                            <div class="flex-shrink-0 w-12 h-12 rounded-full bg-primary text-white font-black flex items-center justify-center shadow-lg shadow-primary/30">3</div>
-                            <div>
-                                <h4 class="text-xl font-bold text-slate-900 mb-2">Download & Apply</h4>
-                                <p class="text-slate-500">Export your resume as a professional PDF. Ready to be sent to recruiters or uploaded to application portals.</p>
-                            </div>
+                    <div class="flex items-center gap-4 mb-6">
+                        <div class="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-blue-400 text-white font-black flex items-center justify-center shadow-lg shadow-primary/30 flex-shrink-0">3</div>
+                        <div>
+                            <h4 class="text-2xl font-bold text-slate-900">Chat to Build & Refine</h4>
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-bold mt-1">
+                                <span class="material-symbols-outlined" style="font-size:12px;">auto_awesome</span>
+                                Agentic Mode
+                            </span>
                         </div>
                     </div>
+                    <p class="text-slate-500 text-lg leading-relaxed">Switch to Agentic Mode and talk to your resume like a conversation. Say <em>"Add AWS S3 integration to my skills"</em> or <em>"Make my last role sound more senior"</em> — the AI understands context and makes targeted edits instantly.</p>
+                </div>
+                <div class="relative">
+                    <div class="absolute -inset-4 bg-blue-400/10 rounded-[2.5rem] blur-xl"></div>
+                    <img src="/static/screenshots/agentic_chat.png" alt="Agentic Mode" class="relative rounded-3xl shadow-2xl border border-white w-full"/>
+                </div>
+            </div>
+
+            <!-- Step 4 -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+                <div class="order-2 lg:order-1 relative">
+                    <div class="absolute -inset-4 bg-primary/10 rounded-[2.5rem] blur-xl"></div>
+                    <div class="relative bg-white rounded-3xl shadow-2xl border border-slate-100 p-12 flex flex-col items-center justify-center gap-6 min-h-[240px]">
+                        <div class="w-20 h-20 rounded-full bg-green-50 flex items-center justify-center">
+                            <span class="material-symbols-outlined text-green-500" style="font-size:40px;">download</span>
+                        </div>
+                        <div class="text-center">
+                            <p class="text-2xl font-black text-slate-900 mb-2">Your resume, as a PDF.</p>
+                            <p class="text-slate-400 text-sm font-medium">ATS-friendly • Professional • Ready to send</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="order-1 lg:order-2">
+                    <div class="flex items-center gap-4 mb-6">
+                        <div class="w-12 h-12 rounded-full bg-primary text-white font-black flex items-center justify-center shadow-lg shadow-primary/30 flex-shrink-0">4</div>
+                        <h4 class="text-2xl font-bold text-slate-900">Download & Apply</h4>
+                    </div>
+                    <p class="text-slate-500 text-lg leading-relaxed">Export your resume as a polished, ATS-optimized PDF in one click. Ready to send to recruiters or upload to any job portal.</p>
                 </div>
             </div>
         </div>
