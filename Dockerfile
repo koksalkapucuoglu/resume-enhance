@@ -48,6 +48,11 @@ COPY . .
 
 # Create a non-root user for security (Best Practice)
 RUN useradd -m appuser && chown -R appuser /app
+
+# Copy and set entrypoint
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 USER appuser
 
 # Environment variables
@@ -58,4 +63,4 @@ ENV PYTHONDONTWRITEBYTECODE=1
 EXPOSE 8000
 
 # Default command (Use gunicorn in production)
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "core.wsgi:application"]
+ENTRYPOINT ["/entrypoint.sh"]
