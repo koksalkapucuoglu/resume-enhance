@@ -1396,13 +1396,104 @@ def preview_saved_resume(request, pk):
 @require_http_methods(["POST"])
 def agent_chat(request):
     """
-    JSON in:  {message, history, builder_state, active_resume_id}
-    JSON out: {type, message, ...extra fields, active_resume_id?}
-    """
-    from django.core.cache import cache
-    from resume.services.agent_service import agent_service
+    Run one turn of the agent loop.
 
-    # Rate limiting
+    JSON in:  {message, history, builder_state, active_resume_id}
+    JSON out: {type: "agent_turn"|"approval_required", message, effects, ...}
+    """
+    from resume.services.agent_service import agent_service
+    from resume.services import agent_loop
+
+    limited = _agent_rate_limited(request)
+    if limited:
+        return limited
+
+    try:
+        data = json.loads(request.body)
+    except (ValueError, KeyError):
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    message = data.get("message", "").strip()
+    if not message:
+        return JsonResponse({"error": "Empty message"}, status=400)
+
+    profile = request.user.profile
+    quota_response = _agent_quota_exceeded(request, message)
+    if quota_response:
+        return quota_response
+
+    builder_state = data.get("builder_state")
+    active_resume_id = data.get("active_resume_id")
+    active_resume = (
+        Resume.objects.filter(pk=active_resume_id, user=request.user).first()
+        if active_resume_id
+        else None
+    )
+
+    # The guided builder is a fixed question sequence, not an agent decision —
+    # it stays outside the loop.
+    if builder_state and builder_state.get("mode") == "build":
+        result = agent_service.handle_builder_step(
+            message, builder_state, request.user
+        )
+        profile.agent_message_count += 1
+        profile.save(update_fields=["agent_message_count"])
+        return JsonResponse({**result, "user_message": message})
+
+    ctx = _agent_context(request, active_resume)
+    outcome = agent_loop.run_turn(
+        request.user, ctx, data.get("history"), message
+    )
+
+    profile.agent_message_count += 1
+    profile.save(update_fields=["agent_message_count"])
+    return JsonResponse(_agent_response(outcome, active_resume_id, message))
+
+
+@login_required
+@require_http_methods(["POST"])
+def agent_approve(request):
+    """
+    Approve or decline a destructive tool call and continue the paused loop.
+    JSON in: {token, approved}
+    """
+    from resume.services import agent_loop
+
+    limited = _agent_rate_limited(request)
+    if limited:
+        return limited
+
+    try:
+        data = json.loads(request.body)
+    except (ValueError, KeyError):
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    token = data.get("token", "")
+    # SECURITY: the parked loop is keyed by user, so a token cannot be replayed
+    # against someone else's conversation. It is consumed on read.
+    parked = agent_loop.take_pending(request.user, token)
+    if not parked:
+        return JsonResponse(
+            {"error": "This confirmation has expired. Please ask again."}, status=410
+        )
+
+    active_resume_id = data.get("active_resume_id")
+    active_resume = (
+        Resume.objects.filter(pk=active_resume_id, user=request.user).first()
+        if active_resume_id
+        else None
+    )
+    ctx = _agent_context(request, active_resume)
+    outcome = agent_loop.resume_turn(
+        request.user, ctx, parked, approved=bool(data.get("approved"))
+    )
+    return JsonResponse(_agent_response(outcome, active_resume_id, ""))
+
+
+def _agent_rate_limited(request):
+    """Shared rate limit for the agent endpoints. Returns a response or None."""
+    from django.core.cache import cache
+
     rate_cfg = settings.AGENT_CHAT_RATE_LIMIT
     rate_key = f"agent_rate_{request.user.id}"
     request_count = cache.get(rate_key, 0)
@@ -1416,107 +1507,105 @@ def agent_chat(request):
             status=429,
         )
     cache.set(rate_key, request_count + 1, rate_cfg["window_seconds"])
+    return None
 
-    try:
-        data = json.loads(request.body)
-    except (ValueError, KeyError):
-        return JsonResponse({"error": "Invalid JSON"}, status=400)
 
-    message = data.get("message", "").strip()
-    if not message:
-        return JsonResponse({"error": "Empty message"}, status=400)
+def _agent_quota_exceeded(request, message):
+    """Checked before any LLM call, so an over-quota user costs nothing."""
+    if request.user.profile.can_send_agent_message():
+        return None
+    lang = "tr" if any(c in message for c in "çğıöşüÇĞİÖŞÜ") else "en"
+    msg = {
+        "en": "You've reached your monthly chat message limit (10). Upgrade to Pro for unlimited usage.",
+        "tr": "Aylık sohbet mesajı limitinize (10) ulaştınız. Sınırsız kullanım için Pro'ya geçin.",
+    }[lang]
+    return JsonResponse({"type": "chat", "message": msg, "quota_exceeded": True})
 
-    builder_state = data.get("builder_state")
-    active_resume_id = data.get("active_resume_id")
 
-    # Resolve active resume (IDOR-safe)
-    active_resume = None
-    if active_resume_id:
-        try:
-            active_resume = Resume.objects.get(pk=active_resume_id, user=request.user)
-        except Resume.DoesNotExist:
-            pass
-
+def _agent_context(request, active_resume):
+    """Facts handed to the loop: the user's resumes, quota and active resume."""
     profile = request.user.profile
-
-    # Check agent message quota BEFORE processing (saves LLM cost)
-    if not profile.can_send_agent_message():
-        lang = "tr" if any(c in message for c in "çğıöşüÇĞİÖŞÜ") else "en"
-        msg = {
-            "en": "You've reached your monthly chat message limit (10). Upgrade to Pro for unlimited usage.",
-            "tr": "Aylık sohbet mesajı limitinize (10) ulaştınız. Sınırsız kullanım için Pro'ya geçin.",
-        }.get(lang)
-        return JsonResponse({"type": "chat", "message": msg, "quota_exceeded": True})
-
-    resume_qs = list(Resume.objects.filter(user=request.user).order_by("-updated_at"))
-    resumes = [
-        {
-            "rank": idx + 1,
-            "id": r.id,
-            "display_name": r.display_name,
-            "title": r.title,
-            "updated_at": r.updated_at.strftime("%Y-%m-%d %H:%M"),
-        }
-        for idx, r in enumerate(resume_qs)
-    ]
-
     limits = settings.FREE_TIER_LIMITS
-    context = {
-        "resumes": resumes,
-        "active_resume_id": active_resume_id,
+    resume_qs = list(Resume.objects.filter(user=request.user).order_by("-updated_at"))
+    return {
+        "lang": profile.ui_language or "en",
+        "active_resume": active_resume,
+        "resumes": [
+            {
+                "rank": idx + 1,
+                "id": r.id,
+                "display_name": r.display_name,
+                "template": r.template_selector,
+                "updated_at": r.updated_at.strftime("%Y-%m-%d %H:%M"),
+            }
+            for idx, r in enumerate(resume_qs)
+        ],
         "quota": {
-            "import_remaining": max(0, limits["import_count"] - profile.import_count),
-            "enhance_remaining": max(
-                0, limits["enhance_count"] - profile.enhance_count
-            ),
-            "download_remaining": max(
-                0, limits["download_count"] - profile.download_count
-            ),
-            "resume_count": request.user.resumes.count(),
-            "resume_limit": limits["resume_count"],
             "is_pro": profile.is_pro(),
+            "resume_count": len(resume_qs),
+            "resume_limit": limits["resume_count"],
+            "imports_left": max(0, limits["import_count"] - profile.import_count),
+            "downloads_left": max(0, limits["download_count"] - profile.download_count),
+            "messages_left": max(
+                0, limits["agent_message_count"] - profile.agent_message_count
+            ),
         },
     }
 
-    # Multi-step conversational builder
-    if builder_state and builder_state.get("mode") == "build":
-        result = agent_service.handle_builder_step(message, builder_state, request.user)
+
+def _agent_response(outcome, active_resume_id, user_message):
+    """Translate a loop outcome into the JSON the dashboard consumes."""
+    status = outcome["status"]
+    effects = outcome.get("effects", [])
+
+    if status == "needs_approval":
+        payload = {
+            "type": "approval_required",
+            "token": outcome["token"],
+            "tool": outcome["tool"],
+            "arguments": outcome["arguments"],
+            "effects": effects,
+        }
+    elif status == "error":
+        payload = {
+            "type": "agent_turn",
+            "message": "The assistant is unavailable right now. Please try again.",
+            "effects": effects,
+            "is_error": True,
+        }
+    elif status == "budget":
+        payload = {
+            "type": "agent_turn",
+            "message": "I couldn't finish that in one go. Could you break it into smaller steps?",
+            "effects": effects,
+        }
     else:
-        classified = agent_service.classify_intent(
-            message, context, active_resume=active_resume
-        )
-        lang = classified.get("lang", "en")
-        llm_msg = classified.pop("llm_message", None)
-        result = agent_service.execute_intent(
-            classified["intent"],
-            classified.get("params", {}),
-            request.user,
-            lang=lang,
-            builder_state=builder_state,
-            active_resume=active_resume,
-            user_message=message,
-        )
-        if llm_msg and result.get("type") == "chat" and not result.get("message"):
-            result["message"] = llm_msg
+        payload = {
+            "type": "agent_turn",
+            "message": outcome.get("message", ""),
+            "effects": effects,
+        }
 
-    # Propagate active_resume_id to frontend so it stays in sync.
-    # For modify_resume / preview, update the active resume to the one that was acted on.
-    if result.get("type") in (
-        "modify_resume",
-        "preview",
-        "analyze_resume",
-        "switch_template",
-    ) and result.get("resume_id"):
-        result["active_resume_id"] = result["resume_id"]
-    elif active_resume_id and result.get("type") not in ("redirect", "multi_step"):
-        # Keep existing active resume unless we're navigating away
-        result["active_resume_id"] = active_resume_id
+    # Keep the frontend's notion of the active resume in sync with what ran.
+    acted_on = next(
+        (
+            e.get("resume_id")
+            for e in reversed(effects)
+            if e.get("type")
+            in ("modify_resume", "preview", "analyze_resume", "switch_template")
+            and e.get("resume_id")
+        ),
+        None,
+    )
+    deleted = {e.get("resume_id") for e in effects if e.get("type") == "resume_deleted"}
+    if acted_on:
+        payload["active_resume_id"] = acted_on
+    elif active_resume_id and int(active_resume_id) not in deleted:
+        payload["active_resume_id"] = active_resume_id
 
-    # Increment agent message counter AFTER successful processing
-    profile.agent_message_count += 1
-    profile.save(update_fields=["agent_message_count"])
-
-    return JsonResponse({**result, "user_message": message})
+    if user_message:
+        payload["user_message"] = user_message
+    return payload
 
 
 # ---------------------------------------------------------------------------
