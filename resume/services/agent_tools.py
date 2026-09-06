@@ -24,7 +24,7 @@ from typing import Callable
 from django.conf import settings
 from django.urls import reverse
 
-from resume.models import JobPosting, Resume
+from resume.models import JobPosting, Resume, ResumeRevision
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +153,8 @@ def _resume_facts(resume):
         "id": resume.id,
         "name": resume.display_name,
         "language": resume.language,
-        "is_translation_of": resume.translation_of_id,
+        "derived_from": resume.derived_from_id,
+        "derived_kind": resume.derived_kind,
         "template": resume.template_selector,
         "experience_count": len(content.get("experience", [])),
         "education_count": len(content.get("education", [])),
@@ -173,8 +174,18 @@ def _resume_facts(resume):
 )
 def list_resumes(user, ctx):
     legacy = _service()._exec_list_resumes(user, ctx["lang"])
+    rows = legacy.get("data", [])
+    # The panel already lists them. Handing the model the whole list too made it
+    # narrate a second, redundant copy in prose.
     return ToolResult(
-        data={"resumes": legacy.get("data", [])},
+        data={
+            "count": len(rows),
+            "names": [r.get("display_name") for r in rows][:10],
+            "note": (
+                "The full list is already on screen. Acknowledge it in one short "
+                "sentence and ask what to do next — do not repeat the entries."
+            ),
+        },
         ui=[legacy],
     )
 
@@ -442,21 +453,33 @@ def match_job(user, ctx, description, resume_id=None):
     if "error" in result:
         return ToolResult(data=result)
 
-    posting = JobPosting.objects.create(
-        user=user,
-        title=result["title"],
-        company=result["company"],
-        description=description[: job_service.MAX_DESCRIPTION_CHARS],
-        tags=result["tags"],
-        resume=resume,
-        match_score=result["score"],
-        missing_keywords=result["missing_keywords"],
+    # One record per posting: pasting the same advert again re-measures the
+    # application rather than opening a second one.
+    digest = JobPosting.fingerprint(description)
+    posting = JobPosting.objects.filter(user=user, content_hash=digest).first() if digest else None
+    is_new = posting is None
+    if is_new:
+        posting = JobPosting(
+            user=user,
+            description=description[: job_service.MAX_DESCRIPTION_CHARS],
+            content_hash=digest,
+        )
+    posting.title = result["title"]
+    posting.company = result["company"]
+    posting.tags = result["tags"]
+    posting.resume = resume
+    previous = posting.record_score(
+        result["score"], resume.id, result["missing_keywords"]
     )
+    posting.save()
+
     return ToolResult(
         data={
             "job_id": posting.id,
             "resume_id": resume.id,
             "score": result["score"],
+            "previous_score": previous,
+            "is_new_application": is_new,
             "matched_keywords": result["matched_keywords"],
             "missing_keywords": result["missing_keywords"],
             "verdict": result["verdict"],
@@ -470,6 +493,7 @@ def match_job(user, ctx, description, resume_id=None):
                 "resume_id": resume.id,
                 "resume_name": resume.display_name,
                 "score": result["score"],
+                "previous_score": previous,
                 "matched_keywords": result["matched_keywords"],
                 "missing_keywords": result["missing_keywords"],
                 "suggestions": result["suggestions"],
@@ -482,9 +506,9 @@ def match_job(user, ctx, description, resume_id=None):
 @tool(
     name="tailor_resume_for_job",
     description=(
-        "Create a copy of a resume rewritten for one saved job posting. The "
-        "original is untouched and the copy is linked to the posting. Run "
-        "match_job first so the posting exists."
+        "Rewrite a resume for one saved job posting, as a variant that leaves "
+        "the original untouched. Running it again for the same job updates that "
+        "same variant rather than making another. Run match_job first."
     ),
     parameters={"job_id": {"type": "integer"}, "resume_id": INT_OR_NULL},
     destructive=True,
@@ -499,21 +523,24 @@ def tailor_resume_for_job(user, ctx, job_id, resume_id=None):
     if not posting:
         return ToolResult(data={"error": f"No saved job with id {job_id}."})
 
-    source = None
-    if resume_id:
-        source = Resume.objects.filter(pk=resume_id, user=user).first()
-    source = source or posting.resume or ctx.get("active_resume")
+    from resume.services import job_service, resume_content, revision_service
+
+    # Always tailor from the base resume. Tailoring a previous variant is what
+    # made titles compound into "Main — Role — Role".
+    requested = (
+        Resume.objects.filter(pk=resume_id, user=user).first() if resume_id else None
+    )
+    source = (requested or posting.resume or ctx.get("active_resume"))
     if not source:
         return ToolResult(data={"error": "No resume to tailor. Ask which one."})
+    source = source.root
 
-    if not user.profile.can_create_resume():
-        return ToolResult(
-            data={
-                "error": f"Resume limit reached ({settings.FREE_TIER_LIMITS['resume_count']} on the free plan)."
-            }
-        )
-
-    from resume.services import job_service
+    existing = Resume.objects.filter(
+        user=user,
+        derived_from=source,
+        derived_kind=Resume.DERIVED_TAILORED,
+        job_postings=posting,
+    ).first()
 
     result = job_service.tailor_content(
         source, posting.description, posting.missing_keywords
@@ -521,31 +548,123 @@ def tailor_resume_for_job(user, ctx, job_id, resume_id=None):
     if "error" in result:
         return ToolResult(data=result)
 
-    from resume.services import resume_content
+    content = resume_content.normalize(result["content"])
+    title = f"{source.title} → {posting.title}"[:255]
 
-    variant = Resume.objects.create(
-        user=user,
-        title=f"{source.title} — {posting.title}"[:255],
-        content=resume_content.normalize(result["content"]),
-        template_selector=source.template_selector,
-        language=source.language,
-    )
+    if existing:
+        # Update in place, with a restore point, instead of adding another CV.
+        revision_service.snapshot(
+            existing,
+            source=ResumeRevision.SOURCE_AGENT,
+            tool_name="tailor_resume_for_job",
+            summary=result["changes_summary"],
+        )
+        existing.content = content
+        existing.title = title
+        existing.save(update_fields=["content", "title", "updated_at"])
+        variant, created = existing, False
+    else:
+        variant = Resume.objects.create(
+            user=user,
+            title=title,
+            content=content,
+            template_selector=source.template_selector,
+            language=source.language,
+            derived_from=source,
+            derived_kind=Resume.DERIVED_TAILORED,
+        )
+        created = True
+
     posting.resume = variant
     posting.save(update_fields=["resume", "updated_at"])
 
     return ToolResult(
         data={
             "ok": True,
-            "new_resume_id": variant.id,
+            "resume_id": variant.id,
+            "created_new_variant": created,
             "job_id": posting.id,
             "source_resume_id": source.id,
+            "counts_against_limit": False,
             "changes_summary": result["changes_summary"],
+            "next": (
+                "Offer to re-run match_job on the same posting so the user can "
+                "see whether the score moved."
+            ),
         },
         ui=[
             {
                 "type": "preview",
                 "resume_id": variant.id,
                 "resume_name": variant.display_name,
+                "message": "",
+            }
+        ],
+    )
+
+
+@tool(
+    name="rescore_job",
+    description=(
+        "Re-measure a saved application against the resume currently attached "
+        "to it, and report the change. Use after editing or tailoring so the "
+        "user can see whether the score moved."
+    ),
+    parameters={"job_id": {"type": "integer"}},
+    pro_only=True,
+)
+def rescore_job(user, ctx, job_id):
+    blocked = _premium_required(user, "Job matching")
+    if blocked:
+        return blocked
+
+    posting = JobPosting.objects.filter(pk=job_id, user=user).first()
+    if not posting:
+        return ToolResult(data={"error": f"No saved job with id {job_id}."})
+
+    resume = posting.resume or ctx.get("active_resume")
+    if not resume:
+        return ToolResult(
+            data={"error": "No resume is attached to this application."}
+        )
+
+    from resume.services import job_service
+
+    result = job_service.analyze_match(
+        resume, posting.description, ctx.get("lang", "en")
+    )
+    if "error" in result:
+        return ToolResult(data=result)
+
+    previous = posting.record_score(
+        result["score"], resume.id, result["missing_keywords"]
+    )
+    posting.save(update_fields=["match_score", "score_history", "missing_keywords",
+                                "updated_at"])
+
+    delta = None if previous is None else result["score"] - previous
+    return ToolResult(
+        data={
+            "job_id": posting.id,
+            "resume_id": resume.id,
+            "score": result["score"],
+            "previous_score": previous,
+            "change": delta,
+            "missing_keywords": result["missing_keywords"],
+            "suggestions": result["suggestions"],
+        },
+        ui=[
+            {
+                "type": "job_match",
+                "job_id": posting.id,
+                "job_label": posting.label,
+                "resume_id": resume.id,
+                "resume_name": resume.display_name,
+                "score": result["score"],
+                "previous_score": previous,
+                "matched_keywords": result["matched_keywords"],
+                "missing_keywords": result["missing_keywords"],
+                "suggestions": result["suggestions"],
                 "message": "",
             }
         ],
@@ -573,6 +692,8 @@ def list_jobs(user, ctx, status=None):
             "company": p.company,
             "status": p.status,
             "score": p.match_score,
+            "first_score": (p.score_history or [{}])[0].get("score"),
+            "measurements": len(p.score_history or []),
             "tags": p.tags,
             "resume_id": p.resume_id,
             "resume_name": p.resume.display_name if p.resume else None,
@@ -785,7 +906,8 @@ def create_translated_copy(user, ctx, target_language, resume_id=None):
         content=copy_module.deepcopy(source.content),
         template_selector=source.template_selector,
         language=source.language,
-        translation_of=source.root,
+        derived_from=source.root,
+        derived_kind=Resume.DERIVED_TRANSLATION,
     )
     legacy = _service()._exec_translate_resume(
         user,
@@ -833,7 +955,7 @@ def list_language_versions(user, ctx, resume_id=None):
                     "id": r.id,
                     "name": r.display_name,
                     "language": r.language,
-                    "is_original": r.translation_of_id is None,
+                    "is_original": r.derived_from_id is None,
                     "updated_at": r.updated_at.strftime("%Y-%m-%d %H:%M"),
                 }
                 for r in resume.language_family()

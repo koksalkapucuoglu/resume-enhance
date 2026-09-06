@@ -92,6 +92,7 @@ STEP_COPY = {
         "delete_resume": "Deleting...",
         "revert_last_change": "Undoing the last change...",
         "match_job": "Comparing against the posting...",
+        "rescore_job": "Re-measuring against the posting...",
         "tailor_resume_for_job": "Tailoring the resume...",
         "list_jobs": "Looking up your applications...",
         "update_job": "Updating the application...",
@@ -120,6 +121,7 @@ STEP_COPY = {
         "delete_resume": "Siliniyor...",
         "revert_last_change": "Son değişiklik geri alınıyor...",
         "match_job": "İlanla karşılaştırılıyor...",
+        "rescore_job": "İlana göre yeniden ölçülüyor...",
         "tailor_resume_for_job": "CV ilana göre uyarlanıyor...",
         "list_jobs": "Başvurularınıza bakıyorum...",
         "update_job": "Başvuru güncelleniyor...",
@@ -151,9 +153,19 @@ You help the user manage and improve their resumes by calling tools. Rules:
   the user is chatting in English.
 - To give the user the same resume in a second language, use
   create_translated_copy — it keeps the original. translate_resume overwrites.
-- When the user pastes a job posting, call match_job. Tailoring needs a saved
-  posting, so match_job runs first and tailor_resume_for_job second.
+- When the user pastes a job posting, call match_job. Pasting the same posting
+  again updates that application; it does not create a second one.
+- Tailoring needs a saved posting: match_job first, tailor_resume_for_job
+  second. Tailoring produces one variant per application and updates it on
+  later runs — it never piles up new resumes.
+- After tailoring or editing a resume attached to an application, offer
+  rescore_job. A score the user cannot see move is not useful to them.
+- If the posting and the resume are in different languages, say so and offer
+  create_translated_copy rather than silently tailoring across languages.
+- Language versions and per-job variants do not count against the resume limit.
 - Prefer acting over asking. If the user's intent is clear, call the tool.
+- Never narrate an action instead of performing it. "I'll save that now" with no
+  tool call is a failure; call the tool in the same turn.
 - Chain tools when a request needs several steps, then summarise what you did.
 - Never invent a resume id. Use the ids listed below, or omit resume_id to act
   on the active resume.
@@ -192,6 +204,12 @@ def _context_block(ctx):
         )
     else:
         lines.append("No resume is currently active.")
+    applications = ctx.get("applications")
+    if applications:
+        lines.append(
+            "Tracked applications (use these ids; do not ask the user to repeat "
+            f"a posting you already have): {json.dumps(applications, ensure_ascii=False)}"
+        )
     lines.append(f"Quota: {json.dumps(ctx['quota'], ensure_ascii=False)}")
     return "\n".join(lines)
 

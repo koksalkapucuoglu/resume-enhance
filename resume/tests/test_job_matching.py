@@ -147,7 +147,7 @@ class JobToolTest(TestCase):
             result = agent_tools.get_tool("tailor_resume_for_job").handler(
                 self.user, self.ctx, job_id=job_id
             )
-        variant = Resume.objects.get(pk=result.data["new_resume_id"])
+        variant = Resume.objects.get(pk=result.data["resume_id"])
         self.assertNotEqual(variant.pk, self.resume.pk)
         self.assertEqual(variant.content["user_info"]["full_name"], "Ada Tailored")
         self.resume.refresh_from_db()
@@ -161,7 +161,7 @@ class JobToolTest(TestCase):
                 self.user, self.ctx, job_id=job_id
             )
         posting = JobPosting.objects.get(pk=job_id)
-        self.assertEqual(posting.resume_id, result.data["new_resume_id"])
+        self.assertEqual(posting.resume_id, result.data["resume_id"])
 
     def test_tailor_needs_approval(self):
         self.assertTrue(agent_tools.get_tool("tailor_resume_for_job").destructive)
@@ -212,10 +212,17 @@ class JobToolTest(TestCase):
         self.assertEqual(groups["c++"]["resumes"][0]["resume_id"], cpp.pk)
 
     def test_groups_rank_by_how_often_a_resume_is_used(self):
-        for _ in range(2):
-            self._match()
+        """Uses are counted per application, and each posting counts once."""
+        self._match()
+        JobPosting.objects.create(
+            user=self.user, title="Another Python role", description="different advert",
+            content_hash="other-hash", tags=["python"], resume=self.resume,
+        )
         other = Resume.objects.create(user=self.user, title="Other", content=content())
-        JobPosting.objects.create(user=self.user, title="X", tags=["python"], resume=other)
+        JobPosting.objects.create(
+            user=self.user, title="X", description="third advert",
+            content_hash="third-hash", tags=["python"], resume=other,
+        )
         groups = agent_tools.get_tool("resume_groups").handler(self.user, self.ctx).data["groups"]
         python = next(g for g in groups if g["tag"] == "python")
         self.assertEqual(python["resumes"][0]["resume_id"], self.resume.pk)
@@ -438,3 +445,261 @@ class JobTrackerPageTest(TestCase):
         self.client.logout()
         resp = self.client.get(self.reverse("resume:jobs"))
         self.assertEqual(resp.status_code, 302)
+
+
+class OneRecordPerPostingTest(TestCase):
+    """Rule 1: pasting the same advert twice must not open a second row."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("ada", password="x")
+        self.user.profile.tier = "pro"
+        self.user.profile.save()
+        self.resume = Resume.objects.create(user=self.user, title="CV", content=content())
+        self.ctx = {"lang": "en", "active_resume": self.resume, "resumes": [], "quota": {}}
+
+    def _match(self, description=POSTING, score=72):
+        payload = json.loads(MATCH_JSON) | {"score": score}
+        with patch("resume.services.job_service.send_openai_message",
+                   return_value=json.dumps(payload)):
+            return agent_tools.get_tool("match_job").handler(
+                self.user, self.ctx, description=description
+            )
+
+    def test_the_same_posting_updates_one_application(self):
+        first = self._match()
+        second = self._match(score=85)
+        self.assertEqual(JobPosting.objects.count(), 1)
+        self.assertEqual(first.data["job_id"], second.data["job_id"])
+
+    def test_whitespace_and_case_do_not_create_a_second_one(self):
+        self._match()
+        self._match(description="  " + POSTING.upper() + "\n\n")
+        self.assertEqual(JobPosting.objects.count(), 1)
+
+    def test_a_different_posting_is_a_different_application(self):
+        self._match()
+        self._match(description="Frontend Engineer at Beta. React, TypeScript, CSS.")
+        self.assertEqual(JobPosting.objects.count(), 2)
+
+    def test_the_first_match_is_flagged_as_new(self):
+        self.assertTrue(self._match().data["is_new_application"])
+        self.assertFalse(self._match().data["is_new_application"])
+
+    def test_rescoring_reports_the_previous_score(self):
+        self._match(score=60)
+        second = self._match(score=78)
+        self.assertEqual(second.data["previous_score"], 60)
+
+    def test_every_measurement_is_kept(self):
+        self._match(score=60)
+        self._match(score=72)
+        self._match(score=85)
+        posting = JobPosting.objects.get()
+        self.assertEqual([m["score"] for m in posting.score_history], [60, 72, 85])
+        self.assertEqual(posting.match_score, 85)
+
+    def test_history_does_not_grow_without_bound(self):
+        for i in range(25):
+            self._match(score=i)
+        self.assertLessEqual(len(JobPosting.objects.get().score_history), 20)
+
+
+class OneVariantPerApplicationTest(TestCase):
+    """Rule 2: tailoring the same job again updates the same variant."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("ada", password="x")
+        self.user.profile.tier = "pro"
+        self.user.profile.save()
+        self.base = Resume.objects.create(user=self.user, title="Main", content=content())
+        self.ctx = {"lang": "en", "active_resume": self.base, "resumes": [], "quota": {}}
+        with patch("resume.services.job_service.send_openai_message",
+                   return_value=MATCH_JSON):
+            self.job_id = agent_tools.get_tool("match_job").handler(
+                self.user, self.ctx, description=POSTING
+            ).data["job_id"]
+
+    def _tailor(self, name="Ada Tailored"):
+        payload = json.dumps({"resume": content(name), "changes_summary": "Reordered"})
+        with patch("resume.services.job_service.send_openai_message", return_value=payload):
+            return agent_tools.get_tool("tailor_resume_for_job").handler(
+                self.user, self.ctx, job_id=self.job_id
+            )
+
+    def test_second_run_reuses_the_variant(self):
+        first = self._tailor("First Pass")
+        second = self._tailor("Second Pass")
+        self.assertEqual(first.data["resume_id"], second.data["resume_id"])
+        self.assertTrue(first.data["created_new_variant"])
+        self.assertFalse(second.data["created_new_variant"])
+        self.assertEqual(Resume.objects.filter(user=self.user).count(), 2)
+
+    def test_the_update_is_undoable(self):
+        variant_id = self._tailor("First Pass").data["resume_id"]
+        self._tailor("Second Pass")
+        variant = Resume.objects.get(pk=variant_id)
+        self.assertEqual(variant.content["user_info"]["full_name"], "Second Pass")
+        self.assertEqual(variant.revisions.count(), 1)
+        self.assertEqual(
+            variant.revisions.first().content["user_info"]["full_name"], "First Pass"
+        )
+
+    def test_the_title_does_not_compound(self):
+        self._tailor()
+        self._tailor()
+        self._tailor()
+        variant = Resume.objects.get(derived_kind=Resume.DERIVED_TAILORED)
+        self.assertEqual(variant.title, "Main → Senior Python Developer")
+
+    def test_tailoring_always_starts_from_the_base_resume(self):
+        """Tailoring a variant of a variant is what made titles pile up."""
+        self._tailor()
+        variant = Resume.objects.get(derived_kind=Resume.DERIVED_TAILORED)
+        self.ctx["active_resume"] = variant
+        self._tailor()
+        self.assertEqual(
+            Resume.objects.filter(derived_kind=Resume.DERIVED_TAILORED).count(), 1
+        )
+        variant.refresh_from_db()
+        self.assertEqual(variant.derived_from_id, self.base.pk)
+
+    def test_the_original_is_untouched(self):
+        self._tailor()
+        self.base.refresh_from_db()
+        self.assertEqual(self.base.content["user_info"]["full_name"], "Ada Lovelace")
+
+    def test_variants_do_not_consume_a_resume_slot(self):
+        self._tailor()
+        self.assertEqual(
+            self.user.resumes.filter(derived_from__isnull=True).count(), 1
+        )
+
+
+class RescoreTest(TestCase):
+    """Rule 3: a score the user cannot see move is not useful."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("ada", password="x")
+        self.user.profile.tier = "pro"
+        self.user.profile.save()
+        self.resume = Resume.objects.create(user=self.user, title="CV", content=content())
+        self.ctx = {"lang": "en", "active_resume": self.resume, "resumes": [], "quota": {}}
+        with patch("resume.services.job_service.send_openai_message",
+                   return_value=MATCH_JSON):
+            self.job_id = agent_tools.get_tool("match_job").handler(
+                self.user, self.ctx, description=POSTING
+            ).data["job_id"]
+
+    def _rescore(self, score):
+        payload = json.loads(MATCH_JSON) | {"score": score}
+        with patch("resume.services.job_service.send_openai_message",
+                   return_value=json.dumps(payload)):
+            return agent_tools.get_tool("rescore_job").handler(
+                self.user, self.ctx, job_id=self.job_id
+            )
+
+    def test_reports_the_change(self):
+        result = self._rescore(85)
+        self.assertEqual(result.data["previous_score"], 72)
+        self.assertEqual(result.data["score"], 85)
+        self.assertEqual(result.data["change"], 13)
+
+    def test_a_drop_is_reported_too(self):
+        self.assertEqual(self._rescore(60).data["change"], -12)
+
+    def test_it_measures_the_resume_attached_to_the_application(self):
+        other = Resume.objects.create(user=self.user, title="Other", content=content())
+        posting = JobPosting.objects.get(pk=self.job_id)
+        posting.resume = other
+        posting.save()
+        self.assertEqual(self._rescore(80).data["resume_id"], other.pk)
+
+    def test_unknown_job(self):
+        result = agent_tools.get_tool("rescore_job").handler(
+            self.user, self.ctx, job_id=99999
+        )
+        self.assertIn("error", result.data)
+
+    def test_it_is_pro_only(self):
+        self.assertTrue(agent_tools.TOOL_REGISTRY["rescore_job"].pro_only)
+
+    def test_it_does_not_need_approval(self):
+        """Measuring changes nothing, so stopping to ask would be noise."""
+        self.assertFalse(agent_tools.TOOL_REGISTRY["rescore_job"].destructive)
+
+
+class DerivedResumeQuotaTest(TestCase):
+    """Only base resumes consume a slot."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("ada", password="x")
+
+    def test_derived_resumes_are_free(self):
+        from django.conf import settings
+
+        limit = settings.FREE_TIER_LIMITS["resume_count"]
+        bases = [
+            Resume.objects.create(user=self.user, title=f"Base {i}", content=content())
+            for i in range(limit)
+        ]
+        self.assertFalse(self.user.profile.can_create_resume())
+
+        for base in bases:
+            Resume.objects.create(
+                user=self.user, title=f"{base.title} tr", content=content(),
+                derived_from=base, derived_kind=Resume.DERIVED_TRANSLATION,
+            )
+            Resume.objects.create(
+                user=self.user, title=f"{base.title} job", content=content(),
+                derived_from=base, derived_kind=Resume.DERIVED_TAILORED,
+            )
+        self.assertEqual(self.user.resumes.count(), limit * 3)
+        self.assertEqual(
+            self.user.resumes.filter(derived_from__isnull=True).count(), limit
+        )
+
+    def test_family_spans_both_kinds(self):
+        base = Resume.objects.create(user=self.user, title="Base", content=content())
+        translation = Resume.objects.create(
+            user=self.user, title="tr", content=content(),
+            derived_from=base, derived_kind=Resume.DERIVED_TRANSLATION,
+        )
+        tailored = Resume.objects.create(
+            user=self.user, title="job", content=content(),
+            derived_from=base, derived_kind=Resume.DERIVED_TAILORED,
+        )
+        self.assertEqual(
+            set(base.family().values_list("pk", flat=True)),
+            {base.pk, translation.pk, tailored.pk},
+        )
+        self.assertEqual(
+            set(base.language_family().values_list("pk", flat=True)),
+            {base.pk, translation.pk},
+        )
+        self.assertEqual(tailored.root, base)
+
+    def test_deleting_the_base_removes_its_derivatives(self):
+        base = Resume.objects.create(user=self.user, title="Base", content=content())
+        derived = Resume.objects.create(
+            user=self.user, title="d", content=content(),
+            derived_from=base, derived_kind=Resume.DERIVED_TAILORED,
+        )
+        base.delete()
+        self.assertFalse(Resume.objects.filter(pk=derived.pk).exists())
+
+
+class FingerprintTest(TestCase):
+    def test_ignores_whitespace_and_case(self):
+        self.assertEqual(
+            JobPosting.fingerprint("Senior  Python\nDeveloper"),
+            JobPosting.fingerprint("senior python developer"),
+        )
+
+    def test_different_text_differs(self):
+        self.assertNotEqual(
+            JobPosting.fingerprint("Python role"), JobPosting.fingerprint("Java role")
+        )
+
+    def test_empty(self):
+        self.assertEqual(JobPosting.fingerprint(""), "")
+        self.assertEqual(JobPosting.fingerprint(None), "")
