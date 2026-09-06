@@ -102,6 +102,79 @@ class Resume(models.Model):
         return f"{self.user.username} - {self.title}"
 
 
+class JobPosting(models.Model):
+    """
+    A job the user is tracking, and the resume they are using for it.
+
+    Tags are what group resumes by the kind of work they suit — "python" roles
+    go out with one CV, "c++" roles with another — so the assistant can answer
+    "which resume do I use for C++ jobs?" from real applications rather than a
+    label the user had to maintain by hand.
+    """
+
+    STATUS_SAVED = "saved"
+    STATUS_APPLIED = "applied"
+    STATUS_INTERVIEW = "interview"
+    STATUS_OFFER = "offer"
+    STATUS_REJECTED = "rejected"
+    STATUS_CHOICES = [
+        (STATUS_SAVED, "Saved"),
+        (STATUS_APPLIED, "Applied"),
+        (STATUS_INTERVIEW, "Interview"),
+        (STATUS_OFFER, "Offer"),
+        (STATUS_REJECTED, "Rejected"),
+    ]
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="job_postings"
+    )
+    title = models.CharField(max_length=255)
+    company = models.CharField(max_length=255, blank=True, default="")
+    url = models.URLField(blank=True, default="")
+    description = models.TextField(blank=True, default="")
+    tags = models.JSONField(default=list, blank=True)
+    # The resume used for this application. Kept if the resume is deleted so the
+    # application history does not disappear with it.
+    resume = models.ForeignKey(
+        Resume,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="job_postings",
+    )
+    status = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default=STATUS_SAVED
+    )
+    match_score = models.IntegerField(null=True, blank=True)
+    missing_keywords = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at", "-id"]
+        indexes = [models.Index(fields=["user", "-updated_at"])]
+
+    @staticmethod
+    def normalize_tags(tags):
+        """Lowercase, trimmed, de-duplicated, order preserved."""
+        seen, cleaned = set(), []
+        for tag in tags or []:
+            if tag is None:
+                continue
+            value = str(tag).strip().lower()
+            if value and value not in seen:
+                seen.add(value)
+                cleaned.append(value)
+        return cleaned
+
+    @property
+    def label(self):
+        return f"{self.title} · {self.company}" if self.company else self.title
+
+    def __str__(self):
+        return f"{self.label} ({self.status})"
+
+
 class ResumeRevision(models.Model):
     """
     A restore point for a Resume: the state it was in *before* a change.

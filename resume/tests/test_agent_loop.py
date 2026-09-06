@@ -818,3 +818,56 @@ class AgentTurnCopyTest(TestCase):
         body = self._turn("show my resume")
         self.assertEqual(body["lang"], "en")
         self.assertEqual(body["diff_copy"]["restore"], "Restore")
+
+
+class StreamCopyOrderTest(TestCase):
+    """Panel wording must arrive before the panels it labels."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("ada", password="x")
+        Resume.objects.create(user=self.user, title="CV", content=content())
+        self.client.force_login(self.user)
+
+    def test_copy_frame_precedes_every_effect(self):
+        turns = [
+            [("message", {"content": "", "tool_calls": [
+                {"id": "c1", "name": "list_resumes", "arguments": "{}"}
+            ]}, USAGE)],
+            [("message", {"content": "done", "tool_calls": []}, USAGE)],
+        ]
+
+        def fake(messages, tools, **kwargs):
+            yield from turns.pop(0)
+
+        with patch("resume.services.agent_loop.stream_openai_tool_turn", side_effect=fake):
+            body = b"".join(
+                self.client.post(
+                    reverse("resume:agent_chat_stream"),
+                    json.dumps({"message": "CV'lerimi listele"}),
+                    content_type="application/json",
+                ).streaming_content
+            ).decode()
+
+        order = [line[7:].strip() for line in body.split("\n") if line.startswith("event:")]
+        self.assertEqual(order[0], "copy")
+        self.assertLess(order.index("copy"), order.index("effect"))
+
+    def test_copy_frame_is_in_the_conversation_language(self):
+        turns = [[("message", {"content": "ok", "tool_calls": []}, USAGE)]]
+
+        def fake(messages, tools, **kwargs):
+            yield from turns.pop(0)
+
+        with patch("resume.services.agent_loop.stream_openai_tool_turn", side_effect=fake):
+            body = b"".join(
+                self.client.post(
+                    reverse("resume:agent_chat_stream"),
+                    json.dumps({"message": "CV'lerimi göster"}),
+                    content_type="application/json",
+                ).streaming_content
+            ).decode()
+
+        frame = next(f for f in body.split("\n\n") if "event: copy" in f)
+        payload = json.loads(frame.split("data:", 1)[1].strip())
+        self.assertEqual(payload["lang"], "tr")
+        self.assertEqual(payload["ui_copy"]["job"]["jobs_title"], "Başvurular")

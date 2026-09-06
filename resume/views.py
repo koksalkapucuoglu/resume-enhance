@@ -1471,6 +1471,18 @@ def _stream_agent(events, active_resume_id, user_message, lang="en", on_done=Non
     Progress is emitted as it happens so the panel fills in while the model is
     still working, instead of everything landing at once when the turn ends.
     """
+    from resume.services import job_service
+
+    # Panels render from streamed effects, which arrive before the final frame.
+    # Send their wording first or the first panel of a Turkish conversation
+    # would be labelled in whatever the interface language happens to be.
+    yield _sse(
+        "copy",
+        {
+            "lang": lang,
+            "ui_copy": {"diff": diff_service.copy(lang), "job": job_service.copy(lang)},
+        },
+    )
     try:
         for event in events:
             kind = event[0]
@@ -1798,9 +1810,23 @@ def _agent_response(outcome, active_resume_id, user_message):
 
 
 def _agent_response_with_lang(outcome, active_resume_id, user_message, lang):
+    """
+    Attach the panel wording for this turn's language.
+
+    The panels are rendered client-side from data, so their labels have to
+    travel with it — otherwise they fall back to the interface language and a
+    Turkish conversation grows English headings.
+    """
+    from resume.services import job_service
+
     payload = _agent_response(outcome, active_resume_id, user_message)
     payload["lang"] = lang
-    payload["diff_copy"] = diff_service.copy(lang)
+    payload["ui_copy"] = {
+        "diff": diff_service.copy(lang),
+        "job": job_service.copy(lang),
+    }
+    # Kept for older clients still reading the flat key
+    payload["diff_copy"] = payload["ui_copy"]["diff"]
     return payload
 
 

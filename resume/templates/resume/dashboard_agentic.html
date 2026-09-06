@@ -65,10 +65,10 @@
 
     <!-- Header -->
     <header class="flex items-center justify-between whitespace-nowrap border-b border-slate-200 bg-white px-4 md:px-8 py-3 z-10 flex-shrink-0">
-        <div class="flex items-center gap-3">
+        <a href="{% url 'resume:dashboard' %}" class="flex items-center gap-3" title="{{ UI.dashboard }}">
             <img src="{% static 'img/resustack_logo.png' %}" alt="ResuStack Logo" class="h-7 w-auto object-contain"/>
             <h2 class="text-slate-900 text-xl font-bold tracking-tight hidden sm:block">ResuStack</h2>
-        </div>
+        </a>
         <div class="flex items-center gap-2 sm:gap-3">
             <div class="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
                 <button id="btn-standard" onclick="switchMode('standard')"
@@ -203,6 +203,24 @@
                         {{ UI.context_empty_upload }}
                     </button>
                 </div>
+            </div>
+
+            <!-- Job Match Panel -->
+            <div id="context-job-match" class="hidden flex-col flex-1 overflow-hidden">
+                <div class="px-4 py-3 border-b border-slate-200 bg-white flex items-center gap-2">
+                    <span class="material-symbols-outlined text-slate-500">work</span>
+                    <h3 id="context-job-title" class="font-semibold text-slate-700 text-sm truncate">{{ UI.job_match_title }}</h3>
+                </div>
+                <div id="context-job-body" class="flex-1 overflow-y-auto p-4 chat-scroll"></div>
+            </div>
+
+            <!-- Job List / Resume Groups Panel -->
+            <div id="context-jobs" class="hidden flex-col flex-1 overflow-hidden">
+                <div class="px-4 py-3 border-b border-slate-200 bg-white flex items-center gap-2">
+                    <span class="material-symbols-outlined text-slate-500">list_alt</span>
+                    <h3 id="context-jobs-title" class="font-semibold text-slate-700 text-sm truncate">{{ UI.jobs_title }}</h3>
+                </div>
+                <div id="context-jobs-body" class="flex-1 overflow-y-auto p-4 space-y-2 chat-scroll"></div>
             </div>
 
             <!-- Change Review Panel -->
@@ -468,6 +486,25 @@ let DIFF_LABELS = {
   title: `{{ UI.history_title|escapejs }}`,
 };
 let conversationLang = "{{ ui_lang }}";
+let JOB_LABELS = {
+  match_title:  `{{ UI.job_match_title|escapejs }}`,
+  match_score:  `{{ UI.job_match_score|escapejs }}`,
+  matched:      `{{ UI.job_matched|escapejs }}`,
+  missing:      `{{ UI.job_missing|escapejs }}`,
+  suggestions:  `{{ UI.job_suggestions|escapejs }}`,
+  none:         `{{ UI.job_none|escapejs }}`,
+  jobs_title:   `{{ UI.jobs_title|escapejs }}`,
+  jobs_empty:   `{{ UI.jobs_empty|escapejs }}`,
+  groups_title: `{{ UI.groups_title|escapejs }}`,
+  groups_empty: `{{ UI.groups_empty|escapejs }}`,
+  status: {
+    saved:     `{{ UI.job_status_saved|escapejs }}`,
+    applied:   `{{ UI.job_status_applied|escapejs }}`,
+    interview: `{{ UI.job_status_interview|escapejs }}`,
+    offer:     `{{ UI.job_status_offer|escapejs }}`,
+    rejected:  `{{ UI.job_status_rejected|escapejs }}`,
+  },
+};
 
 // Inline "see what changed / undo" affordance under the bot's reply
 function appendChangeReviewBar(resumeId) {
@@ -765,6 +802,120 @@ function sendQuickAction(intentLabel) {
 }
 
 // ---------------------------------------------------------------------------
+// Job matching and application tracking
+// ---------------------------------------------------------------------------
+function scoreColour(score) {
+    if (score >= 75) return ['bg-green-50', 'text-green-700', 'bg-green-500'];
+    if (score >= 50) return ['bg-amber-50', 'text-amber-700', 'bg-amber-500'];
+    return ['bg-red-50', 'text-red-700', 'bg-red-500'];
+}
+
+function keywordChips(words, tone) {
+    if (!words || !words.length) return '';
+    return `<div class="flex flex-wrap gap-1.5">${words.map(w =>
+        `<span class="text-[11px] px-2 py-0.5 rounded-full ${tone}">${escHtml(w)}</span>`
+    ).join('')}</div>`;
+}
+
+function renderJobMatch(data) {
+    hideAllContextPanels();
+    const panel = document.getElementById('context-job-match');
+    panel.classList.remove('hidden');
+    panel.classList.add('flex');
+    document.getElementById('context-job-title').textContent = data.job_label || JOB_LABELS.match_title;
+
+    const [bg, fg, bar] = scoreColour(data.score);
+    const suggestions = (data.suggestions || []).map(sug =>
+        `<li class="flex gap-2"><span class="material-symbols-outlined !text-[14px] text-primary flex-shrink-0 mt-0.5">lightbulb</span><span>${escHtml(sug)}</span></li>`
+    ).join('');
+
+    document.getElementById('context-job-body').innerHTML = `
+      <div class="${bg} rounded-xl p-4 text-center mb-4">
+        <p class="text-4xl font-black ${fg}">${data.score}</p>
+        <p class="text-xs text-slate-500 mt-1">${escHtml(JOB_LABELS.match_score)}</p>
+        <div class="mt-3 h-1.5 bg-white/70 rounded-full overflow-hidden">
+          <div class="h-full ${bar} rounded-full" style="width:${Math.max(0, Math.min(100, data.score))}%"></div>
+        </div>
+      </div>
+      <div class="mb-4">
+        <p class="text-xs font-semibold text-slate-500 mb-1.5">${escHtml(JOB_LABELS.matched)}</p>
+        ${keywordChips(data.matched_keywords, 'bg-green-100 text-green-700') ||
+          `<p class="text-xs text-slate-400">${escHtml(JOB_LABELS.none)}</p>`}
+      </div>
+      <div class="mb-4">
+        <p class="text-xs font-semibold text-slate-500 mb-1.5">${escHtml(JOB_LABELS.missing)}</p>
+        ${keywordChips(data.missing_keywords, 'bg-red-100 text-red-700') ||
+          `<p class="text-xs text-slate-400">${escHtml(JOB_LABELS.none)}</p>`}
+      </div>
+      ${suggestions ? `<div>
+        <p class="text-xs font-semibold text-slate-500 mb-1.5">${escHtml(JOB_LABELS.suggestions)}</p>
+        <ul class="space-y-1.5 text-xs text-slate-600">${suggestions}</ul>
+      </div>` : ''}`;
+}
+
+function statusChip(status) {
+    const tone = {
+        saved: 'bg-slate-100 text-slate-600',
+        applied: 'bg-blue-100 text-blue-700',
+        interview: 'bg-amber-100 text-amber-700',
+        offer: 'bg-green-100 text-green-700',
+        rejected: 'bg-red-100 text-red-700',
+    }[status] || 'bg-slate-100 text-slate-600';
+    const label = (JOB_LABELS.status || {})[status] || status;
+    return `<span class="text-[10px] px-1.5 py-0.5 rounded-full ${tone} font-medium">${escHtml(label)}</span>`;
+}
+
+function openJobsPanel(title) {
+    hideAllContextPanels();
+    const panel = document.getElementById('context-jobs');
+    panel.classList.remove('hidden');
+    panel.classList.add('flex');
+    document.getElementById('context-jobs-title').textContent = title;
+    return document.getElementById('context-jobs-body');
+}
+
+function renderJobList(jobs) {
+    const body = openJobsPanel(JOB_LABELS.jobs_title);
+    if (!jobs || !jobs.length) {
+        body.innerHTML = `<p class="text-slate-400 text-sm text-center py-8">${escHtml(JOB_LABELS.jobs_empty)}</p>`;
+        return;
+    }
+    body.innerHTML = jobs.map(job => `
+      <div class="bg-white border border-slate-200 rounded-lg p-3">
+        <div class="flex items-start justify-between gap-2 mb-1">
+          <p class="text-sm font-semibold text-slate-800 truncate">${escHtml(job.title)}</p>
+          ${statusChip(job.status)}
+        </div>
+        ${job.company ? `<p class="text-xs text-slate-500">${escHtml(job.company)}</p>` : ''}
+        <div class="flex items-center gap-2 mt-2 flex-wrap">
+          ${job.score != null ? `<span class="text-[11px] font-semibold text-slate-600">${job.score}/100</span>` : ''}
+          ${job.resume_name ? `<span class="text-[11px] text-slate-400">${escHtml(job.resume_name)}</span>` : ''}
+          <span class="text-[11px] text-slate-300">${escHtml(job.updated_at)}</span>
+        </div>
+      </div>`).join('');
+}
+
+function renderResumeGroups(groups) {
+    const body = openJobsPanel(JOB_LABELS.groups_title);
+    if (!groups || !groups.length) {
+        body.innerHTML = `<p class="text-slate-400 text-sm text-center py-8">${escHtml(JOB_LABELS.groups_empty)}</p>`;
+        return;
+    }
+    body.innerHTML = groups.map(group => `
+      <div class="bg-white border border-slate-200 rounded-lg p-3">
+        <p class="text-xs font-bold text-primary uppercase tracking-wide mb-2">${escHtml(group.tag)}</p>
+        ${group.resumes.map(r => `
+          <div class="flex items-center gap-2 py-1 cursor-pointer hover:bg-slate-50 rounded px-1 -mx-1"
+               data-resume-id="${r.resume_id}" data-resume-name="${escHtml(r.resume_name)}"
+               onclick="selectResumeFromCard(this)">
+            <span class="material-symbols-outlined !text-[15px] text-slate-400">description</span>
+            <span class="text-sm text-slate-700 truncate flex-1">${escHtml(r.resume_name)}</span>
+            <span class="text-[11px] text-slate-400">${r.uses}×</span>
+          </div>`).join('')}
+      </div>`).join('');
+}
+
+// ---------------------------------------------------------------------------
 // Streaming transport
 //
 // The loop reports progress as it goes — which tool it is running, each panel
@@ -833,7 +984,9 @@ function parseSseFrame(frame) {
 }
 
 function applyStreamEvent(parsed) {
-    if (parsed.event === 'step') {
+    if (parsed.event === 'copy') {
+        adoptUiCopy(parsed.data);
+    } else if (parsed.event === 'step') {
         showStepIndicator(parsed.data.label);
     } else if (parsed.event === 'effect') {
         hideStepIndicator();
@@ -890,9 +1043,19 @@ function hideStepIndicator() {
 // one of the response shapes handleResponse already knows, so a turn that ran
 // three tools renders three panels without any new rendering code.
 // ---------------------------------------------------------------------------
+function adoptUiCopy(payload) {
+    if (!payload) return;
+    if (payload.lang) conversationLang = payload.lang;
+    if (payload.ui_copy) {
+        if (payload.ui_copy.diff) DIFF_LABELS = payload.ui_copy.diff;
+        if (payload.ui_copy.job) JOB_LABELS = payload.ui_copy.job;
+    } else if (payload.diff_copy) {
+        DIFF_LABELS = payload.diff_copy;
+    }
+}
+
 function handleAgentPayload(data, opts = {}) {
-    if (data.lang) conversationLang = data.lang;
-    if (data.diff_copy) DIFF_LABELS = data.diff_copy;
+    adoptUiCopy(data);
     // Streamed turns render effects as they arrive; the done frame repeats them
     // so the buffered path stays usable, but replaying would duplicate panels.
     const effects = opts.alreadyRendered ? [] : (data.effects || []);
@@ -1063,6 +1226,24 @@ function handleResponse(data) {
             renderUploadPrompt(data);
             break;
 
+        case 'job_match':
+            appendMessage('bot', msg);
+            renderJobMatch(data);
+            showContextBadge();
+            break;
+
+        case 'job_list':
+            appendMessage('bot', msg);
+            renderJobList(data.jobs);
+            showContextBadge();
+            break;
+
+        case 'resume_groups':
+            appendMessage('bot', msg);
+            renderResumeGroups(data.groups);
+            showContextBadge();
+            break;
+
         case 'confirm':
             appendMessage('bot', msg);
             pendingConfirm = {action: data.action, params: data.params};
@@ -1121,7 +1302,8 @@ function showContextDefault() {
 
 function hideAllContextPanels() {
     ['context-default','context-empty','context-resume-list','context-preview',
-     'context-quota','context-confirm','context-analysis','context-diff'].forEach(id => {
+     'context-quota','context-confirm','context-analysis','context-diff',
+     'context-job-match','context-jobs'].forEach(id => {
         const el = document.getElementById(id);
         el.classList.add('hidden');
         el.classList.remove('flex');

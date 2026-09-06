@@ -2,7 +2,7 @@
 
 > **Canlı doküman.** Her faz bitiminde "Kullanıcı Ne Yapabiliyor" bölümü güncellenir.
 > Karar gerekçeleri: fiyatlandırma → tek seferlik ödeme, paywall iş akışında (bkz. `PRODUCT.md`).
-> Son güncelleme: 2026-09-06 — **Faz 1, 2 ve 3 tamamlandı.**
+> Son güncelleme: 2026-09-06 — **Faz 1-4 tamamlandı.** Kalan: Faz 5 (ödeme).
 
 ---
 
@@ -13,7 +13,7 @@
 | 1 | ✅ Navigasyon & mod bütünlüğü | İki modu tek ürün gibi hissettirmek | — |
 | 2 | ✅ Revizyon: diff / geri alma | AI'ya güven | **Free** |
 | 3 | ✅ Agent loop | Çok adımlı işi tek mesajda bitirmek | — (retention) |
-| 4 | JD matching + ilan↔CV mapping | İş arama iş akışı | **Paywall burada** |
+| 4 | ✅ JD matching + ilan↔CV mapping | İş arama iş akışı | **Paywall burada** |
 | 5 | Tek seferlik ödeme | Gelir | — |
 | — | TR nişi | Ertelendi, 1-5 sonrası konuşulacak | — |
 
@@ -156,14 +156,22 @@ class JobPosting(models.Model):
 ```
 
 **İş kalemleri:**
-- [ ] `JobPosting` modeli + migration
-- [ ] Yeni tool'lar: `match_job` (skor + eksik keyword), `tailor_resume_for_job` (ilana özel varyant üret), `list_jobs`, `link_resume_to_job`
-- [ ] "CV grupları" görünümü: hangi CV hangi etiketlerdeki ilanlarda kullanılıyor — *Python işleri → CV1, C++ işleri → CV2*
-- [ ] Agentic'te ilan yapıştır → skor + eksikler + "bu ilana özel varyant üret" çipi
-- [ ] Standart modda ilan takip tablosu
-- [ ] Premium kapısı: JD matching + tailoring + ilan takibi
+- [x] `JobPosting` modeli + migration `0013` — durum, skor, eksik keyword'ler, etiketler, kullanılan CV
+- [x] `services/job_service.py` — `analyze_match`, `tailor_content`, `resume_groups`
+- [x] 5 yeni tool: `match_job`, `tailor_resume_for_job` (destructive), `list_jobs`, `update_job`, `resume_groups`
+- [x] CV grupları başvurulardan türetiliyor — kullanıcının elle etiketlemesi gerekmiyor
+- [x] Agentic'te üç yeni panel: eşleşme skoru + keyword'ler, başvuru listesi, CV grupları
+- [x] Premium kapısı: pro tool'lar **şemadan filtreleniyor** (free kullanıcıya hiç önerilmiyor), handler'lar ayrıca tier kontrol ediyor
+- [ ] Standart modda ilan takip tablosu — agentic'te tam, standart modda henüz yok
 
-### ✅ Faz 4 sonunda kullanıcı ne yapabiliyor
+**Tasarım notları**
+- Uyarlama **kopya üretir**, orijinali bozmaz. Tailoring prompt'u uydurmayı yasaklıyor: sıralama ve ifade değişir, deneyim eklenmez.
+- `JobPosting.resume` `SET_NULL` — CV silinse de başvuru geçmişi kalır.
+- Tool sayısı 25'e çıktı; pro filtresi free kullanıcı için listeyi 20'ye indiriyor (20 üstünde seçim doğruluğu düşüyor).
+
+**Doğrulama:** 208 test geçiyor. Canlı LLM ile: Türkçe ilan yapıştırıldı → 60/100 skor, karşılanan/belgelenmemiş keyword ayrımı, 3 öneri; *"bu ilana özel bir CV varyantı oluştur"* → onay → yeni varyant üretildi, orijinal korundu; *"hangi iş türü için hangi CV'yi kullanıyorum?"* → etiket bazlı gruplar.
+
+### ✅ Faz 4 sonunda kullanıcı ne yapabiliyor *(canlı — 2026-09-06)*
 - Faz 1-3'ün tamamı, **artı:**
 - İlan metnini yapıştırıp **eşleşme skoru + eksik keyword listesi** alır
 - *"Bu ilana özel bir varyant üret"* der; base CV'sinden türev CV çıkar, base bozulmaz
