@@ -1454,7 +1454,9 @@ def agent_chat(request):
 
     profile.agent_message_count += 1
     profile.save(update_fields=["agent_message_count"])
-    return JsonResponse(_agent_response(outcome, active_resume_id, message))
+    return JsonResponse(
+        _agent_response_with_lang(outcome, active_resume_id, message, ctx["lang"])
+    )
 
 
 def _sse(event, payload):
@@ -1462,7 +1464,7 @@ def _sse(event, payload):
     return f"event: {event}\ndata: {json.dumps(payload, default=str)}\n\n"
 
 
-def _stream_agent(events, active_resume_id, user_message, on_done=None):
+def _stream_agent(events, active_resume_id, user_message, lang="en", on_done=None):
     """
     Turn loop events into an SSE stream.
 
@@ -1483,7 +1485,10 @@ def _stream_agent(events, active_resume_id, user_message, on_done=None):
                 if on_done:
                     on_done(outcome)
                 yield _sse(
-                    "done", _agent_response(outcome, active_resume_id, user_message)
+                    "done",
+                    _agent_response_with_lang(
+                        outcome, active_resume_id, user_message, lang
+                    ),
                 )
     except Exception:
         logger.exception("Agent stream failed")
@@ -1549,7 +1554,9 @@ def agent_chat_stream(request):
 
     events = agent_loop.stream_turn(request.user, ctx, data.get("history"), message)
     return _sse_response(
-        _stream_agent(events, active_resume_id, message, on_done=charge)
+        _stream_agent(
+            events, active_resume_id, message, ctx["lang"], on_done=charge
+        )
     )
 
 
@@ -1585,7 +1592,9 @@ def agent_approve_stream(request):
     events = agent_loop.stream_resume_turn(
         request.user, ctx, parked, approved=bool(data.get("approved"))
     )
-    return _sse_response(_stream_agent(events, active_resume_id, ""))
+    return _sse_response(
+        _stream_agent(events, active_resume_id, "", ctx["lang"])
+    )
 
 
 @login_required
@@ -1655,7 +1664,9 @@ def agent_approve(request):
     outcome = agent_loop.resume_turn(
         request.user, ctx, parked, approved=bool(data.get("approved"))
     )
-    return JsonResponse(_agent_response(outcome, active_resume_id, ""))
+    return JsonResponse(
+        _agent_response_with_lang(outcome, active_resume_id, "", ctx["lang"])
+    )
 
 
 def _agent_rate_limited(request):
@@ -1786,6 +1797,13 @@ def _agent_response(outcome, active_resume_id, user_message):
     return payload
 
 
+def _agent_response_with_lang(outcome, active_resume_id, user_message, lang):
+    payload = _agent_response(outcome, active_resume_id, user_message)
+    payload["lang"] = lang
+    payload["diff_copy"] = diff_service.copy(lang)
+    return payload
+
+
 # ---------------------------------------------------------------------------
 # Agentic dashboard — toggle UI mode
 # ---------------------------------------------------------------------------
@@ -1794,6 +1812,17 @@ def _agent_response(outcome, active_resume_id, user_message):
 def _get_owned_resume(request, pk):
     """Fetch a resume owned by the caller, or None. SECURITY: prevents IDOR."""
     return Resume.objects.filter(pk=pk, user=request.user).first()
+
+
+def _requested_lang(request):
+    """
+    Language for user-facing copy.
+
+    The agentic panel passes ?lang= because it follows the conversation; the
+    editor omits it and gets the interface language.
+    """
+    lang = request.GET.get("lang") or request.user.profile.ui_language or "en"
+    return lang if lang in ("en", "tr") else "en"
 
 
 @login_required
@@ -1860,6 +1889,7 @@ def resume_revision_diff(request, pk, revision_id):
             "template_after": resume.template_selector,
             "changes": changes,
             "summary": diff_service.summarize(changes),
+            "copy": diff_service.copy(_requested_lang(request)),
         }
     )
 
@@ -1877,8 +1907,14 @@ def resume_latest_diff(request, pk):
 
     revision = revision_service.history(resume).first()
     if not revision:
+        copy = diff_service.copy(_requested_lang(request))
         return JsonResponse(
-            {"revision_id": None, "changes": [], "summary": "No changes yet"}
+            {
+                "revision_id": None,
+                "changes": [],
+                "summary": copy["no_changes"],
+                "copy": copy,
+            }
         )
     return resume_revision_diff(request, pk, revision.pk)
 

@@ -788,3 +788,33 @@ class ApprovedEffectStreamTest(TestCase):
             )
         self.assertNotIn("effect", [e[0] for e in events])
         self.assertTrue(Resume.objects.filter(pk=self.resume.pk).exists())
+
+
+class AgentTurnCopyTest(TestCase):
+    """An agent turn tells the client which language to render its own UI in."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("ada", password="x")
+        Resume.objects.create(user=self.user, title="CV", content=content())
+        self.client.force_login(self.user)
+
+    def _turn(self, message):
+        with patch(
+            "resume.services.agent_loop.send_openai_tool_turn",
+            return_value=(assistant("ok"), USAGE),
+        ):
+            return self.client.post(
+                reverse("resume:agent_chat"),
+                json.dumps({"message": message}),
+                content_type="application/json",
+            ).json()
+
+    def test_turkish_message_returns_turkish_diff_copy(self):
+        body = self._turn("CV'mi göster")
+        self.assertEqual(body["lang"], "tr")
+        self.assertEqual(body["diff_copy"]["restore"], "Geri yükle")
+
+    def test_english_message_returns_english_diff_copy(self):
+        body = self._turn("show my resume")
+        self.assertEqual(body["lang"], "en")
+        self.assertEqual(body["diff_copy"]["restore"], "Restore")

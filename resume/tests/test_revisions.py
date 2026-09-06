@@ -327,3 +327,62 @@ class ManualSaveSnapshotTest(TestCase):
         self.assertIsNotNone(revision)
         self.assertEqual(revision.source, ResumeRevision.SOURCE_MANUAL)
         self.assertEqual(revision.content["user_info"]["full_name"], "Ada Lovelace")
+
+
+class DiffCopyTest(TestCase):
+    """Diff wording follows whoever is asking, in their language."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("ada", password="x")
+        self.resume = Resume.objects.create(user=self.user, title="CV", content=content())
+        revision_service.snapshot(self.resume, ResumeRevision.SOURCE_AGENT)
+        self.resume.content = content(name="Grace Hopper")
+        self.resume.save()
+        self.client.force_login(self.user)
+
+    def test_default_follows_the_interface_language(self):
+        self.user.profile.ui_language = "tr"
+        self.user.profile.save()
+        resp = self.client.get(
+            reverse("resume:resume_latest_diff", args=[self.resume.pk])
+        )
+        self.assertEqual(resp.json()["copy"]["before"], "Önce")
+
+    def test_lang_parameter_wins(self):
+        """The agentic panel passes ?lang= because it follows the conversation."""
+        resp = self.client.get(
+            reverse("resume:resume_latest_diff", args=[self.resume.pk]) + "?lang=tr"
+        )
+        copy = resp.json()["copy"]
+        self.assertEqual(copy["before"], "Önce")
+        self.assertEqual(copy["restore"], "Geri yükle")
+
+    def test_unknown_language_falls_back_to_english(self):
+        resp = self.client.get(
+            reverse("resume:resume_latest_diff", args=[self.resume.pk]) + "?lang=klingon"
+        )
+        self.assertEqual(resp.json()["copy"]["before"], "Before")
+
+    def test_revision_diff_endpoint_carries_copy_too(self):
+        revision = self.resume.revisions.first()
+        resp = self.client.get(
+            reverse("resume:resume_revision_diff", args=[self.resume.pk, revision.pk])
+            + "?lang=tr"
+        )
+        self.assertEqual(resp.json()["copy"]["changed"], "değişti")
+
+    def test_empty_history_still_returns_copy(self):
+        blank = Resume.objects.create(user=self.user, title="Blank", content=content())
+        resp = self.client.get(
+            reverse("resume:resume_latest_diff", args=[blank.pk]) + "?lang=tr"
+        )
+        body = resp.json()
+        self.assertIsNone(body["revision_id"])
+        self.assertEqual(body["summary"], "Değişiklik yok")
+
+    def test_every_key_exists_in_both_languages(self):
+        from resume.services import diff_service
+
+        self.assertEqual(
+            set(diff_service.DIFF_COPY["en"]), set(diff_service.DIFF_COPY["tr"])
+        )
