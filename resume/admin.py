@@ -18,13 +18,14 @@ class ResumeAdmin(admin.ModelAdmin):
         "title",
         "language",
         "template_selector",
-        "translation_of",
+        "derived_from",
+        "derived_kind",
         "created_at",
         "updated_at",
     )
-    list_filter = ("language", "template_selector", "created_at", "updated_at")
+    list_filter = ("language", "derived_kind", "template_selector", "created_at")
     search_fields = ("user__username", "user__email", "title")
-    raw_id_fields = ("translation_of",)
+    raw_id_fields = ("derived_from",)
     date_hierarchy = "created_at"
 
 
@@ -39,7 +40,9 @@ class ResumeRevisionAdmin(admin.ModelAdmin):
 
 @admin.register(JobPosting)
 class JobPostingAdmin(admin.ModelAdmin):
-    list_display = ("title", "company", "user", "status", "match_score", "updated_at")
+    list_display = (
+        "title", "company", "user", "status", "match_score", "resume", "updated_at"
+    )
     list_filter = ("status", "created_at")
     search_fields = ("title", "company", "user__username")
     raw_id_fields = ("user", "resume")

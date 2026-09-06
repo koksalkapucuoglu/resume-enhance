@@ -30,14 +30,26 @@ class Resume(models.Model):
     template_selector = models.CharField(max_length=50, default="faangpath-simple")
     # The language the resume is WRITTEN in — unrelated to the interface language.
     language = models.CharField(max_length=5, choices=LANGUAGE_CHOICES, default="en")
-    # Set when this resume is a translated variant of another. Variants are the
-    # same document in another language, so they do not consume a resume slot.
-    translation_of = models.ForeignKey(
+    # A derived resume is the same document in another form — another language,
+    # or tailored to one job. It hangs off a base resume and does not consume a
+    # resume slot: charging twice would penalise exactly the bilingual, many-
+    # applications user this is built for.
+    DERIVED_TRANSLATION = "translation"
+    DERIVED_TAILORED = "tailored"
+    DERIVED_KIND_CHOICES = [
+        (DERIVED_TRANSLATION, "Language version"),
+        (DERIVED_TAILORED, "Tailored for a job"),
+    ]
+
+    derived_from = models.ForeignKey(
         "self",
         on_delete=models.CASCADE,
         null=True,
         blank=True,
-        related_name="translations",
+        related_name="derivatives",
+    )
+    derived_kind = models.CharField(
+        max_length=20, choices=DERIVED_KIND_CHOICES, blank=True, default=""
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -84,16 +96,27 @@ class Resume(models.Model):
         return dict(self.LANGUAGE_CHOICES).get(self.language, self.language)
 
     @property
+    def is_derived(self):
+        return self.derived_from_id is not None
+
+    @property
     def root(self):
-        """The original resume in a translation family — itself if it is one."""
-        return self.translation_of or self
+        """The base resume this one derives from — itself if it is a base."""
+        return self.derived_from or self
+
+    def family(self, kind=None):
+        """The base resume and its derivatives, oldest first."""
+        root = self.root
+        qs = Resume.objects.filter(
+            models.Q(pk=root.pk) | models.Q(derived_from=root)
+        )
+        if kind:
+            qs = qs.filter(models.Q(pk=root.pk) | models.Q(derived_kind=kind))
+        return qs.order_by("created_at")
 
     def language_family(self):
-        """This resume and every translation sharing its root, oldest first."""
-        root = self.root
-        return Resume.objects.filter(
-            models.Q(pk=root.pk) | models.Q(translation_of=root)
-        ).order_by("created_at")
+        """This resume and its language versions, oldest first."""
+        return self.family(kind=self.DERIVED_TRANSLATION)
 
     @property
     def owner_name(self):
@@ -135,6 +158,10 @@ class JobPosting(models.Model):
     url = models.URLField(blank=True, default="")
     description = models.TextField(blank=True, default="")
     tags = models.JSONField(default=list, blank=True)
+    # Fingerprint of the posting body, so pasting the same advert twice updates
+    # the application instead of opening a second one. Derived from the text
+    # rather than the title, which the model may summarise differently.
+    content_hash = models.CharField(max_length=64, blank=True, default="", db_index=True)
     # The resume used for this application. Kept if the resume is deleted so the
     # application history does not disappear with it.
     resume = models.ForeignKey(
@@ -147,7 +174,10 @@ class JobPosting(models.Model):
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default=STATUS_SAVED
     )
+    # The latest measurement. Every measurement is kept in score_history as
+    # {at, score, resume_id} so "did my edit help?" has an answer.
     match_score = models.IntegerField(null=True, blank=True)
+    score_history = models.JSONField(default=list, blank=True)
     missing_keywords = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -168,6 +198,32 @@ class JobPosting(models.Model):
                 seen.add(value)
                 cleaned.append(value)
         return cleaned
+
+    @staticmethod
+    def fingerprint(description):
+        """Stable id for a posting body, insensitive to whitespace and case."""
+        import hashlib
+        import re
+
+        normalized = re.sub(r"\s+", " ", (description or "")).strip().lower()
+        return hashlib.sha256(normalized.encode()).hexdigest() if normalized else ""
+
+    def record_score(self, score, resume_id=None, missing_keywords=None):
+        """Add a measurement and return the one before it, if any."""
+        from django.utils import timezone
+
+        previous = self.match_score
+        self.score_history = list(self.score_history or [])[-19:] + [
+            {
+                "at": timezone.now().isoformat(timespec="seconds"),
+                "score": score,
+                "resume_id": resume_id,
+            }
+        ]
+        self.match_score = score
+        if missing_keywords is not None:
+            self.missing_keywords = missing_keywords
+        return previous
 
     @property
     def label(self):
@@ -358,14 +414,14 @@ class UserProfile(models.Model):
         """
         Check if user can create a new resume.
 
-        Translated variants are the same document in another language, so they
-        are not counted — a bilingual user is not penalised for keeping both.
+        Only base resumes count. Derived ones — language versions and per-job
+        variants — are the same document in another form.
         """
         if self.is_pro():
             return True
         from django.conf import settings
 
-        count = self.user.resumes.filter(translation_of__isnull=True).count()
+        count = self.user.resumes.filter(derived_from__isnull=True).count()
         return count < settings.FREE_TIER_LIMITS["resume_count"]
 
     def __str__(self):

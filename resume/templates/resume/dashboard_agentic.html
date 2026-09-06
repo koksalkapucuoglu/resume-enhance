@@ -359,6 +359,9 @@ const BADGE_MODERN = "{{ UI.badge_modern }}";
 const BADGE_CLASSIC = "{{ UI.badge_classic }}";
 // Set when arriving via /dashboard/?resume=<pk> (e.g. handed over by the editor)
 const CHAT_LANG = "{{ ui_lang }}";
+const STREAM_LABELS = {
+  interrupted: `{{ UI.stream_interrupted|escapejs }}`,
+};
 const UPLOAD_LABELS = {
   choose:    `{{ UI.upload_choose|escapejs }}`,
   uploading: `{{ UI.upload_uploading|escapejs }}`,
@@ -923,6 +926,7 @@ function renderResumeGroups(groups) {
 // shows its work instead of sitting behind a spinner.
 // ---------------------------------------------------------------------------
 let streamedBubble = null;
+let sawEffect = false;
 
 async function runAgentStream(url, body) {
     const resp = await fetch(url, {
@@ -963,9 +967,24 @@ async function runAgentStream(url, body) {
     }
 
     const streamedText = streamedBubble !== null;
+    const sawAnything = streamedText || sawEffect;
     streamedBubble = null;
-    if (done) done.streamedText = streamedText;
-    return done || {type: 'agent_turn', message: '', effects: []};
+    sawEffect = false;
+
+    if (done) {
+        done.streamedText = streamedText;
+        return done;
+    }
+    // The stream ended without a final frame — a dropped connection. If the
+    // turn already produced visible output, saying "unavailable" on top of it
+    // is worse than saying nothing.
+    return {
+        type: 'agent_turn',
+        message: sawAnything ? '' : STREAM_LABELS.interrupted,
+        effects: [],
+        is_error: !sawAnything,
+        streamedText,
+    };
 }
 
 function parseSseFrame(frame) {
@@ -990,6 +1009,7 @@ function applyStreamEvent(parsed) {
         showStepIndicator(parsed.data.label);
     } else if (parsed.event === 'effect') {
         hideStepIndicator();
+        sawEffect = true;
         applyEffect(parsed.data);
     } else if (parsed.event === 'token') {
         hideTyping();

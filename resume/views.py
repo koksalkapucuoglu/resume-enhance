@@ -1650,6 +1650,14 @@ def _sse(event, payload):
     return f"event: {event}\ndata: {json.dumps(payload, default=str)}\n\n"
 
 
+def _sse_comment(text=""):
+    """
+    A comment frame. Clients ignore it, but it keeps bytes flowing so an idle
+    proxy does not close a stream while a slow tool is still running.
+    """
+    return f": {text}\n\n"
+
+
 def _stream_agent(events, active_resume_id, user_message, lang="en", on_done=None):
     """
     Turn loop events into an SSE stream.
@@ -1675,7 +1683,10 @@ def _stream_agent(events, active_resume_id, user_message, lang="en", on_done=Non
             if kind == "token":
                 yield _sse("token", {"text": event[1]})
             elif kind == "step":
+                # A tool call can take tens of seconds; announce it and then
+                # keep the connection warm while it runs.
                 yield _sse("step", {"label": event[1]})
+                yield _sse_comment("working")
             elif kind == "effect":
                 yield _sse("effect", event[1])
             elif kind == "done":
@@ -1705,8 +1716,9 @@ def _sse_response(generator):
     response = StreamingHttpResponse(
         generator, content_type="text/event-stream"
     )
-    response["Cache-Control"] = "no-cache"
-    # Tell reverse proxies not to buffer, or the stream arrives all at once
+    # no-transform additionally asks CDNs not to buffer or rewrite the body,
+    # which otherwise turns a stream into one late lump — or a dropped one.
+    response["Cache-Control"] = "no-cache, no-transform"
     response["X-Accel-Buffering"] = "no"
     return response
 
@@ -1913,17 +1925,38 @@ def _agent_context(request, active_resume, message="", history=None):
         if message or history
         else (profile.ui_language or "en")
     )
+    # Tool results do not survive into the next user message, so anything the
+    # assistant must be able to refer back to — "the job I just saved" — has to
+    # be part of the standing context instead.
+    applications = []
+    if profile.is_pro():
+        applications = [
+            {
+                "id": p.id,
+                "title": p.title,
+                "company": p.company,
+                "status": p.status,
+                "score": p.match_score,
+                "resume_id": p.resume_id,
+            }
+            for p in JobPosting.objects.filter(user=request.user).order_by(
+                "-updated_at"
+            )[:10]
+        ]
+
     return {
         "lang": lang,
         "confirm_destructive": profile.confirm_destructive,
         "active_resume": active_resume,
+        "applications": applications,
         "resumes": [
             {
                 "rank": idx + 1,
                 "id": r.id,
                 "display_name": r.display_name,
                 "language": r.language,
-                "translation_of": r.translation_of_id,
+                "derived_from": r.derived_from_id,
+                "derived_kind": r.derived_kind,
                 "template": r.template_selector,
                 "updated_at": r.updated_at.strftime("%Y-%m-%d %H:%M"),
             }

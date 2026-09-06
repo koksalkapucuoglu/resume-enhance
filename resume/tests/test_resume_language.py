@@ -56,7 +56,8 @@ class TranslationFamilyTest(TestCase):
             title="CV (TR)",
             content=content(),
             language="tr",
-            translation_of=self.original,
+            derived_from=self.original,
+            derived_kind=Resume.DERIVED_TRANSLATION,
         )
 
     def test_root_resolves_for_both(self):
@@ -81,11 +82,12 @@ class TranslationFamilyTest(TestCase):
             title="Another TR",
             content=content(),
             language="tr",
-            translation_of=self.original,
+            derived_from=self.original,
+            derived_kind=Resume.DERIVED_TRANSLATION,
         )
         self.assertFalse(self.user.profile.can_create_resume())
         self.assertEqual(
-            self.user.resumes.filter(translation_of__isnull=True).count(), limit
+            self.user.resumes.filter(derived_from__isnull=True).count(), limit
         )
 
     def test_deleting_the_original_removes_its_translations(self):
@@ -126,7 +128,7 @@ class TranslatedCopyToolTest(TestCase):
         self.assertTrue(result.data["ok"])
         copy = Resume.objects.get(pk=result.data["new_resume_id"])
         self.assertEqual(copy.language, "tr")
-        self.assertEqual(copy.translation_of_id, self.resume.pk)
+        self.assertEqual(copy.derived_from_id, self.resume.pk)
         self.resume.refresh_from_db()
         self.assertEqual(self.resume.language, "en")
         self.assertEqual(self.resume.content["user_info"]["full_name"], "Ada Lovelace")

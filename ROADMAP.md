@@ -169,7 +169,9 @@ class JobPosting(models.Model):
 - `JobPosting.resume` `SET_NULL` — CV silinse de başvuru geçmişi kalır.
 - Tool sayısı 25'e çıktı; pro filtresi free kullanıcı için listeyi 20'ye indiriyor (20 üstünde seçim doğruluğu düşüyor).
 
-**Doğrulama:** 208 test geçiyor. Canlı LLM ile: Türkçe ilan yapıştırıldı → 60/100 skor, karşılanan/belgelenmemiş keyword ayrımı, 3 öneri; *"bu ilana özel bir CV varyantı oluştur"* → onay → yeni varyant üretildi, orijinal korundu; *"hangi iş türü için hangi CV'yi kullanıyorum?"* → etiket bazlı gruplar.
+**2026-09-06 sonrası yeniden temellendirildi** — bkz. `.claude/APPLICATION_FLOW.md`. Her eylem yeni kayıt üretiyordu (bir ilan için 7 başvuru, bir grupta 4-5 CV, birikmiş başlıklar). Üç kural geldi: aynı ilan = tek kayıt, aynı ilan için tek varyant, puan geçmişli bir ölçüm. Türev CV'ler (dil + ilana özel) kotaya sayılmıyor.
+
+**Doğrulama (ilk sürüm):** 208 test geçiyor. Canlı LLM ile: Türkçe ilan yapıştırıldı → 60/100 skor, karşılanan/belgelenmemiş keyword ayrımı, 3 öneri; *"bu ilana özel bir CV varyantı oluştur"* → onay → yeni varyant üretildi, orijinal korundu; *"hangi iş türü için hangi CV'yi kullanıyorum?"* → etiket bazlı gruplar.
 
 ### ✅ Faz 4 sonunda kullanıcı ne yapabiliyor *(canlı — 2026-09-06)*
 - Faz 1-3'ün tamamı, **artı:**
