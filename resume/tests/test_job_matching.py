@@ -331,3 +331,110 @@ class JobCopyTest(TestCase):
     def test_status_keys_cover_every_model_choice(self):
         model_statuses = {value for value, _ in JobPosting.STATUS_CHOICES}
         self.assertEqual(set(job_service.JOB_COPY["en"]["status"]), model_statuses)
+
+
+class JobTrackerPageTest(TestCase):
+    """The standard dashboard's table over the same data the tools reach."""
+
+    def setUp(self):
+        from django.urls import reverse
+
+        self.reverse = reverse
+        self.user = User.objects.create_user("ada", password="x")
+        self.user.profile.tier = "pro"
+        self.user.profile.save()
+        self.resume = Resume.objects.create(user=self.user, title="CV", content=content())
+        self.other_resume = Resume.objects.create(
+            user=self.user, title="Second", content=content()
+        )
+        self.job = JobPosting.objects.create(
+            user=self.user, title="Backend Engineer", company="Acme",
+            tags=["python"], resume=self.resume, match_score=72,
+            missing_keywords=["AWS"],
+        )
+        self.client.force_login(self.user)
+
+    def test_page_lists_the_users_applications(self):
+        html = self.client.get(self.reverse("resume:jobs")).content.decode()
+        self.assertIn("Backend Engineer", html)
+        self.assertIn("Acme", html)
+        self.assertIn("72", html)
+
+    def test_page_shows_resume_groups(self):
+        html = self.client.get(self.reverse("resume:jobs")).content.decode()
+        self.assertIn("python", html)
+
+    def test_free_users_get_the_upsell_not_the_table(self):
+        self.user.profile.tier = "free"
+        self.user.profile.save()
+        html = self.client.get(self.reverse("resume:jobs")).content.decode()
+        self.assertNotIn("Backend Engineer", html)
+        self.assertIn("Pro", html)
+
+    def test_another_users_applications_are_not_listed(self):
+        eve = User.objects.create_user("eve", password="x")
+        JobPosting.objects.create(user=eve, title="Eve's secret job")
+        html = self.client.get(self.reverse("resume:jobs")).content.decode()
+        self.assertNotIn("Eve's secret job", html)
+
+    def test_status_can_be_changed(self):
+        self.client.post(
+            self.reverse("resume:update_job_posting", args=[self.job.pk]),
+            {"status": "interview"},
+        )
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, "interview")
+
+    def test_resume_can_be_reassigned(self):
+        self.client.post(
+            self.reverse("resume:update_job_posting", args=[self.job.pk]),
+            {"status": "applied", "resume": str(self.other_resume.pk)},
+        )
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.resume_id, self.other_resume.pk)
+
+    def test_resume_can_be_cleared(self):
+        self.client.post(
+            self.reverse("resume:update_job_posting", args=[self.job.pk]),
+            {"status": "applied", "resume": ""},
+        )
+        self.job.refresh_from_db()
+        self.assertIsNone(self.job.resume_id)
+
+    def test_a_bad_status_is_ignored(self):
+        self.client.post(
+            self.reverse("resume:update_job_posting", args=[self.job.pk]),
+            {"status": "ghosted"},
+        )
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, "saved")
+
+    def test_another_users_resume_cannot_be_attached(self):
+        eve = User.objects.create_user("eve", password="x")
+        theirs = Resume.objects.create(user=eve, title="Eve CV", content=content())
+        self.client.post(
+            self.reverse("resume:update_job_posting", args=[self.job.pk]),
+            {"resume": str(theirs.pk)},
+        )
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.resume_id, self.resume.pk)
+
+    def test_deleting_stops_tracking(self):
+        self.client.post(self.reverse("resume:delete_job_posting", args=[self.job.pk]))
+        self.assertFalse(JobPosting.objects.filter(pk=self.job.pk).exists())
+
+    def test_cannot_delete_another_users_application(self):
+        eve = User.objects.create_user("eve", password="x")
+        theirs = JobPosting.objects.create(user=eve, title="Eve's job")
+        self.client.post(self.reverse("resume:delete_job_posting", args=[theirs.pk]))
+        self.assertTrue(JobPosting.objects.filter(pk=theirs.pk).exists())
+
+    def test_mutations_require_post(self):
+        for name in ("resume:update_job_posting", "resume:delete_job_posting"):
+            resp = self.client.get(self.reverse(name, args=[self.job.pk]))
+            self.assertEqual(resp.status_code, 405, name)
+
+    def test_login_required(self):
+        self.client.logout()
+        resp = self.client.get(self.reverse("resume:jobs"))
+        self.assertEqual(resp.status_code, 302)

@@ -28,7 +28,7 @@ from resume.services.pdf_service import (
     PdfGenerationError,
     resume_pdf_service,
 )
-from resume.models import Resume, ResumeRevision
+from resume.models import JobPosting, Resume, ResumeRevision
 from resume.services import diff_service, revision_service
 
 logger = logging.getLogger(__name__)
@@ -1397,6 +1397,84 @@ def preview_saved_resume(request, pk):
 # ---------------------------------------------------------------------------
 # Agentic dashboard — chat endpoint
 # ---------------------------------------------------------------------------
+
+
+class JobListView(LoginRequiredMixin, ListView):
+    """
+    Application tracker for the standard dashboard.
+
+    The agentic mode reaches the same data through tools; this is the same
+    thing for people who would rather see a table.
+    """
+
+    model = JobPosting
+    context_object_name = "jobs"
+    template_name = "resume/jobs.html"
+
+    def get_queryset(self):
+        # SECURITY: scoped to the caller
+        return (
+            JobPosting.objects.filter(user=self.request.user)
+            .select_related("resume")
+            .order_by("-updated_at")
+        )
+
+    def get_context_data(self, **kwargs):
+        from resume.services import job_service
+
+        context = super().get_context_data(**kwargs)
+        context["settings"] = settings
+        context["is_pro"] = self.request.user.profile.is_pro()
+        context["status_choices"] = JobPosting.STATUS_CHOICES
+        context["resumes"] = Resume.objects.filter(user=self.request.user).order_by(
+            "-updated_at"
+        )
+        context["groups"] = (
+            job_service.resume_groups(self.request.user) if context["is_pro"] else []
+        )
+        return context
+
+
+@login_required
+@require_http_methods(["POST"])
+def update_job_posting(request, pk):
+    """Change a tracked application's status or the resume attached to it."""
+    posting = JobPosting.objects.filter(pk=pk, user=request.user).first()
+    if not posting:
+        messages.error(request, "Application not found.")
+        return redirect("resume:jobs")
+
+    fields = []
+    status = request.POST.get("status")
+    if status and status in dict(JobPosting.STATUS_CHOICES):
+        posting.status = status
+        fields.append("status")
+
+    resume_id = request.POST.get("resume")
+    if resume_id is not None:
+        if resume_id == "":
+            posting.resume = None
+            fields.append("resume")
+        else:
+            resume = Resume.objects.filter(pk=resume_id, user=request.user).first()
+            if resume:
+                posting.resume = resume
+                fields.append("resume")
+
+    if fields:
+        posting.save(update_fields=fields + ["updated_at"])
+    return redirect("resume:jobs")
+
+
+@login_required
+@require_http_methods(["POST"])
+def delete_job_posting(request, pk):
+    """Stop tracking an application."""
+    posting = JobPosting.objects.filter(pk=pk, user=request.user).first()
+    if posting:
+        posting.delete()
+        messages.success(request, "Application removed.")
+    return redirect("resume:jobs")
 
 
 @login_required
