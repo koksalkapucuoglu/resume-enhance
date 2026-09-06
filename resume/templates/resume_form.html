@@ -168,13 +168,20 @@
             <h2 class="text-slate-900 text-2xl font-bold tracking-tight">ResuStack</h2>
         </a>
         
-        <div class="flex flex-1 justify-end gap-4 md:gap-8">
-            <nav class="hidden md:flex items-center gap-6">
-                <a class="text-slate-500 text-sm font-medium hover:text-primary transition-colors" href="{% url 'resume:dashboard' %}">{{ UI.dashboard }}</a>
-            </nav>
+        <!--
+          Only Save and the mode toggle stay visible as the viewport narrows.
+          Secondary actions (Dashboard, History, Download) collapse into the
+          overflow menu so the bar cannot push its own buttons off-screen.
+        -->
+        <div class="flex flex-1 justify-end items-center gap-2 md:gap-4">
+            <!-- Unsaved Indicator -->
+            <span id="unsavedIndicator" class="hidden text-amber-600 text-sm font-medium items-center gap-1">
+                <span class="material-symbols-outlined text-base">edit</span>
+                <span class="hidden md:inline">{{ UI.unsaved_changes }}</span>
+            </span>
 
-            <!-- Mode Toggle (same component as the dashboard) -->
-            <div class="hidden sm:flex items-center gap-1 bg-slate-100 rounded-lg p-1 self-center">
+            <!-- Mode Toggle -->
+            <div class="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
                 <button type="button" id="btn-standard"
                         class="px-2 md:px-3 py-1.5 rounded-md text-xs font-semibold bg-white text-slate-700 shadow-sm">
                     {{ UI.mode_standard }}
@@ -182,58 +189,61 @@
                 <button type="button" id="btn-agentic" onclick="switchToAgentic()"
                         class="px-2 md:px-3 py-1.5 rounded-md text-xs font-semibold text-slate-500 hover:text-slate-700 transition-all flex items-center gap-1">
                     <span class="material-symbols-outlined !text-[14px]">auto_awesome</span>
-                    {{ UI.mode_agentic }}
+                    <span class="hidden sm:inline">{{ UI.mode_agentic }}</span>
                 </button>
             </div>
-            
-            <!-- Action Buttons -->
-            <div class="flex items-center gap-3">
-                <!-- Unsaved Indicator -->
-                <span id="unsavedIndicator" class="hidden text-amber-600 text-sm font-medium flex items-center gap-1">
-                    <span class="material-symbols-outlined text-base">edit</span>
-                    {{ UI.unsaved_changes }}
-                </span>
-                
-                <!-- History Button (only meaningful for a saved resume) -->
-                {% if resume_id %}
-                <button type="button" id="historyButton" onclick="openHistory()"
-                        title="{{ UI.history_title }}"
-                        class="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-all">
-                    <span class="material-symbols-outlined text-lg">history</span>
-                    <span class="hidden md:inline">{{ UI.history }}</span>
-                </button>
-                {% endif %}
 
-                <!-- Save Button -->
-                <button type="button"
-                        id="saveButton"
-                        onclick="saveChanges()"
-                        class="flex items-center gap-2 px-3 sm:px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-all shadow-md shadow-green-600/20">
-                    <span class="material-symbols-outlined text-lg">save</span>
-                    <span class="hidden sm:inline">{{ UI.btn_save }}</span>
+            <!-- Primary action -->
+            <button type="button" id="saveButton" onclick="saveChanges()"
+                    class="flex items-center gap-2 px-3 sm:px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-all shadow-md shadow-green-600/20">
+                <span class="material-symbols-outlined text-lg">save</span>
+                <span class="hidden sm:inline">{{ UI.btn_save }}</span>
+            </button>
+
+            <!-- Download stays out on wide screens, moves into the menu below lg -->
+            <button type="button" id="downloadButton" onclick="submitForm('pdf', false, true)"
+                    class="hidden lg:flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-primary rounded-lg hover:bg-primary-hover transition-all shadow-md shadow-primary/20">
+                <span class="material-symbols-outlined text-lg">download</span>
+                {{ UI.btn_download_pdf }}
+            </button>
+
+            <!-- Overflow menu -->
+            <div class="relative">
+                <button type="button" id="moreButton" onclick="toggleHeaderMenu(event)"
+                        aria-haspopup="true" aria-expanded="false" aria-label="More actions"
+                        class="flex items-center justify-center w-9 h-9 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors">
+                    <span class="material-symbols-outlined text-xl">more_vert</span>
                 </button>
-                
-                
-                <!-- Download Button -->
-                <button type="button" 
-                        id="downloadButton" 
-                        onclick="submitForm('pdf', false, true)"
-                        class="flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-primary rounded-lg hover:bg-primary-hover transition-all shadow-md shadow-primary/20">
-                    <span class="material-symbols-outlined text-lg">download</span>
-                    {{ UI.btn_download_pdf }}
-                </button>
-                
-                <!-- User Avatar & Logout -->
-                {% if user.is_authenticated %}
-                <div class="flex items-center gap-3 ml-2">
-                    <a href="{% url 'profile' %}" class="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold border border-slate-300 hover:bg-primary hover:text-white hover:border-primary transition-all" title="Profile">
-                        {{ user.username|slice:":1"|upper }}
+                <div id="headerMenu"
+                     class="hidden absolute right-0 mt-1 w-52 bg-white border border-slate-200 rounded-xl shadow-lg py-1 z-50">
+                    <button type="button" onclick="submitForm('pdf', false, true); closeHeaderMenu();"
+                            class="lg:hidden w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                        <span class="material-symbols-outlined text-lg text-slate-400">download</span>
+                        {{ UI.btn_download_pdf }}
+                    </button>
+                    {% if resume_id %}
+                    <button type="button" onclick="closeHeaderMenu(); openHistory();"
+                            class="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                        <span class="material-symbols-outlined text-lg text-slate-400">history</span>
+                        {{ UI.history }}
+                    </button>
+                    {% endif %}
+                    <a href="{% url 'resume:dashboard' %}"
+                       class="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                        <span class="material-symbols-outlined text-lg text-slate-400">grid_view</span>
+                        {{ UI.dashboard }}
                     </a>
-                    <a href="{% url 'logout' %}" class="flex items-center gap-1 text-slate-500 text-sm font-medium hover:text-red-500 transition-colors">
+                    <a href="{% url 'profile' %}"
+                       class="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                        <span class="material-symbols-outlined text-lg text-slate-400">person</span>
+                        {{ UI.profile }}
+                    </a>
+                    <a href="{% url 'logout' %}"
+                       class="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors">
                         <span class="material-symbols-outlined text-lg">logout</span>
+                        {{ UI.logout }}
                     </a>
                 </div>
-                {% endif %}
             </div>
         </div>
     </header>
@@ -1389,6 +1399,28 @@ function submitFeedback() {
 function getCookie(name) {
   return document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith(name+'='))?.split('=')[1] || '';
 }
+
+// ---------------------------------------------------------------------------
+// Header overflow menu
+// ---------------------------------------------------------------------------
+function toggleHeaderMenu(event) {
+  event.stopPropagation();
+  const menu = document.getElementById('headerMenu');
+  const button = document.getElementById('moreButton');
+  const opening = menu.classList.contains('hidden');
+  menu.classList.toggle('hidden', !opening);
+  button.setAttribute('aria-expanded', String(opening));
+}
+
+function closeHeaderMenu() {
+  const menu = document.getElementById('headerMenu');
+  if (!menu || menu.classList.contains('hidden')) return;
+  menu.classList.add('hidden');
+  document.getElementById('moreButton').setAttribute('aria-expanded', 'false');
+}
+
+document.addEventListener('click', closeHeaderMenu);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeHeaderMenu(); });
 
 // ---------------------------------------------------------------------------
 // Mode toggle — hands the resume being edited over to the agentic dashboard

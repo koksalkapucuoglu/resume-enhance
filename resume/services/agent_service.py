@@ -536,19 +536,25 @@ Rules:
 
     def _exec_upload_resume(self, lang: str) -> dict:
         msg = {
-            "en": "Redirecting to PDF upload...",
-            "tr": "PDF yukleme sayfasina yonlendiriliyorsunuz...",
-        }.get(lang, "Redirecting.")
-        return {"type": "redirect", "url": reverse("resume:upload_cv"), "message": msg}
+            "en": "Choose the PDF you'd like me to import.",
+            "tr": "Iceri aktarmami istediginiz PDF'i secin.",
+        }.get(lang, "Choose a PDF.")
+        return {
+            "type": "request_upload",
+            "source": "pdf",
+            "upload_url": reverse("resume:upload_cv"),
+            "message": msg,
+        }
 
     def _exec_upload_linkedin(self, lang: str) -> dict:
         msg = {
-            "en": "Redirecting to LinkedIn upload...",
-            "tr": "LinkedIn yukleme sayfasina yonlendiriliyorsunuz...",
-        }.get(lang, "Redirecting.")
+            "en": "Choose your LinkedIn profile PDF.",
+            "tr": "LinkedIn profil PDF'inizi secin.",
+        }.get(lang, "Choose a LinkedIn PDF.")
         return {
-            "type": "redirect",
-            "url": reverse("resume:upload_linkedin_cv"),
+            "type": "request_upload",
+            "source": "linkedin",
+            "upload_url": reverse("resume:upload_linkedin_cv"),
             "message": msg,
         }
 
@@ -1159,7 +1165,10 @@ Respond in {"Turkish" if lang == "tr" else "English"}."""
                 summary=f"Before translating to {target_language}",
             )
             resume.content = translated
-            resume.save(update_fields=["content", "updated_at"])
+            resume.language = Resume.normalize_language(
+                target_language, resume.language
+            )
+            resume.save(update_fields=["content", "language", "updated_at"])
             msg = {
                 "tr": f"**{resume.display_name}** {target_language} diline çevrildi.",
                 "en": f"**{resume.display_name}** translated to {target_language}.",

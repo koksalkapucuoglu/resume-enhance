@@ -84,10 +84,11 @@ TRANSLATIONS = {
         "history_template_change": "Template",
         "history_confirm_restore": "Restore this version? The current state is kept, so you can undo it.",
         "history_last_change": "See last change",
-        # Agent approval
-        "approval_title": "This will change your resume. Continue?",
-        "approval_approve": "Yes, go ahead",
-        "approval_decline": "No, cancel",
+        # In-chat upload
+        "upload_choose": "Choose a PDF",
+        "upload_uploading": "Uploading...",
+        "upload_done": "Imported. Your resume is ready on the right.",
+        "upload_failed": "The upload failed. Please try another file.",
         "context_resumes_title": "Your Resumes",
         "context_preview_title": "Preview",
         "context_quota_title": "Usage Limits",
@@ -198,10 +199,11 @@ TRANSLATIONS = {
         "history_template_change": "Şablon",
         "history_confirm_restore": "Bu sürüme dönülsün mü? Mevcut hali saklanır, geri alabilirsiniz.",
         "history_last_change": "Son değişikliği gör",
-        # Agent approval
-        "approval_title": "Bu işlem CV'nizi değiştirecek. Devam edilsin mi?",
-        "approval_approve": "Evet, devam et",
-        "approval_decline": "Hayır, iptal",
+        # In-chat upload
+        "upload_choose": "PDF seç",
+        "upload_uploading": "Yükleniyor...",
+        "upload_done": "İçeri aktarıldı. CV'niz sağda hazır.",
+        "upload_failed": "Yükleme başarısız oldu. Başka bir dosya deneyin.",
         "context_resumes_title": "Özgeçmişleriniz",
         "context_preview_title": "Önizleme",
         "context_quota_title": "Kullanım Limitleri",
