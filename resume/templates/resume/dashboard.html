@@ -72,7 +72,8 @@
         
         <div class="flex flex-1 justify-end gap-4">
             <nav class="hidden md:flex items-center gap-6">
-                <a class="text-primary text-sm font-semibold" href="{% url 'resume:dashboard' %}">Dashboard</a>
+                <a class="text-primary text-sm font-semibold" href="{% url 'resume:dashboard' %}">{{ UI.dashboard }}</a>
+                <a class="text-slate-500 text-sm font-medium hover:text-primary transition-colors" href="{% url 'resume:jobs' %}">{{ UI.nav_jobs }}</a>
             </nav>
 
             <!-- Mode Toggle -->

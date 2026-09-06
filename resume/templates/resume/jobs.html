@@ -1,0 +1,191 @@
+{% load static %}
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>{{ UI.nav_jobs }} - ResuStack</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+    tailwind.config = {
+        darkMode: "class",
+        theme: {
+            extend: {
+                colors: {
+                    "primary": "#2563eb",
+                    "primary-hover": "#1d4ed8",
+                    "background-light": "#f1f5f9",
+                },
+                fontFamily: {"display": ["Inter", "sans-serif"], "sans": ["Inter", "sans-serif"]},
+            },
+        },
+    };
+</script>
+</head>
+<body class="bg-background-light font-sans text-slate-900 min-h-screen flex flex-col">
+
+<header class="flex items-center justify-between whitespace-nowrap border-b border-slate-200 bg-white px-4 md:px-10 lg:px-20 py-4 z-10 sticky top-0">
+    <a href="{% url 'resume:dashboard' %}" class="flex items-center gap-3" title="{{ UI.dashboard }}">
+        <img src="{% static 'img/resustack_logo.png' %}" alt="ResuStack Logo" class="h-8 w-auto object-contain"/>
+        <h2 class="text-slate-900 text-2xl font-bold tracking-tight">ResuStack</h2>
+    </a>
+    <div class="flex flex-1 justify-end gap-4 items-center">
+        <nav class="hidden md:flex items-center gap-6">
+            <a class="text-slate-500 text-sm font-medium hover:text-primary transition-colors" href="{% url 'resume:dashboard' %}">{{ UI.dashboard }}</a>
+            <a class="text-primary text-sm font-semibold" href="{% url 'resume:jobs' %}">{{ UI.nav_jobs }}</a>
+        </nav>
+        <a href="{% url 'profile' %}" class="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold border border-slate-300 hover:bg-primary hover:text-white hover:border-primary transition-all" title="{{ UI.profile }}">
+            {{ user.username|slice:":1"|upper }}
+        </a>
+        <a href="{% url 'logout' %}" class="flex items-center gap-1 text-slate-500 text-sm font-medium hover:text-red-500 transition-colors">
+            <span class="material-symbols-outlined text-lg">logout</span>
+            <span class="hidden sm:inline">{{ UI.logout }}</span>
+        </a>
+    </div>
+</header>
+
+<main class="flex-1 px-4 md:px-10 lg:px-20 py-8">
+  <div class="max-w-[1100px] mx-auto w-full">
+    <h1 class="text-3xl md:text-4xl font-black tracking-tight">{{ UI.nav_jobs }}</h1>
+    <p class="text-slate-500 text-sm mt-1">{{ UI.jobs_subtitle }}</p>
+
+    {% if messages %}
+      <div class="mt-5 space-y-2">
+        {% for message in messages %}
+          <div class="px-4 py-3 rounded-lg text-sm {% if message.tags == 'error' %}bg-red-50 text-red-700 border border-red-200{% else %}bg-green-50 text-green-700 border border-green-200{% endif %}">
+            {{ message }}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% if not is_pro %}
+      <div class="mt-8 bg-white border border-slate-200 rounded-2xl p-8 text-center">
+        <div class="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <span class="material-symbols-outlined text-primary text-3xl">work</span>
+        </div>
+        <h2 class="text-lg font-bold text-slate-900">{{ UI.jobs_pro_title }}</h2>
+        <p class="text-slate-500 text-sm mt-2 max-w-md mx-auto">{{ UI.jobs_pro_body }}</p>
+        <a href="{% url 'profile' %}" class="inline-block mt-5 px-6 py-2.5 rounded-lg bg-primary text-white text-sm font-bold hover:bg-primary-hover transition-colors">
+          {{ UI.jobs_pro_cta }}
+        </a>
+      </div>
+
+    {% elif not jobs %}
+      <div class="mt-8 bg-white border border-slate-200 rounded-2xl p-10 text-center">
+        <div class="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <span class="material-symbols-outlined text-slate-400 text-3xl">work_off</span>
+        </div>
+        <p class="text-slate-500 text-sm">{{ UI.jobs_empty }}</p>
+      </div>
+
+    {% else %}
+      {% if groups %}
+        <section class="mt-8">
+          <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">{{ UI.groups_title }}</h2>
+          <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {% for group in groups %}
+              <div class="bg-white border border-slate-200 rounded-xl p-4">
+                <p class="text-xs font-bold text-primary uppercase tracking-wide mb-2">{{ group.tag }}</p>
+                {% for entry in group.resumes %}
+                  <div class="flex items-center gap-2 py-0.5">
+                    <span class="material-symbols-outlined !text-[15px] text-slate-400">description</span>
+                    <span class="text-sm text-slate-700 truncate flex-1">{{ entry.resume_name }}</span>
+                    <span class="text-[11px] text-slate-400">{{ entry.uses }}×</span>
+                  </div>
+                {% endfor %}
+              </div>
+            {% endfor %}
+          </div>
+        </section>
+      {% endif %}
+
+      <section class="mt-8 bg-white border border-slate-200 rounded-2xl overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm min-w-[720px]">
+            <thead class="bg-slate-50 text-slate-500">
+              <tr>
+                <th class="text-left font-semibold px-5 py-3">{{ UI.jobs_col_role }}</th>
+                <th class="text-left font-semibold px-5 py-3 w-24">{{ UI.jobs_col_score }}</th>
+                <th class="text-left font-semibold px-5 py-3 w-40">{{ UI.jobs_col_status }}</th>
+                <th class="text-left font-semibold px-5 py-3 w-56">{{ UI.jobs_col_resume }}</th>
+                <th class="px-5 py-3 w-28"></th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              {% for job in jobs %}
+              <tr>
+                <form method="post" action="{% url 'resume:update_job_posting' job.pk %}" id="job-form-{{ job.pk }}">{% csrf_token %}</form>
+                <td class="px-5 py-4 align-top">
+                  <p class="font-semibold text-slate-800">{{ job.title }}</p>
+                  {% if job.company %}<p class="text-xs text-slate-500">{{ job.company }}</p>{% endif %}
+                  {% if job.tags %}
+                    <div class="flex flex-wrap gap-1 mt-1.5">
+                      {% for tag in job.tags %}
+                        <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{{ tag }}</span>
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                  {% if job.missing_keywords %}
+                    <p class="text-[11px] text-slate-400 mt-1.5">
+                      {{ UI.jobs_missing }} {{ job.missing_keywords|join:", " }}
+                    </p>
+                  {% endif %}
+                </td>
+                <td class="px-5 py-4 align-top">
+                  {% if job.match_score != None %}
+                    <span class="font-bold {% if job.match_score >= 75 %}text-green-600{% elif job.match_score >= 50 %}text-amber-600{% else %}text-red-600{% endif %}">
+                      {{ job.match_score }}
+                    </span><span class="text-slate-400 text-xs">/100</span>
+                  {% else %}
+                    <span class="text-slate-300">—</span>
+                  {% endif %}
+                </td>
+                <td class="px-5 py-4 align-top">
+                  <select name="status" form="job-form-{{ job.pk }}"
+                          class="w-full text-xs rounded-lg border-slate-200 focus:border-primary focus:ring-primary">
+                    {% for value, label in status_choices %}
+                      <option value="{{ value }}" {% if job.status == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                </td>
+                <td class="px-5 py-4 align-top">
+                  <select name="resume" form="job-form-{{ job.pk }}"
+                          class="w-full text-xs rounded-lg border-slate-200 focus:border-primary focus:ring-primary">
+                    <option value="">{{ UI.jobs_no_resume }}</option>
+                    {% for resume in resumes %}
+                      <option value="{{ resume.pk }}" {% if job.resume_id == resume.pk %}selected{% endif %}>{{ resume.display_name }}</option>
+                    {% endfor %}
+                  </select>
+                </td>
+                <td class="px-5 py-4 align-top">
+                  <div class="flex items-center gap-1 justify-end">
+                    <button type="submit" form="job-form-{{ job.pk }}"
+                            class="px-3 py-1.5 text-xs font-semibold text-primary bg-primary/10 rounded-lg hover:bg-primary/20 transition-colors">
+                      {{ UI.jobs_save }}
+                    </button>
+                    <button type="button" title="{{ UI.jobs_remove }}"
+                            onclick="if (confirm('{{ UI.jobs_remove_confirm|escapejs }}')) document.getElementById('job-delete-{{ job.pk }}').submit();"
+                            class="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors">
+                      <span class="material-symbols-outlined !text-[18px]">delete</span>
+                    </button>
+                  </div>
+                  <form id="job-delete-{{ job.pk }}" method="post" action="{% url 'resume:delete_job_posting' job.pk %}" class="hidden">{% csrf_token %}</form>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    {% endif %}
+  </div>
+</main>
+
+<footer class="mt-auto border-t border-slate-200 bg-white py-6 px-4 md:px-10 lg:px-20">
+  <p class="text-slate-400 text-xs text-center">© 2026 ResuStack. All rights reserved.</p>
+</footer>
+</body>
+</html>

@@ -162,7 +162,7 @@ class JobPosting(models.Model):
 - [x] CV grupları başvurulardan türetiliyor — kullanıcının elle etiketlemesi gerekmiyor
 - [x] Agentic'te üç yeni panel: eşleşme skoru + keyword'ler, başvuru listesi, CV grupları
 - [x] Premium kapısı: pro tool'lar **şemadan filtreleniyor** (free kullanıcıya hiç önerilmiyor), handler'lar ayrıca tier kontrol ediyor
-- [ ] Standart modda ilan takip tablosu — agentic'te tam, standart modda henüz yok
+- [x] Standart modda ilan takip tablosu — `/jobs/` sayfası: CV grupları özeti + durum/CV düzenlenebilir tablo, free planda upsell
 
 **Tasarım notları**
 - Uyarlama **kopya üretir**, orijinali bozmaz. Tailoring prompt'u uydurmayı yasaklıyor: sıralama ve ifade değişir, deneyim eklenmez.
