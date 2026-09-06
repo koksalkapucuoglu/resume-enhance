@@ -1,0 +1,101 @@
+{% load static %}
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>{{ UI.pricing_title }} - ResuStack</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+    tailwind.config = {
+        darkMode: "class",
+        theme: {extend: {
+            colors: {"primary": "#2563eb", "primary-hover": "#1d4ed8", "background-light": "#f1f5f9"},
+            fontFamily: {"display": ["Inter","sans-serif"], "sans": ["Inter","sans-serif"]},
+        }},
+    };
+</script>
+</head>
+<body class="bg-background-light font-sans text-slate-900 min-h-screen flex flex-col">
+
+<header class="flex items-center justify-between whitespace-nowrap border-b border-slate-200 bg-white px-4 md:px-10 lg:px-20 py-4 sticky top-0 z-10">
+    <a href="{% url 'resume:dashboard' %}" class="flex items-center gap-3" title="{{ UI.dashboard }}">
+        <img src="{% static 'img/resustack_logo.png' %}" alt="ResuStack Logo" class="h-8 w-auto object-contain"/>
+        <h2 class="text-slate-900 text-2xl font-bold tracking-tight">ResuStack</h2>
+    </a>
+    <div class="flex items-center gap-4">
+        <a class="text-slate-500 text-sm font-medium hover:text-primary transition-colors" href="{% url 'resume:dashboard' %}">{{ UI.dashboard }}</a>
+        <a href="{% url 'profile' %}" class="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold border border-slate-300 hover:bg-primary hover:text-white hover:border-primary transition-all">
+            {{ user.username|slice:":1"|upper }}
+        </a>
+    </div>
+</header>
+
+<main class="flex-1 px-4 md:px-10 lg:px-20 py-10">
+  <div class="max-w-[900px] mx-auto w-full">
+    <div class="text-center">
+      <h1 class="text-3xl md:text-4xl font-black tracking-tight">{{ UI.pricing_title }}</h1>
+      <p class="text-slate-500 text-sm mt-2 max-w-xl mx-auto">{{ UI.pricing_subtitle }}</p>
+    </div>
+
+    {% if messages %}
+      <div class="mt-6 space-y-2 max-w-lg mx-auto">
+        {% for message in messages %}
+          <div class="px-4 py-3 rounded-lg text-sm {% if message.tags == 'error' %}bg-red-50 text-red-700 border border-red-200{% else %}bg-green-50 text-green-700 border border-green-200{% endif %}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% if is_pro %}
+      <div class="mt-8 bg-white border-2 border-green-500 rounded-2xl p-6 text-center">
+        <span class="material-symbols-outlined text-green-600 text-4xl">verified</span>
+        <h2 class="text-lg font-bold text-slate-900 mt-1">{{ UI.pricing_current }}</h2>
+        {% if premium_until %}
+          <p class="text-slate-500 text-sm mt-1">
+            {{ UI.pricing_until }} {{ premium_until|date:"d M Y" }} · {{ days_left }} {{ UI.pricing_days_left }}
+          </p>
+        {% endif %}
+      </div>
+    {% endif %}
+
+    <div class="mt-8 grid gap-5 sm:grid-cols-2">
+      {% for plan in plans %}
+        <div class="bg-white rounded-2xl p-6 flex flex-col border-2 {% if plan.highlight %}border-primary shadow-lg shadow-primary/10{% else %}border-slate-200{% endif %}">
+          <h3 class="font-bold text-slate-900">{{ plan.name }}</h3>
+          <p class="text-4xl font-black text-slate-900 mt-2">{{ plan.price_display }}</p>
+          <p class="text-slate-500 text-sm mt-2 flex-1">{{ plan.blurb }}</p>
+          {% if plan.checkout_url %}
+            <form method="post" action="{% url 'resume:start_checkout' plan.code %}" class="mt-5">
+              {% csrf_token %}
+              <button type="submit"
+                      class="w-full py-2.5 rounded-lg font-bold text-sm transition-colors {% if plan.highlight %}bg-primary text-white hover:bg-primary-hover{% else %}bg-slate-100 text-slate-700 hover:bg-slate-200{% endif %}">
+                {% if is_pro %}{{ UI.pricing_extend }}{% else %}{{ UI.pricing_buy }}{% endif %}
+              </button>
+            </form>
+          {% else %}
+            <p class="mt-5 text-center text-xs text-slate-400 py-2.5">{{ UI.pricing_unavailable }}</p>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+
+    <section class="mt-10 bg-white border border-slate-200 rounded-2xl p-6">
+      <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wide mb-4">{{ UI.pricing_included }}</h2>
+      <ul class="space-y-2.5 text-sm text-slate-700">
+        <li class="flex gap-2.5"><span class="material-symbols-outlined !text-[18px] text-green-600 flex-shrink-0">check_circle</span>{{ UI.pricing_feat_unlimited }}</li>
+        <li class="flex gap-2.5"><span class="material-symbols-outlined !text-[18px] text-green-600 flex-shrink-0">check_circle</span>{{ UI.pricing_feat_history }}</li>
+        <li class="flex gap-2.5"><span class="material-symbols-outlined !text-[18px] text-green-600 flex-shrink-0">check_circle</span>{{ UI.pricing_feat_jd }}</li>
+        <li class="flex gap-2.5"><span class="material-symbols-outlined !text-[18px] text-green-600 flex-shrink-0">check_circle</span>{{ UI.pricing_feat_tailor }}</li>
+        <li class="flex gap-2.5"><span class="material-symbols-outlined !text-[18px] text-green-600 flex-shrink-0">check_circle</span>{{ UI.pricing_feat_tracking }}</li>
+      </ul>
+    </section>
+  </div>
+</main>
+
+<footer class="mt-auto border-t border-slate-200 bg-white py-6 px-4">
+  <p class="text-slate-400 text-xs text-center">© 2026 ResuStack. All rights reserved.</p>
+</footer>
+</body>
+</html>

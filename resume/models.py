@@ -2,7 +2,9 @@ from django.db import models
 from django.contrib.auth import get_user_model
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from datetime import date
+from datetime import date, timedelta
+
+from django.utils import timezone
 
 
 User = get_user_model()
@@ -247,6 +249,10 @@ class UserProfile(models.Model):
 
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
     tier = models.CharField(max_length=10, choices=TIER_CHOICES, default=TIER_FREE)
+    # Access bought outright, not a subscription: when this passes, the account
+    # falls back to free and the data stays put. Set by the payment webhook;
+    # `tier` remains the manual override for staff-granted accounts.
+    premium_until = models.DateTimeField(null=True, blank=True)
     # NULL means "the user has not chosen a mode yet" — resolves to UI_MODE_DEFAULT.
     # An explicit choice is always preserved.
     ui_mode = models.CharField(
@@ -281,8 +287,31 @@ class UserProfile(models.Model):
         return self.ui_mode or self.UI_MODE_DEFAULT
 
     def is_pro(self):
-        """Check if user is on Pro tier."""
-        return self.tier == self.TIER_PRO
+        """Pro either because staff set the tier, or because access was bought."""
+        if self.tier == self.TIER_PRO:
+            return True
+        return bool(self.premium_until and self.premium_until > timezone.now())
+
+    @property
+    def premium_days_left(self):
+        if self.tier == self.TIER_PRO:
+            return None  # granted indefinitely
+        if not self.premium_until:
+            return 0
+        remaining = self.premium_until - timezone.now()
+        return max(0, remaining.days)
+
+    def grant_premium(self, days):
+        """
+        Extend paid access by `days`.
+
+        Extends from whichever is later — now, or an unexpired balance — so
+        buying again before expiry adds time instead of discarding it.
+        """
+        start = max(timezone.now(), self.premium_until or timezone.now())
+        self.premium_until = start + timedelta(days=days)
+        self.save(update_fields=["premium_until"])
+        return self.premium_until
 
     def can_import(self):
         """Check if user can import a PDF."""
@@ -338,6 +367,36 @@ class UserProfile(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.tier.upper()}"
+
+
+class Purchase(models.Model):
+    """
+    A completed payment.
+
+    Kept as an audit trail independent of the profile: it answers what someone
+    paid for and when, and makes webhook delivery idempotent — providers retry,
+    and a retry must not grant a second period.
+    """
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="purchases"
+    )
+    provider = models.CharField(max_length=30)
+    # The provider's own id for this payment. Unique, so a redelivered webhook
+    # is recognised rather than granting access twice.
+    external_id = models.CharField(max_length=255, unique=True)
+    plan = models.CharField(max_length=30)
+    days_granted = models.IntegerField()
+    amount_cents = models.IntegerField(default=0)
+    currency = models.CharField(max_length=10, default="USD")
+    granted_until = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.user.username} · {self.plan} · {self.created_at:%Y-%m-%d}"
 
 
 @receiver(post_save, sender=User)
