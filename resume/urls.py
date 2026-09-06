@@ -73,4 +73,9 @@ urlpatterns = [
     ),
     path("agent/toggle-mode/", views.toggle_agent_mode, name="toggle_agent_mode"),
     path("agent/toggle-language/", views.toggle_ui_language, name="toggle_ui_language"),
+    path(
+        "agent/toggle-confirm/",
+        views.toggle_confirm_destructive,
+        name="toggle_confirm_destructive",
+    ),
 ]

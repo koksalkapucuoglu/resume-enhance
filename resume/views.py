@@ -31,7 +31,7 @@ from resume.services.pdf_service import (
     resume_pdf_service,
 )
 from resume.models import Feedback, JobPosting, Resume, ResumeRevision
-from resume.services import diff_service, revision_service
+from resume.services import diff_service, resume_content, revision_service
 
 logger = logging.getLogger(__name__)
 
@@ -345,6 +345,11 @@ def populate_formsets_from_extracted_json(extracted_json):
     Returns:
         dict: A dictionary containing the populated forms and formsets.
     """
+    # Content reaches here from the form, two importers and the agent, each with
+    # its own idea of the shape. Normalising first means the editor opens an
+    # agent-written resume exactly as it opens one typed in by hand.
+    extracted_json = resume_content.normalize(extracted_json)
+
     # User Info Form
     user_form = UserInfoForm(
         initial={
@@ -1069,7 +1074,7 @@ def upload_cv(request):
             resume = Resume.objects.create(
                 user=request.user,
                 title=_auto_title_from_content(extracted_json),
-                content=extracted_json,
+                content=resume_content.normalize(extracted_json),
                 language=Resume.normalize_language(extracted_json.get("language")),
             )
 
@@ -1163,7 +1168,7 @@ def upload_linkedin_cv(request):
             resume = Resume.objects.create(
                 user=request.user,
                 title=_auto_title_from_content(extracted_json, prefix="LinkedIn"),
-                content=extracted_json,
+                content=resume_content.normalize(extracted_json),
                 language=Resume.normalize_language(extracted_json.get("language")),
             )
 
@@ -1242,27 +1247,9 @@ def download_resume_pdf(request, pk):
         return redirect("resume:dashboard")
 
     try:
-        # Transform stored JSON into the format expected by the PDF template
-        skills_raw = user_info.get("skills", [])
-        if isinstance(skills_raw, list):
-            skills_str = ", ".join(skills_raw)
-        else:
-            skills_str = str(skills_raw)
-
-        resume_data = {
-            "user_data": {
-                "full_name": user_info.get("full_name", ""),
-                "email": user_info.get("email", ""),
-                "phone": user_info.get("phone", ""),
-                "github": user_info.get("github", ""),
-                "linkedin": user_info.get("linkedin", ""),
-                "skills": skills_str,
-            },
-            "education_data": content.get("education", []),
-            "experience_data": content.get("experience", []),
-            "project_data": content.get("projects_and_publications", []),
-            "generation_date": datetime.now().strftime("%Y-%m-%d"),
-        }
+        # Same builder the preview uses, so the download cannot disagree with
+        # what the user was shown.
+        resume_data = resume_content.build_context(content)
 
         pdf_bytes = resume_pdf_service.generate_resume_pdf(
             resume_data=resume_data,
@@ -1371,25 +1358,7 @@ def preview_saved_resume(request, pk):
     except Resume.DoesNotExist:
         return HttpResponse("<p>Resume not found.</p>", status=404)
 
-    content = resume.content or {}
-    user_info = content.get("user_info", {})
-    experience_data = []
-    for exp in content.get("experience", []):
-        exp_copy = dict(exp)
-        desc = exp_copy.get("description", [])
-        if isinstance(desc, str):
-            exp_copy["description"] = [
-                line for line in desc.split("\n") if line.strip()
-            ]
-        experience_data.append(exp_copy)
-
-    context = {
-        "user_data": user_info,
-        "education_data": content.get("education", []),
-        "experience_data": experience_data,
-        "project_data": content.get("projects_and_publications", []),
-        "generation_date": datetime.now().strftime("%Y-%m-%d"),
-    }
+    context = resume_content.build_context(resume.content)
     template_name = settings.TEMPLATE_SELECTOR_HTML_MAP.get(
         resume.template_selector, "faangpath_simple_template_pdf.html"
     )
@@ -1946,6 +1915,7 @@ def _agent_context(request, active_resume, message="", history=None):
     )
     return {
         "lang": lang,
+        "confirm_destructive": profile.confirm_destructive,
         "active_resume": active_resume,
         "resumes": [
             {
@@ -2227,6 +2197,24 @@ def toggle_agent_mode(request):
     return JsonResponse(
         {"success": True, "mode": profile.ui_mode, "redirect_url": redirect_url}
     )
+
+
+@login_required
+@require_http_methods(["POST"])
+def toggle_confirm_destructive(request):
+    """
+    Turn the agent's "are you sure?" step on or off.
+    POST body: {enabled: bool}
+    """
+    try:
+        enabled = bool(json.loads(request.body).get("enabled", True))
+    except (ValueError, KeyError):
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    profile = request.user.profile
+    profile.confirm_destructive = enabled
+    profile.save(update_fields=["confirm_destructive"])
+    return JsonResponse({"success": True, "confirm_destructive": enabled})
 
 
 @login_required

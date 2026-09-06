@@ -259,6 +259,9 @@ class UserProfile(models.Model):
         max_length=20, choices=UI_MODE_CHOICES, null=True, blank=True, default=None
     )
     ui_language = models.CharField(max_length=5, default='en')
+    # Whether the agent stops for confirmation before changing a resume. Some
+    # people want the speed and have the change history to fall back on.
+    confirm_destructive = models.BooleanField(default=True)
 
     # Monthly quota counters
     import_count = models.IntegerField(default=0)

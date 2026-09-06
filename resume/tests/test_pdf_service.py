@@ -32,7 +32,7 @@ class HtmlToPdfConverterTestCase(TestCase):
         mock_settings.BASE_DIR = "/app"
         mock_html_instance = Mock()
         mock_html_class.return_value = mock_html_instance
-        expected_pdf_bytes = b"fake pdf content"
+        expected_pdf_bytes = b"%PDF-1.7 fake pdf content"
         mock_html_instance.write_pdf.return_value = expected_pdf_bytes
 
         result = self.converter.convert_html_to_pdf(self.sample_html)
@@ -50,7 +50,7 @@ class HtmlToPdfConverterTestCase(TestCase):
         mock_settings.BASE_DIR = "/app"
         mock_html_instance = Mock()
         mock_html_class.return_value = mock_html_instance
-        expected_pdf_bytes = b"styled pdf content"
+        expected_pdf_bytes = b"%PDF-1.7 styled pdf content"
         mock_html_instance.write_pdf.return_value = expected_pdf_bytes
 
         result = self.converter.convert_html_to_pdf(self.sample_html, self.sample_css)
@@ -79,7 +79,7 @@ class HtmlToPdfConverterTestCase(TestCase):
         mock_render_to_string.return_value = self.sample_html
 
         with patch.object(self.converter, "convert_html_to_pdf") as mock_convert:
-            expected_pdf = b"template pdf content"
+            expected_pdf = b"%PDF-1.7 template pdf content"
             mock_convert.return_value = expected_pdf
 
             result = self.converter.convert_template_to_pdf(template_name, context)
@@ -158,7 +158,7 @@ class ResumePdfServiceTestCase(TestCase):
             with patch.object(
                 self.service.pdf_converter, "convert_template_to_pdf"
             ) as mock_convert:
-                expected_pdf = b"resume pdf content"
+                expected_pdf = b"%PDF-1.7 resume pdf content"
                 mock_convert.return_value = expected_pdf
 
                 result = self.service.generate_resume_pdf(
@@ -227,13 +227,41 @@ class PdfServiceIntegrationTestCase(TestCase):
         mock_render.return_value = "<html><body>Test</body></html>"
         mock_html_instance = Mock()
         mock_html_class.return_value = mock_html_instance
-        mock_html_instance.write_pdf.return_value = b"integration test pdf"
+        mock_html_instance.write_pdf.return_value = b"%PDF-1.7 integration test pdf"
 
         with patch.object(Path, "exists", return_value=False):
             result = self.service.generate_resume_pdf(
                 self.sample_context, "faangpath-simple"
             )
 
-        self.assertEqual(result, b"integration test pdf")
+        self.assertEqual(result, b"%PDF-1.7 integration test pdf")
         mock_render.assert_called_once()
         mock_html_instance.write_pdf.assert_called_once()
+
+
+class PdfSanityCheckTestCase(TestCase):
+    """A body that is not a PDF must not reach the browser as one."""
+
+    def setUp(self):
+        self.service = ResumePdfService()
+
+    @patch.object(HtmlToPdfConverter, "convert_template_to_pdf")
+    def test_empty_output_is_refused(self, mock_convert):
+        mock_convert.return_value = b""
+        with self.assertRaises(PdfGenerationError):
+            self.service.generate_resume_pdf({}, "faangpath-simple", None)
+
+    @patch.object(HtmlToPdfConverter, "convert_template_to_pdf")
+    def test_html_error_page_is_refused(self, mock_convert):
+        """The symptom this prevents is a blank tab and 'Invalid PDF structure'."""
+        mock_convert.return_value = b"<html><body>Server Error</body></html>"
+        with self.assertRaises(PdfGenerationError) as ctx:
+            self.service.generate_resume_pdf({}, "faangpath-simple", None)
+        self.assertIn("not a PDF", str(ctx.exception))
+
+    @patch.object(HtmlToPdfConverter, "convert_template_to_pdf")
+    def test_real_looking_output_passes(self, mock_convert):
+        mock_convert.return_value = b"%PDF-1.7\n..."
+        self.assertTrue(
+            self.service.generate_resume_pdf({}, "faangpath-simple", None)
+        )

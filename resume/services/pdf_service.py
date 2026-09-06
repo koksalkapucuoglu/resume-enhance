@@ -176,7 +176,17 @@ class ResumePdfService:
                 css_file_path=css_file_path,
             )
 
-            self.logger.info("Resume PDF generated successfully")
+            # A truncated or empty body still arrives with a PDF content type,
+            # so the browser's viewer reports "Invalid PDF structure" and the
+            # user sees a blank tab. Fail here instead, with a real reason.
+            if not pdf_bytes or not pdf_bytes.startswith(b"%PDF"):
+                raise PdfGenerationError(
+                    f"Renderer returned {len(pdf_bytes or b'')} bytes that are not a PDF"
+                )
+
+            self.logger.info(
+                "Resume PDF generated successfully (%d bytes)", len(pdf_bytes)
+            )
             return pdf_bytes
 
         except Exception as e:

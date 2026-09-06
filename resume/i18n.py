@@ -140,6 +140,10 @@ TRANSLATIONS = {
         "pricing_soon_title": "Pro is not on sale yet",
         "pricing_soon_body": "Everything below is built and working — we're still choosing how to take payment. Tell us which plan you'd want and we'll let you know the moment it opens.",
         "pricing_notify": "Tell me when it's ready",
+        # Confirmation setting
+        "confirm_setting_title": "Ask before changing a resume",
+        "confirm_setting_body": "The assistant confirms edits, template switches and deletions before applying them. Turn this off to move faster — every change is still recorded and can be undone from the change history.",
+        "confirm_setting_saved": "Saved.",
         "context_resumes_title": "Your Resumes",
         "context_preview_title": "Preview",
         "context_quota_title": "Usage Limits",
@@ -306,6 +310,10 @@ TRANSLATIONS = {
         "pricing_soon_title": "Pro henüz satışta değil",
         "pricing_soon_body": "Aşağıdaki her şey hazır ve çalışıyor — ödemeyi nasıl alacağımıza henüz karar vermedik. Hangi planı isterdiğinizi söyleyin, satışa çıktığı anda haber verelim.",
         "pricing_notify": "Hazır olunca haber ver",
+        # Confirmation setting
+        "confirm_setting_title": "CV değişmeden önce sor",
+        "confirm_setting_body": "Asistan düzenleme, şablon değişimi ve silme işlemlerinden önce onay ister. Daha hızlı ilerlemek için kapatabilirsiniz — her değişiklik yine kaydediliyor ve geçmişten geri alınabiliyor.",
+        "confirm_setting_saved": "Kaydedildi.",
         "context_resumes_title": "Özgeçmişleriniz",
         "context_preview_title": "Önizleme",
         "context_quota_title": "Kullanım Limitleri",
