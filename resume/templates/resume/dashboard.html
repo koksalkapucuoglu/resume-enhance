@@ -490,12 +490,19 @@ function getCookie(name) {
 }
 
 async function switchToAgentic() {
-    await fetch('{% url "resume:toggle_agent_mode" %}', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
-        body: JSON.stringify({mode: 'agentic'}),
-    });
-    window.location.reload();
+    const btn = document.getElementById('btn-agentic');
+    btn.disabled = true;
+    try {
+        const res = await fetch('{% url "resume:toggle_agent_mode" %}', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+            body: JSON.stringify({mode: 'agentic'}),
+        });
+        const data = await res.json();
+        window.location.href = data.redirect_url || '{% url "resume:dashboard" %}';
+    } catch (e) {
+        btn.disabled = false;
+    }
 }
 </script>
 </body>

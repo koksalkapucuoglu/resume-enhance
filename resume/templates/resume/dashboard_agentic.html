@@ -178,12 +178,31 @@
         <div id="context-panel" class="hidden lg:flex flex-col w-full lg:w-2/5 bg-slate-50 overflow-hidden">
 
             <!-- Default state -->
-            <div id="context-default" class="flex flex-col items-center justify-center flex-1 text-center px-8">
+            <div id="context-default" class="{% if not has_resumes %}hidden {% endif %}flex flex-col items-center justify-center flex-1 text-center px-8">
                 <div class="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-4">
                     <span class="material-symbols-outlined text-slate-400 text-3xl">chat_bubble</span>
                 </div>
                 <h3 class="text-slate-700 font-semibold mb-2">{{ UI.context_default_title }}</h3>
                 <p class="text-slate-400 text-sm max-w-xs">{{ UI.context_default_hint }}</p>
+            </div>
+
+            <!-- Empty state: no resumes at all -->
+            <div id="context-empty" class="{% if has_resumes %}hidden flex-col{% else %}flex flex-col{% endif %} items-center justify-center flex-1 text-center px-8">
+                <div class="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-4">
+                    <span class="material-symbols-outlined text-slate-400 text-3xl">note_add</span>
+                </div>
+                <h3 class="text-slate-700 font-semibold mb-2">{{ UI.context_empty_title }}</h3>
+                <p class="text-slate-400 text-sm max-w-xs mb-5">{{ UI.context_empty_hint }}</p>
+                <div class="flex flex-col gap-2 w-full max-w-[220px]">
+                    <button onclick="sendQuickAction('{{ UI.context_empty_create|escapejs }}')"
+                            class="px-4 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary-hover transition-colors">
+                        {{ UI.context_empty_create }}
+                    </button>
+                    <button onclick="sendQuickAction('{{ UI.context_empty_upload|escapejs }}')"
+                            class="px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors">
+                        {{ UI.context_empty_upload }}
+                    </button>
+                </div>
             </div>
 
             <!-- Resume List Panel -->
@@ -305,6 +324,9 @@ const CSRF_TOKEN = '{{ csrf_token }}';
 const PROACTIVE_SUGGESTIONS = {{ proactive_suggestions|default:"[]"|safe }};
 const BADGE_MODERN = "{{ UI.badge_modern }}";
 const BADGE_CLASSIC = "{{ UI.badge_classic }}";
+// Set when arriving via /dashboard/?resume=<pk> (e.g. handed over by the editor)
+const INITIAL_RESUME = {{ initial_resume|default:"null"|safe }};
+const HAS_RESUMES = {{ has_resumes|yesno:"true,false" }};
 
 // ---------------------------------------------------------------------------
 // localStorage keys
@@ -342,14 +364,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const welcomeMsg = `{{ UI.welcome_msg|escapejs }}`;
     document.getElementById('welcome-bubble').innerHTML = formatMessage(welcomeMsg);
 
-    // Restore active resume from localStorage
-    try {
-        const stored = JSON.parse(localStorage.getItem(LS_ACTIVE));
-        if (stored && stored.id) {
-            setActiveResume(stored.id, stored.name);
-            loadPreviewPanel(stored.id, stored.name);
+    // Active resume: a ?resume=<pk> deep link (e.g. handed over by the editor)
+    // wins over whatever localStorage remembers from an earlier session.
+    if (INITIAL_RESUME && INITIAL_RESUME.id) {
+        setActiveResume(INITIAL_RESUME.id, INITIAL_RESUME.name);
+        loadPreviewPanel(INITIAL_RESUME.id, INITIAL_RESUME.name);
+    } else {
+        try {
+            const stored = JSON.parse(localStorage.getItem(LS_ACTIVE));
+            if (stored && stored.id) {
+                setActiveResume(stored.id, stored.name);
+                loadPreviewPanel(stored.id, stored.name);
+            } else {
+                showContextDefault();
+            }
+        } catch(e) {
+            localStorage.removeItem(LS_ACTIVE);
+            showContextDefault();
         }
-    } catch(e) { localStorage.removeItem(LS_ACTIVE); }
+    }
 
     // Restore chat history from localStorage
     try {
@@ -393,13 +426,22 @@ document.addEventListener('DOMContentLoaded', () => {
 // Mode toggle
 // ---------------------------------------------------------------------------
 async function switchMode(mode) {
-    if (mode === 'standard') {
-        await fetch('{% url "resume:toggle_agent_mode" %}', {
+    if (mode !== 'standard') return;
+    const btn = document.getElementById('btn-standard');
+    btn.disabled = true;
+    // Hand the active resume over so the editor opens on the same document
+    const body = {mode: 'standard'};
+    if (activeResumeId) body.resume_id = activeResumeId;
+    try {
+        const res = await fetch('{% url "resume:toggle_agent_mode" %}', {
             method: 'POST',
             headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN},
-            body: JSON.stringify({mode: 'standard'}),
+            body: JSON.stringify(body),
         });
-        window.location.href = '{% url "resume:dashboard" %}';
+        const data = await res.json();
+        window.location.href = data.redirect_url || '{% url "resume:dashboard" %}';
+    } catch (e) {
+        btn.disabled = false;
     }
 }
 
@@ -675,12 +717,15 @@ function removeAllChips() {
 // ---------------------------------------------------------------------------
 function showContextDefault() {
     hideAllContextPanels();
-    document.getElementById('context-default').classList.remove('hidden');
-    document.getElementById('context-default').classList.add('flex');
+    // With no resumes at all, the generic "context panel" copy is useless —
+    // show the onboarding empty state instead.
+    const id = HAS_RESUMES ? 'context-default' : 'context-empty';
+    document.getElementById(id).classList.remove('hidden');
+    document.getElementById(id).classList.add('flex');
 }
 
 function hideAllContextPanels() {
-    ['context-default','context-resume-list','context-preview',
+    ['context-default','context-empty','context-resume-list','context-preview',
      'context-quota','context-confirm','context-analysis'].forEach(id => {
         const el = document.getElementById(id);
         el.classList.add('hidden');

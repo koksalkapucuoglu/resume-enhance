@@ -82,11 +82,15 @@ class UserProfile(models.Model):
     UI_STANDARD = "standard"
     UI_AGENTIC = "agentic"
     UI_MODE_CHOICES = [(UI_STANDARD, "Standard"), (UI_AGENTIC, "Agentic")]
+    # Mode used when the user has never made an explicit choice (ui_mode is NULL).
+    UI_MODE_DEFAULT = UI_AGENTIC
 
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
     tier = models.CharField(max_length=10, choices=TIER_CHOICES, default=TIER_FREE)
+    # NULL means "the user has not chosen a mode yet" — resolves to UI_MODE_DEFAULT.
+    # An explicit choice is always preserved.
     ui_mode = models.CharField(
-        max_length=20, choices=UI_MODE_CHOICES, default=UI_STANDARD
+        max_length=20, choices=UI_MODE_CHOICES, null=True, blank=True, default=None
     )
     ui_language = models.CharField(max_length=5, default='en')
 
@@ -110,6 +114,11 @@ class UserProfile(models.Model):
             self.agent_message_count = 0
             self.quota_reset_date = today
             self.save()
+
+    @property
+    def resolved_ui_mode(self):
+        """The mode to render: the user's explicit choice, or the product default."""
+        return self.ui_mode or self.UI_MODE_DEFAULT
 
     def is_pro(self):
         """Check if user is on Pro tier."""
