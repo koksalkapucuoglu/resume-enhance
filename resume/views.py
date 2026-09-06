@@ -11,7 +11,9 @@ from django.forms import formset_factory
 from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.contrib.auth.models import User
 from django.views.decorators.clickjacking import xframe_options_sameorigin
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.views.generic import ListView, TemplateView
 from PyPDF2 import PdfReader
@@ -1397,6 +1399,101 @@ def preview_saved_resume(request, pk):
 # ---------------------------------------------------------------------------
 # Agentic dashboard — chat endpoint
 # ---------------------------------------------------------------------------
+
+
+@login_required
+def pricing_page(request):
+    """What Pro costs and what it unlocks."""
+    from resume.services import payment_service
+
+    profile = request.user.profile
+    return render(
+        request,
+        "resume/pricing.html",
+        {
+            "plans": payment_service.plans(),
+            "is_pro": profile.is_pro(),
+            "premium_until": profile.premium_until,
+            "days_left": profile.premium_days_left,
+            "settings": settings,
+        },
+    )
+
+
+@login_required
+@require_http_methods(["POST"])
+def start_checkout(request, plan_code):
+    """
+    Hand the user off to the provider's hosted checkout.
+
+    Card details never reach this app — the provider collects them and tells us
+    the outcome over the webhook.
+    """
+    from resume.services import payment_service
+
+    plan = payment_service.get_plan(plan_code)
+    if not plan:
+        messages.error(request, "That plan is not available.")
+        return redirect("resume:pricing")
+
+    url = payment_service.get_provider().checkout_url(plan, request.user)
+    if not url:
+        logger.error("No checkout URL configured for plan %s", plan_code)
+        messages.error(
+            request, "Checkout is not available right now. Please try again later."
+        )
+        return redirect("resume:pricing")
+    return redirect(url)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def payment_webhook(request):
+    """
+    Grant access when the provider confirms a payment.
+
+    Unauthenticated by necessity — the caller is the provider, not the user —
+    so the signature is the only thing that makes this trustworthy. Anything
+    unsigned is refused before the body is read as data.
+    """
+    from resume.services import payment_service
+
+    provider = payment_service.get_provider()
+    try:
+        provider.verify(request.body, request.headers)
+    except payment_service.PaymentError as exc:
+        logger.warning("Rejected payment webhook: %s", exc)
+        return HttpResponse(status=401)
+
+    try:
+        parsed = provider.parse(request.body)
+    except payment_service.PaymentError as exc:
+        logger.warning("Unusable payment webhook: %s", exc)
+        return HttpResponse(status=400)
+
+    if parsed is None:
+        # An event we do not act on. Acknowledge it or the provider will retry.
+        return HttpResponse(status=200)
+
+    user = User.objects.filter(pk=parsed["user_id"]).first()
+    if not user:
+        logger.error("Payment for unknown user %s", parsed["user_id"])
+        return HttpResponse(status=200)
+
+    try:
+        payment_service.record_purchase(
+            user=user,
+            provider_name=provider.name,
+            external_id=parsed["external_id"],
+            plan_code=parsed["plan_code"],
+            amount_cents=parsed["amount_cents"],
+            currency=parsed["currency"],
+        )
+    except payment_service.PaymentError as exc:
+        logger.error("Could not apply purchase: %s", exc)
+        return HttpResponse(status=400)
+
+    return HttpResponse(status=200)
 
 
 class JobListView(LoginRequiredMixin, ListView):

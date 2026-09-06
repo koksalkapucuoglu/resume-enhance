@@ -285,6 +285,36 @@ FREE_TIER_LIMITS = {
     "agent_message_count": 10,  # Monthly agent chat messages
 }
 
+# Purchasable access. One-time periods, not subscriptions — see
+# resume/services/payment_service.py for why.
+PREMIUM_PLANS = [
+    {
+        "code": "pro_3m",
+        "name": "Pro · 3 months",
+        "days": 90,
+        "price_display": "$9",
+        "blurb": "Covers a typical job search.",
+        "checkout_url": os.environ.get("CHECKOUT_URL_PRO_3M", ""),
+        "provider_product_id": os.environ.get("PRODUCT_ID_PRO_3M", ""),
+        "highlight": True,
+    },
+    {
+        "code": "pro_12m",
+        "name": "Pro · 12 months",
+        "days": 365,
+        "price_display": "$24",
+        "blurb": "For a longer search, or coming back for the next one.",
+        "checkout_url": os.environ.get("CHECKOUT_URL_PRO_12M", ""),
+        "provider_product_id": os.environ.get("PRODUCT_ID_PRO_12M", ""),
+        "highlight": False,
+    },
+]
+
+PAYMENTS = {
+    "PROVIDER": os.environ.get("PAYMENT_PROVIDER", "lemonsqueezy"),
+    "WEBHOOK_SECRET": os.environ.get("PAYMENT_WEBHOOK_SECRET", ""),
+}
+
 # Agent Chat Rate Limiting
 AGENT_CHAT_RATE_LIMIT = {
     "max_requests": 20,  # Maximum requests per window

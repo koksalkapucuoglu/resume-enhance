@@ -2,7 +2,7 @@
 
 > **Canlı doküman.** Her faz bitiminde "Kullanıcı Ne Yapabiliyor" bölümü güncellenir.
 > Karar gerekçeleri: fiyatlandırma → tek seferlik ödeme, paywall iş akışında (bkz. `PRODUCT.md`).
-> Son güncelleme: 2026-09-06 — **Faz 1-4 tamamlandı.** Kalan: Faz 5 (ödeme).
+> Son güncelleme: 2026-09-06 — **Faz 1-5 tamamlandı.** Sırada: TR nişi.
 
 ---
 
@@ -14,7 +14,7 @@
 | 2 | ✅ Revizyon: diff / geri alma | AI'ya güven | **Free** |
 | 3 | ✅ Agent loop | Çok adımlı işi tek mesajda bitirmek | — (retention) |
 | 4 | ✅ JD matching + ilan↔CV mapping | İş arama iş akışı | **Paywall burada** |
-| 5 | Tek seferlik ödeme | Gelir | — |
+| 5 | ✅ Tek seferlik ödeme | Gelir | — |
 | — | TR nişi | Ertelendi, 1-5 sonrası konuşulacak | — |
 
 ---
@@ -186,13 +186,20 @@ class JobPosting(models.Model):
 **Model:** abonelik **yok**. Tek seferlik paket (ör. "3 ay sınırsız" ya da kredi paketi).
 
 **İş kalemleri:**
-- [ ] Sağlayıcı seçimi (LemonSqueezy / Paddle / Iyzico) — TR kartı desteği belirleyici
-- [ ] Checkout + webhook → `UserProfile.tier` + bitiş tarihi
-- [ ] `UserProfile`: `premium_until` alanı; `is_pro()` tarihe baksın
-- [ ] Fiyatlandırma sayfası + profilde satın alma durumu
-- [ ] Kota aşımında premium çağrısı (kaba değil, bağlamsal)
+- [x] `UserProfile.premium_until` + `grant_premium()`; `is_pro()` hem elle verilen tier'a hem satın alınan süreye bakıyor
+- [x] `Purchase` modeli — denetim kaydı ve webhook idempotency (aynı sipariş iki kez süre vermiyor)
+- [x] `services/payment_service.py` — plan kataloğu + değiştirilebilir sağlayıcı adaptörü (ilk adaptör: LemonSqueezy)
+- [x] `/pricing/` sayfası, `/checkout/<plan>/`, imza doğrulamalı `/webhooks/payments/`
+- [x] Profil ve başvuru sayfasındaki upsell'ler fiyatlandırmaya bağlandı; agent da free kullanıcıya `/pricing/`'i söylüyor
+- [x] Süre uzatma: bitmemiş bakiye varken tekrar satın alma süreyi **ekliyor**, sıfırlamıyor
 
-### ✅ Faz 5 sonunda kullanıcı ne yapabiliyor
+**Planlar:** Pro 3 ay $9 (varsayılan — bir iş arama döngüsü), Pro 12 ay $24.
+
+**Kurulum:** Kod tarafı hazır ama **canlı hesap kurulumu bende değil** — hesap açma, ürün oluşturma ve ödeme bilgisi girme adımları `.claude/PAYMENTS.md`'de. `CHECKOUT_URL_*` boşken fiyat kartı "kurulmadı" gösteriyor, yarım kurulumla kimse ödeme ekranına düşmüyor.
+
+**Doğrulama:** 256 test geçiyor (35'i ödeme). İmza doğrulama, kurcalanmış gövde, tekrar teslimat, bilinmeyen kullanıcı, süre dolması ve satın alınan erişimin kotaları + pro tool'ları açması kapsanıyor. **Gerçek bir ödeme denenmedi** — canlı hesap gerekiyor.
+
+### ✅ Faz 5 sonunda kullanıcı ne yapabiliyor *(kod hazır — canlı ödeme kurulumu bekliyor)*
 - Faz 1-4'ün tamamı, **artı:**
 - **Tek seferlik ödemeyle** premium açar: sınırsız CV / import / enhance / indirme, sınırsız revizyon geçmişi, JD matching + ilan takibi
 - Aboneliğe hapsolmaz — süre biter, veri kalır, tekrar ödemeye zorlanmaz

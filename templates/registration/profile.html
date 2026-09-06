@@ -158,15 +158,24 @@
                             </p>
                             <p class="text-sm text-slate-500 mt-1">
                                 {% if request.user.profile.is_pro %}
-                                    Unlimited resumes, imports, enhancements & downloads
+                                    Unlimited resumes, imports, enhancements &amp; downloads
+                                    {% if request.user.profile.premium_until %}
+                                        · {{ UI.pricing_until|lower }} {{ request.user.profile.premium_until|date:"d M Y" }}
+                                    {% endif %}
                                 {% else %}
                                     Limited features with monthly quotas
                                 {% endif %}
                             </p>
                         </div>
-                        <div class="px-5 py-2.5 bg-slate-100 text-slate-500 text-sm font-bold rounded-lg">
-                            {% if request.user.profile.is_pro %}Active{% else %}Free Plan{% endif %}
-                        </div>
+                        {% if request.user.profile.is_pro %}
+                            <a href="{% url 'resume:pricing' %}" class="px-5 py-2.5 bg-slate-100 text-slate-600 text-sm font-bold rounded-lg hover:bg-slate-200 transition-colors">
+                                {{ UI.pricing_extend }}
+                            </a>
+                        {% else %}
+                            <a href="{% url 'resume:pricing' %}" class="px-5 py-2.5 bg-primary text-white text-sm font-bold rounded-lg hover:bg-primary-hover transition-colors">
+                                {{ UI.pricing_buy }}
+                            </a>
+                        {% endif %}
                     </div>
                 </div>
             </div>
