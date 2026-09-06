@@ -172,6 +172,19 @@
             <nav class="hidden md:flex items-center gap-6">
                 <a class="text-slate-500 text-sm font-medium hover:text-primary transition-colors" href="{% url 'resume:dashboard' %}">{{ UI.dashboard }}</a>
             </nav>
+
+            <!-- Mode Toggle (same component as the dashboard) -->
+            <div class="hidden sm:flex items-center gap-1 bg-slate-100 rounded-lg p-1 self-center">
+                <button type="button" id="btn-standard"
+                        class="px-2 md:px-3 py-1.5 rounded-md text-xs font-semibold bg-white text-slate-700 shadow-sm">
+                    {{ UI.mode_standard }}
+                </button>
+                <button type="button" id="btn-agentic" onclick="switchToAgentic()"
+                        class="px-2 md:px-3 py-1.5 rounded-md text-xs font-semibold text-slate-500 hover:text-slate-700 transition-all flex items-center gap-1">
+                    <span class="material-symbols-outlined !text-[14px]">auto_awesome</span>
+                    {{ UI.mode_agentic }}
+                </button>
+            </div>
             
             <!-- Action Buttons -->
             <div class="flex items-center gap-3">
@@ -1347,6 +1360,29 @@ function submitFeedback() {
 
 function getCookie(name) {
   return document.cookie.split(';').map(c => c.trim()).find(c => c.startsWith(name+'='))?.split('=')[1] || '';
+}
+
+// ---------------------------------------------------------------------------
+// Mode toggle — hands the resume being edited over to the agentic dashboard
+// ---------------------------------------------------------------------------
+const EDITING_RESUME_ID = {{ resume_id|default:"null" }};
+
+async function switchToAgentic() {
+  const btn = document.getElementById('btn-agentic');
+  btn.disabled = true;
+  const body = {mode: 'agentic'};
+  if (EDITING_RESUME_ID) body.resume_id = EDITING_RESUME_ID;
+  try {
+    const res = await fetch('{% url "resume:toggle_agent_mode" %}', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    window.location.href = data.redirect_url || '{% url "resume:dashboard" %}';
+  } catch (e) {
+    btn.disabled = false;
+  }
 }
 </script>
 </body>

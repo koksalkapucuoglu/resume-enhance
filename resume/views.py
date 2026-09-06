@@ -10,6 +10,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.forms import formset_factory
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_http_methods
 from django.views.generic import ListView, TemplateView
@@ -97,7 +98,7 @@ class DashboardView(LoginRequiredMixin, ListView):
     ordering = ["-updated_at"]
 
     def get_template_names(self):
-        if self.request.user.profile.ui_mode == "agentic":
+        if self.request.user.profile.resolved_ui_mode == "agentic":
             return ["resume/dashboard_agentic.html"]
         return ["resume/dashboard.html"]
 
@@ -109,9 +110,22 @@ class DashboardView(LoginRequiredMixin, ListView):
         context["settings"] = settings
 
         # Proactive suggestions for agentic dashboard
-        if self.request.user.profile.ui_mode == "agentic":
+        if self.request.user.profile.resolved_ui_mode == "agentic":
             suggestions = []
             resumes = list(self.get_queryset())
+
+            # Deep link: /dashboard/?resume=<pk> opens agentic with that resume active.
+            # Lets the editor hand its context over when switching modes.
+            context["has_resumes"] = bool(resumes)
+            initial_resume = None
+            requested_pk = self.request.GET.get("resume")
+            if requested_pk:
+                match = next(
+                    (r for r in resumes if str(r.pk) == str(requested_pk)), None
+                )
+                if match:
+                    initial_resume = {"id": match.pk, "name": match.display_name}
+            context["initial_resume"] = json.dumps(initial_resume)
             if not resumes:
                 suggestions.append(
                     {
@@ -1524,7 +1538,25 @@ def toggle_agent_mode(request):
     profile = request.user.profile
     profile.ui_mode = mode
     profile.save(update_fields=["ui_mode"])
-    return JsonResponse({"success": True, "mode": profile.ui_mode})
+
+    # Carry the resume the user is working on across the switch, so changing
+    # mode reframes the same document instead of dropping them on a list.
+    redirect_url = reverse("resume:dashboard")
+    resume_id = data.get("resume_id")
+    if resume_id:
+        # SECURITY: filter by user — the id comes from the client
+        resume = Resume.objects.filter(pk=resume_id, user=request.user).first()
+        if resume:
+            if mode == "standard":
+                redirect_url = reverse(
+                    "resume:resume_form_edit", kwargs={"pk": resume.pk}
+                )
+            else:
+                redirect_url = f"{reverse('resume:dashboard')}?resume={resume.pk}"
+
+    return JsonResponse(
+        {"success": True, "mode": profile.ui_mode, "redirect_url": redirect_url}
+    )
 
 
 @login_required
