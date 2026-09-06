@@ -16,7 +16,7 @@ from django.conf import settings
 from django.urls import reverse
 
 from resume.models import Resume, ResumeRevision
-from resume.services import revision_service
+from resume.services import resume_content, revision_service
 from resume.openai_engine import send_openai_message
 
 logger = logging.getLogger(__name__)
@@ -458,7 +458,10 @@ Respond ONLY with valid JSON:
                 tool_name="modify_resume",
                 summary=validated.get("changes_summary", ""),
             )
-            resume.content = validated["modified_resume"]
+            # Normalise before storing: the model returns skills as a string
+            # often enough, and content the form editor cannot re-open is worse
+            # than a rejected edit.
+            resume.content = resume_content.normalize(validated["modified_resume"])
             resume.save(update_fields=["content", "updated_at"])
             quick_replies = (
                 ["Preview changes", "More changes", "Download PDF"]
@@ -494,7 +497,10 @@ User request: {user_message}"""
                 tool_name="modify_resume",
                 summary=validated.get("changes_summary", ""),
             )
-            resume.content = validated["modified_resume"]
+            # Normalise before storing: the model returns skills as a string
+            # often enough, and content the form editor cannot re-open is worse
+            # than a rejected edit.
+            resume.content = resume_content.normalize(validated["modified_resume"])
             resume.save(update_fields=["content", "updated_at"])
             quick_replies = (
                 ["Preview changes", "More changes", "Download PDF"]
@@ -894,7 +900,7 @@ Respond in {"Turkish" if lang == "tr" else "English"}."""
                 tool_name="translate_resume",
                 summary=f"Before translating to {target_language}",
             )
-            resume.content = translated
+            resume.content = resume_content.normalize(translated)
             resume.language = Resume.normalize_language(
                 target_language, resume.language
             )

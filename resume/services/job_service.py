@@ -63,7 +63,7 @@ def _resume_text(resume):
     return json.dumps(resume.content or {}, ensure_ascii=False)
 
 
-def analyze_match(resume, description):
+def analyze_match(resume, description, lang="en"):
     """
     Score how well a resume answers a posting.
 
@@ -85,7 +85,10 @@ def analyze_match(resume, description):
       present even if the exact word is absent.
     - "tags" are 2-5 lowercase labels for the KIND of role this is
       (e.g. "python", "backend", "devops", "senior"), used to group postings.
-    - Write "verdict" and "suggestions" in the resume's language.
+    - Write "verdict" and "suggestions" in REPLY_LANGUAGE, given below — the
+      person reading them is the one chatting, not the resume.
+    - Leave keywords as they appear in the posting or resume; do not translate
+      a technology name.
 
     Respond ONLY with JSON:
     {
@@ -100,7 +103,9 @@ def analyze_match(resume, description):
     }
     """.strip()
 
+    language_name = {"tr": "Turkish", "en": "English"}.get(lang, "English")
     user_message = (
+        f"REPLY_LANGUAGE: {language_name}\n\n"
         f"RESUME (JSON):\n{_resume_text(resume)}\n\n"
         f"JOB POSTING:\n{description}"
     )

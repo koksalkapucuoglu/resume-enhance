@@ -300,6 +300,27 @@
                         <span class="material-symbols-outlined !text-[14px]">check_circle</span>
                         Mode saved. Changes apply on next dashboard visit.
                     </p>
+
+                    <hr class="my-6 border-slate-100">
+
+                    <div class="flex items-start justify-between gap-4">
+                        <div>
+                            <p class="text-sm font-semibold text-slate-800">{{ UI.confirm_setting_title }}</p>
+                            <p class="text-sm text-slate-500 mt-1">{{ UI.confirm_setting_body }}</p>
+                        </div>
+                        <button type="button" id="confirm-toggle"
+                                onclick="toggleConfirmDestructive()"
+                                role="switch"
+                                aria-checked="{% if request.user.profile.confirm_destructive %}true{% else %}false{% endif %}"
+                                class="relative inline-flex h-6 w-11 flex-shrink-0 rounded-full transition-colors mt-0.5 {% if request.user.profile.confirm_destructive %}bg-primary{% else %}bg-slate-300{% endif %}">
+                            <span id="confirm-knob"
+                                  class="inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform mt-0.5 {% if request.user.profile.confirm_destructive %}translate-x-[22px]{% else %}translate-x-0.5{% endif %}"></span>
+                        </button>
+                    </div>
+                    <p id="confirm-saved-msg" class="hidden text-xs text-green-600 mt-3 flex items-center gap-1">
+                        <span class="material-symbols-outlined !text-[14px]">check_circle</span>
+                        {{ UI.confirm_setting_saved }}
+                    </p>
                 </div>
             </div>
 
@@ -426,6 +447,30 @@ async function setLanguage(lang) {
         // Reload to apply new translations
         window.location.reload();
     }
+}
+
+async function toggleConfirmDestructive() {
+    const button = document.getElementById('confirm-toggle');
+    const knob = document.getElementById('confirm-knob');
+    const enabled = button.getAttribute('aria-checked') !== 'true';
+    button.disabled = true;
+    try {
+        const res = await fetch('{% url "resume:toggle_confirm_destructive" %}', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
+            body: JSON.stringify({enabled}),
+        });
+        if (!res.ok) throw new Error('failed');
+        button.setAttribute('aria-checked', String(enabled));
+        button.classList.toggle('bg-primary', enabled);
+        button.classList.toggle('bg-slate-300', !enabled);
+        knob.classList.toggle('translate-x-[22px]', enabled);
+        knob.classList.toggle('translate-x-0.5', !enabled);
+        document.getElementById('confirm-saved-msg').classList.remove('hidden');
+    } catch (e) {
+        alert('Could not save. Please try again.');
+    }
+    button.disabled = false;
 }
 
 async function setUiMode(mode) {

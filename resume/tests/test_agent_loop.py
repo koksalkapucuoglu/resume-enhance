@@ -871,3 +871,92 @@ class StreamCopyOrderTest(TestCase):
         payload = json.loads(frame.split("data:", 1)[1].strip())
         self.assertEqual(payload["lang"], "tr")
         self.assertEqual(payload["ui_copy"]["job"]["jobs_title"], "Başvurular")
+
+
+class ConfirmationSettingTest(TestCase):
+    """Turning confirmations off lets destructive tools run straight through."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("ada", password="x")
+        self.resume = Resume.objects.create(user=self.user, title="CV", content=content())
+        self.client.force_login(self.user)
+
+    def _ctx(self, confirm):
+        return {
+            "lang": "en",
+            "confirm_destructive": confirm,
+            "active_resume": self.resume,
+            "resumes": [],
+            "quota": {},
+        }
+
+    def _delete_turn(self):
+        return (
+            assistant(tool_calls=[call("delete_resume", {"resume_id": self.resume.id})]),
+            USAGE,
+        )
+
+    def test_on_by_default_the_loop_pauses(self):
+        from resume.services import agent_loop
+
+        with patch("resume.services.agent_loop.send_openai_tool_turn",
+                   return_value=self._delete_turn()):
+            out = agent_loop.run_turn(self.user, self._ctx(True), [], "delete it")
+        self.assertEqual(out["status"], "needs_approval")
+        self.assertTrue(Resume.objects.filter(pk=self.resume.pk).exists())
+
+    def test_off_the_tool_runs_immediately(self):
+        from resume.services import agent_loop
+
+        turns = [self._delete_turn(), (assistant("Deleted."), USAGE)]
+        with patch("resume.services.agent_loop.send_openai_tool_turn",
+                   side_effect=turns):
+            out = agent_loop.run_turn(self.user, self._ctx(False), [], "delete it")
+        self.assertEqual(out["status"], "done")
+        self.assertFalse(Resume.objects.filter(pk=self.resume.pk).exists())
+
+    def test_default_is_on_for_a_new_account(self):
+        self.assertTrue(self.user.profile.confirm_destructive)
+
+    def test_toggle_endpoint(self):
+        resp = self.client.post(
+            reverse("resume:toggle_confirm_destructive"),
+            json.dumps({"enabled": False}),
+            content_type="application/json",
+        )
+        self.assertTrue(resp.json()["success"])
+        self.user.profile.refresh_from_db()
+        self.assertFalse(self.user.profile.confirm_destructive)
+
+    def test_toggle_requires_post_and_login(self):
+        self.assertEqual(
+            self.client.get(reverse("resume:toggle_confirm_destructive")).status_code,
+            405,
+        )
+        self.client.logout()
+        self.assertEqual(
+            self.client.post(reverse("resume:toggle_confirm_destructive")).status_code,
+            302,
+        )
+
+
+class UploadDoesNotClaimSuccessTest(TestCase):
+    """The tool result must not read as a completed import."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("ada", password="x")
+        self.ctx = {"lang": "en", "active_resume": None, "resumes": [], "quota": {}}
+
+    def test_result_says_it_is_waiting(self):
+        result = agent_tools.get_tool("upload_resume").handler(
+            self.user, self.ctx, source="pdf"
+        )
+        self.assertTrue(result.data["awaiting_file"])
+        self.assertNotIn("ok", result.data)
+        self.assertIn("nothing has been uploaded", result.data["note"].lower())
+
+    def test_the_picker_is_still_shown(self):
+        result = agent_tools.get_tool("upload_resume").handler(
+            self.user, self.ctx, source="pdf"
+        )
+        self.assertEqual(result.ui[0]["type"], "request_upload")

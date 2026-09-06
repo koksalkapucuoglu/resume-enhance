@@ -364,7 +364,7 @@ def _run_events(user, ctx, messages, effects, start_step, usage_totals, stream=F
                 )
                 continue
 
-            if tool.destructive:
+            if tool.destructive and ctx.get("confirm_destructive", True):
                 token = _park(user, messages, call, effects, step, ctx.get("lang", "en"))
                 yield (
                     "done",

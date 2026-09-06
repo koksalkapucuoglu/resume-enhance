@@ -325,10 +325,18 @@ AGENT_CHAT_RATE_LIMIT = {
     "window_seconds": 60,  # Time window in seconds
 }
 
-# Cache backend (required for rate limiting)
+# Cache backend.
+#
+# Must be shared across processes: gunicorn runs several workers, and both the
+# agent's pending-approval state and the chat rate limit are meaningless if
+# each worker keeps its own copy — an approval parked by one worker looks
+# expired to the next. LocMemCache is per-process, so it is only used when
+# running a single-process dev server without a database cache table.
 CACHES = {
     "default": {
-        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-        "LOCATION": "resustack-cache",
+        "BACKEND": os.environ.get(
+            "CACHE_BACKEND", "django.core.cache.backends.db.DatabaseCache"
+        ),
+        "LOCATION": os.environ.get("CACHE_LOCATION", "resustack_cache"),
     }
 }

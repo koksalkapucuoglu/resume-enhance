@@ -364,7 +364,20 @@ def upload_resume(user, ctx, source="pdf"):
         if source == "linkedin"
         else service._exec_upload_resume(ctx["lang"])
     )
-    return ToolResult(data={"ok": True, "source": source}, ui=[legacy])
+    # Deliberately not "ok": the file picker has only been shown. Reporting
+    # success here made the model announce an upload that had not happened.
+    return ToolResult(
+        data={
+            "awaiting_file": True,
+            "source": source,
+            "note": (
+                "A file picker was shown to the user. Nothing has been uploaded "
+                "yet. Do not claim the import succeeded — say you are waiting "
+                "for them to choose a file, or say nothing further."
+            ),
+        },
+        ui=[legacy],
+    )
 
 
 @tool(
@@ -425,7 +438,7 @@ def match_job(user, ctx, description, resume_id=None):
 
     from resume.services import job_service
 
-    result = job_service.analyze_match(resume, description)
+    result = job_service.analyze_match(resume, description, ctx.get("lang", "en"))
     if "error" in result:
         return ToolResult(data=result)
 
@@ -508,10 +521,12 @@ def tailor_resume_for_job(user, ctx, job_id, resume_id=None):
     if "error" in result:
         return ToolResult(data=result)
 
+    from resume.services import resume_content
+
     variant = Resume.objects.create(
         user=user,
         title=f"{source.title} — {posting.title}"[:255],
-        content=result["content"],
+        content=resume_content.normalize(result["content"]),
         template_selector=source.template_selector,
         language=source.language,
     )
