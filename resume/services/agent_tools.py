@@ -24,7 +24,7 @@ from typing import Callable
 from django.conf import settings
 from django.urls import reverse
 
-from resume.models import Resume
+from resume.models import JobPosting, Resume
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +48,7 @@ class Tool:
     parameters: dict
     handler: Callable
     destructive: bool = False
+    pro_only: bool = False
 
     def schema(self):
         """OpenAI function-calling definition, with strict argument checking."""
@@ -72,7 +73,7 @@ class Tool:
 TOOL_REGISTRY: dict[str, Tool] = {}
 
 
-def tool(name, description, parameters=None, destructive=False):
+def tool(name, description, parameters=None, destructive=False, pro_only=False):
     """Register a function as a tool the model may call."""
 
     def decorator(fn):
@@ -82,14 +83,28 @@ def tool(name, description, parameters=None, destructive=False):
             parameters=parameters or {},
             handler=fn,
             destructive=destructive,
+            pro_only=pro_only,
         )
         return fn
 
     return decorator
 
 
-def tool_schemas():
-    return [t.schema() for t in TOOL_REGISTRY.values()]
+def tool_schemas(user=None):
+    """
+    Schemas the model may choose from.
+
+    Pro-only tools are withheld from free accounts rather than offered and then
+    refused: it keeps the catalogue short — selection accuracy drops as the list
+    grows — and stops the assistant repeatedly proposing something the user
+    cannot run. The handlers still check the tier themselves.
+    """
+    is_pro = bool(user and user.profile.is_pro())
+    return [t.schema() for t in TOOL_REGISTRY.values() if is_pro or not t.pro_only]
+
+
+def pro_tool_names():
+    return [name for name, t in TOOL_REGISTRY.items() if t.pro_only]
 
 
 def get_tool(name):
@@ -371,6 +386,264 @@ def duplicate_resume(user, ctx, resume_id=None):
         user, {"resume_id": resume.id}, ctx["lang"]
     )
     return ToolResult(data={"ok": True, "source_resume_id": resume.id}, ui=[legacy])
+
+
+# ---------------------------------------------------------------------------
+# Job matching and application tracking
+# ---------------------------------------------------------------------------
+
+
+def _premium_required(user, feature):
+    """Job tracking is the paid tier. Returns an error result, or None."""
+    if user.profile.is_pro():
+        return None
+    return ToolResult(
+        data={
+            "error": f"{feature} is a Pro feature.",
+            "upgrade_required": True,
+        }
+    )
+
+
+@tool(
+    name="match_job",
+    description=(
+        "Score how well a resume fits a job posting the user pasted, and list "
+        "the requirements it does not evidence. Saves the posting so it can be "
+        "tracked. Pass the posting text verbatim."
+    ),
+    parameters={"description": {"type": "string"}, "resume_id": INT_OR_NULL},
+    pro_only=True,
+)
+def match_job(user, ctx, description, resume_id=None):
+    blocked = _premium_required(user, "Job matching")
+    if blocked:
+        return blocked
+    resume, error = _resume_or_error(user, resume_id, ctx)
+    if error:
+        return error
+
+    from resume.services import job_service
+
+    result = job_service.analyze_match(resume, description)
+    if "error" in result:
+        return ToolResult(data=result)
+
+    posting = JobPosting.objects.create(
+        user=user,
+        title=result["title"],
+        company=result["company"],
+        description=description[: job_service.MAX_DESCRIPTION_CHARS],
+        tags=result["tags"],
+        resume=resume,
+        match_score=result["score"],
+        missing_keywords=result["missing_keywords"],
+    )
+    return ToolResult(
+        data={
+            "job_id": posting.id,
+            "resume_id": resume.id,
+            "score": result["score"],
+            "matched_keywords": result["matched_keywords"],
+            "missing_keywords": result["missing_keywords"],
+            "verdict": result["verdict"],
+            "suggestions": result["suggestions"],
+        },
+        ui=[
+            {
+                "type": "job_match",
+                "job_id": posting.id,
+                "job_label": posting.label,
+                "resume_id": resume.id,
+                "resume_name": resume.display_name,
+                "score": result["score"],
+                "matched_keywords": result["matched_keywords"],
+                "missing_keywords": result["missing_keywords"],
+                "suggestions": result["suggestions"],
+                "message": "",
+            }
+        ],
+    )
+
+
+@tool(
+    name="tailor_resume_for_job",
+    description=(
+        "Create a copy of a resume rewritten for one saved job posting. The "
+        "original is untouched and the copy is linked to the posting. Run "
+        "match_job first so the posting exists."
+    ),
+    parameters={"job_id": {"type": "integer"}, "resume_id": INT_OR_NULL},
+    destructive=True,
+    pro_only=True,
+)
+def tailor_resume_for_job(user, ctx, job_id, resume_id=None):
+    blocked = _premium_required(user, "Tailoring a resume to a job")
+    if blocked:
+        return blocked
+
+    posting = JobPosting.objects.filter(pk=job_id, user=user).first()
+    if not posting:
+        return ToolResult(data={"error": f"No saved job with id {job_id}."})
+
+    source = None
+    if resume_id:
+        source = Resume.objects.filter(pk=resume_id, user=user).first()
+    source = source or posting.resume or ctx.get("active_resume")
+    if not source:
+        return ToolResult(data={"error": "No resume to tailor. Ask which one."})
+
+    if not user.profile.can_create_resume():
+        return ToolResult(
+            data={
+                "error": f"Resume limit reached ({settings.FREE_TIER_LIMITS['resume_count']} on the free plan)."
+            }
+        )
+
+    from resume.services import job_service
+
+    result = job_service.tailor_content(
+        source, posting.description, posting.missing_keywords
+    )
+    if "error" in result:
+        return ToolResult(data=result)
+
+    variant = Resume.objects.create(
+        user=user,
+        title=f"{source.title} — {posting.title}"[:255],
+        content=result["content"],
+        template_selector=source.template_selector,
+        language=source.language,
+    )
+    posting.resume = variant
+    posting.save(update_fields=["resume", "updated_at"])
+
+    return ToolResult(
+        data={
+            "ok": True,
+            "new_resume_id": variant.id,
+            "job_id": posting.id,
+            "source_resume_id": source.id,
+            "changes_summary": result["changes_summary"],
+        },
+        ui=[
+            {
+                "type": "preview",
+                "resume_id": variant.id,
+                "resume_name": variant.display_name,
+                "message": "",
+            }
+        ],
+    )
+
+
+@tool(
+    name="list_jobs",
+    description="List the job postings the user is tracking, with status, score and which resume was used.",
+    parameters={"status": STR_OR_NULL},
+    pro_only=True,
+)
+def list_jobs(user, ctx, status=None):
+    blocked = _premium_required(user, "Job tracking")
+    if blocked:
+        return blocked
+
+    postings = JobPosting.objects.filter(user=user).select_related("resume")
+    if status:
+        postings = postings.filter(status=status)
+    jobs = [
+        {
+            "id": p.id,
+            "title": p.title,
+            "company": p.company,
+            "status": p.status,
+            "score": p.match_score,
+            "tags": p.tags,
+            "resume_id": p.resume_id,
+            "resume_name": p.resume.display_name if p.resume else None,
+            "updated_at": p.updated_at.strftime("%Y-%m-%d"),
+        }
+        for p in postings[:50]
+    ]
+    return ToolResult(
+        data={"jobs": jobs, "count": len(jobs)},
+        ui=[{"type": "job_list", "jobs": jobs, "message": ""}],
+    )
+
+
+@tool(
+    name="update_job",
+    description=(
+        "Update a tracked job: change its status (saved, applied, interview, "
+        "offer, rejected) or the resume attached to it."
+    ),
+    parameters={
+        "job_id": {"type": "integer"},
+        "status": STR_OR_NULL,
+        "resume_id": INT_OR_NULL,
+    },
+    pro_only=True,
+)
+def update_job(user, ctx, job_id, status=None, resume_id=None):
+    blocked = _premium_required(user, "Job tracking")
+    if blocked:
+        return blocked
+
+    posting = JobPosting.objects.filter(pk=job_id, user=user).first()
+    if not posting:
+        return ToolResult(data={"error": f"No saved job with id {job_id}."})
+
+    fields = []
+    if status:
+        valid = dict(JobPosting.STATUS_CHOICES)
+        if status not in valid:
+            return ToolResult(
+                data={"error": f"Status must be one of: {', '.join(valid)}."}
+            )
+        posting.status = status
+        fields.append("status")
+    if resume_id:
+        resume = Resume.objects.filter(pk=resume_id, user=user).first()
+        if not resume:
+            return ToolResult(data={"error": f"No resume with id {resume_id}."})
+        posting.resume = resume
+        fields.append("resume")
+
+    if not fields:
+        return ToolResult(data={"error": "Nothing to update — give a status or a resume."})
+
+    posting.save(update_fields=fields + ["updated_at"])
+    return ToolResult(
+        data={
+            "ok": True,
+            "job_id": posting.id,
+            "status": posting.status,
+            "resume_id": posting.resume_id,
+        }
+    )
+
+
+@tool(
+    name="resume_groups",
+    description=(
+        "Show which resume the user sends for which kind of role, grouped by "
+        "the tags of the jobs they applied to. Answers 'which CV do I use for "
+        "C++ jobs?'."
+    ),
+    pro_only=True,
+)
+def resume_groups(user, ctx):
+    blocked = _premium_required(user, "Resume grouping")
+    if blocked:
+        return blocked
+
+    from resume.services import job_service
+
+    groups = job_service.resume_groups(user)
+    return ToolResult(
+        data={"groups": groups},
+        ui=[{"type": "resume_groups", "groups": groups, "message": ""}],
+    )
 
 
 # ---------------------------------------------------------------------------

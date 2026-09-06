@@ -52,6 +52,7 @@ DESTRUCTIVE_COPY = {
         "delete_resume": "Delete the resume permanently",
         "revert_last_change": "Undo the most recent change",
         "create_translated_copy": "Create a translated copy",
+        "tailor_resume_for_job": "Create a copy tailored to this job",
     },
     "tr": {
         "modify_resume": "CV içeriğini düzenle",
@@ -60,6 +61,7 @@ DESTRUCTIVE_COPY = {
         "delete_resume": "CV'yi kalıcı olarak sil",
         "revert_last_change": "Son değişikliği geri al",
         "create_translated_copy": "Çevrilmiş bir kopya oluştur",
+        "tailor_resume_for_job": "Bu ilana özel bir kopya oluştur",
     },
 }
 
@@ -89,6 +91,11 @@ STEP_COPY = {
         "upload_resume": "Getting ready for your file...",
         "delete_resume": "Deleting...",
         "revert_last_change": "Undoing the last change...",
+        "match_job": "Comparing against the posting...",
+        "tailor_resume_for_job": "Tailoring the resume...",
+        "list_jobs": "Looking up your applications...",
+        "update_job": "Updating the application...",
+        "resume_groups": "Grouping your resumes...",
     },
     "tr": {
         "_default": "Çalışıyorum...",
@@ -112,6 +119,11 @@ STEP_COPY = {
         "upload_resume": "Dosyanız için hazırlanıyorum...",
         "delete_resume": "Siliniyor...",
         "revert_last_change": "Son değişiklik geri alınıyor...",
+        "match_job": "İlanla karşılaştırılıyor...",
+        "tailor_resume_for_job": "CV ilana göre uyarlanıyor...",
+        "list_jobs": "Başvurularınıza bakıyorum...",
+        "update_job": "Başvuru güncelleniyor...",
+        "resume_groups": "CV'leriniz gruplanıyor...",
     },
 }
 
@@ -139,6 +151,8 @@ You help the user manage and improve their resumes by calling tools. Rules:
   the user is chatting in English.
 - To give the user the same resume in a second language, use
   create_translated_copy — it keeps the original. translate_resume overwrites.
+- When the user pastes a job posting, call match_job. Tailoring needs a saved
+  posting, so match_job runs first and tailor_resume_for_job second.
 - Prefer acting over asking. If the user's intent is clear, call the tool.
 - Chain tools when a request needs several steps, then summarise what you did.
 - Never invent a resume id. Use the ids listed below, or omit resume_id to act
@@ -149,6 +163,9 @@ You help the user manage and improve their resumes by calling tools. Rules:
 - After tools run, write a short, friendly confirmation. Do not repeat data the
   side panel already shows in full; summarise it.
 - If a tool returns an error, explain it plainly and suggest what to do next.
+- Job matching, tailoring a resume to a posting and application tracking are
+  Pro features. If they are not in your tool list, this user is on the free
+  plan: say the feature needs Pro rather than pretending you did it.
 """
 
 
@@ -305,7 +322,7 @@ def _run_events(user, ctx, messages, effects, start_step, usage_totals, stream=F
     endpoints share this so there is a single implementation of the loop.
     """
     tool_calls_made = 0
-    schemas = agent_tools.tool_schemas()
+    schemas = agent_tools.tool_schemas(user)
     pending_tokens = []
 
     for step in range(start_step, MAX_STEPS):
