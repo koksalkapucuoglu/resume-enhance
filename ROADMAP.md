@@ -2,7 +2,7 @@
 
 > **Canlı doküman.** Her faz bitiminde "Kullanıcı Ne Yapabiliyor" bölümü güncellenir.
 > Karar gerekçeleri: fiyatlandırma → tek seferlik ödeme, paywall iş akışında (bkz. `PRODUCT.md`).
-> Son güncelleme: 2026-09-06 — **Faz 1 ve Faz 2 tamamlandı.**
+> Son güncelleme: 2026-09-06 — **Faz 1, 2 ve 3 tamamlandı.**
 
 ---
 
@@ -12,7 +12,7 @@
 |---|---|---|---|
 | 1 | ✅ Navigasyon & mod bütünlüğü | İki modu tek ürün gibi hissettirmek | — |
 | 2 | ✅ Revizyon: diff / geri alma | AI'ya güven | **Free** |
-| 3 | Agent loop | Çok adımlı işi tek mesajda bitirmek | — (retention) |
+| 3 | ✅ Agent loop | Çok adımlı işi tek mesajda bitirmek | — (retention) |
 | 4 | JD matching + ilan↔CV mapping | İş arama iş akışı | **Paywall burada** |
 | 5 | Tek seferlik ödeme | Gelir | — |
 | — | TR nişi | Ertelendi, 1-5 sonrası konuşulacak | — |
@@ -106,26 +106,36 @@ for _ in range(MAX_STEPS):              # 5
 ```
 
 **İş kalemleri:**
-- [ ] `TOOL_CATALOG` → native function-calling şemasına (JSON Schema params, `destructive` bayrağı)
-- [ ] `_exec_*` fonksiyonları tool registry'ye — **iç mantık değişmiyor**, sadece imza + dönüş tipi standartlaşıyor
-- [ ] Döngü + `MAX_STEPS` + adım/token bütçesi
-- [ ] `history` gerçekten kullanılsın → "onu da sil", "bir tane daha ekle" çalışsın
-- [ ] Yıkıcı tool'larda onay akışı (`delete_resume`, `modify_resume`, `switch_template`, `revert`)
-- [ ] Streaming (SSE) — hem token hem "şu an X yapıyorum" adım göstergesi
-- [ ] Açık bug'lar: agentic'te step-by-step builder + chat'ten PDF upload
-- [ ] Kota: mesaj başına değil **tur başına** sayım (loop token'ı ~3-4x'liyor)
-- [ ] Testleri yeni sözleşmeye uyarla
+- [x] 18 tool `agent_tools.py`'da, native function calling + `strict: true` şemalar, `destructive` bayrağı
+- [x] `ToolResult` — `data` (modele) / `ui` (tarayıcıya) ayrımı; `ui` eski response şekillerini yeniden kullanıyor
+- [x] Döngü `agent_loop.py`'da: `MAX_STEPS=5`, `MAX_TOOL_CALLS=8`, token sayacı
+- [x] `history` gerçekten kullanılıyor → "onu geri al" bağlamdan çözülüyor
+- [x] Onay akışı: interrupt-and-resume, sunucuda cache'li tek kullanımlık token, red edilirse `denied_by_user` tool sonucu
+- [x] Streaming (SSE): `token` / `step` / `effect` / `done` frame'leri; adım göstergesi + canlı yazım
+- [x] Bug: chat'ten PDF upload (POST-only view'a GET redirect ediyordu)
+- [x] Bug: step-by-step builder (buton etiketi LLM'e geri gidip `help` oluyordu)
+- [x] Editör header'ı overflow menüye toparlandı
+- [x] Ölü kod: `classify_intent`, `execute_intent`, `_llm_classify`, `TOOL_CATALOG`, `_exec_help/clarify/delete/details` silindi (1290 → 996 satır)
+- [x] Onay ve ilerleme metinleri **sohbet diline** bağlandı (arayüz diline değil); dil algılama geçmişi de dikkate alıyor
+- [x] Testler yeni sözleşmeye taşındı
+
+**Kota kararı değişti:** "tur başına sayım" iptal edildi. 1 kullanıcı mesajı = 1 birim, döngü kaç adım sürerse sürsün. Kullanıcı adım sayısını tahmin edemez; ajanın verimsizliğinin bedelini ödememeli. Maliyeti `MAX_STEPS` + tool call tavanı tutuyor.
+
+**Doğrulama:** 165 test geçiyor. Canlı LLM ile: *"CV'lerimi listele ve sonra ilkini analiz et"* tek mesajda iki tool; *"onu geri al"* bağlamdan çözülüyor; Türkçe onay diyaloğu + reddetme; streaming adım göstergesi ve canlı yazım; onaylanan tool'un efektleri anında paneli güncelliyor.
 
 **Dokunulacak:** `agent_service.py` (1290 → ~400 satır + tool modülleri), `views.py:agent_chat`, `dashboard_agentic.html`, `test_agent_service.py`
 
-### ✅ Faz 3 sonunda kullanıcı ne yapabiliyor
+### ✅ Faz 3 sonunda kullanıcı ne yapabiliyor *(canlı — 2026-09-06)*
 - Faz 1-2'nin tamamı, **artı:**
 - **Tek cümlede çok adımlı iş:** *"CV'mi analiz et, zayıf maddeleri düzelt, modern şablona geçir ve indir"* → 4 mesaj değil, 1 mesaj
 - Takip cümleleri çalışır: *"onu da kaldır"*, *"bir tane daha ekle"*, *"az önceki gibi ama daha kısa"*
 - Cevabın yazılışını canlı görür; agent'ın hangi adımda olduğunu takip eder
 - Geri alınamaz işlemlerden önce **onay sorulur**
 - Agentic modda step-by-step yeni CV oluşturma ve **chat'ten PDF yükleme** çalışır
-- Bir tool patlarsa agent bunu görüp toparlar / açıklar (bugün sessizce yanlış cevap veriyor)
+- Bir tool patlarsa agent bunu görüp toparlar / açıklar (eskiden sessizce yanlış cevap veriyordu)
+- **Aynı CV'yi iki dilde tutar:** `create_translated_copy` orijinali bozmadan bağlı bir kopya üretir; çeviri varyantları CV limitine sayılmaz
+- Agent, CV içeriğini o CV'nin dilinde yazar — sohbet başka dilde olsa bile
+- Onay ve ilerleme metinleri sohbet dilinde görünür
 
 ---
 

@@ -106,6 +106,83 @@ def send_openai_tool_turn(
         return None, f"Error: {str(e)}"
 
 
+def stream_openai_tool_turn(
+    messages: list,
+    tools: list,
+    model: str = "gpt-4o-mini",
+    temperature: float = 0.2,
+    max_tokens: int = 1200,
+):
+    """
+    Streaming counterpart of send_openai_tool_turn.
+
+    Yields ("token", text) as prose arrives, then exactly one terminal event:
+    ("message", assistant_message_dict, usage) on success, or ("error", text)
+    on failure. Tool calls arrive as fragments spread across deltas, so they are
+    reassembled by index before the terminal event.
+    """
+    try:
+        stream = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            tools=tools,
+            tool_choice="auto",
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stream=True,
+            stream_options={"include_usage": True},
+            timeout=90,
+        )
+    except openai.RateLimitError as e:
+        yield ("error", f"OpenAI API request exceeded rate limit: {e}")
+        return
+    except openai.APIError as e:
+        yield ("error", f"OpenAI API returned an API Error: {e}")
+        return
+    except Exception as e:
+        yield ("error", f"Error: {str(e)}")
+        return
+
+    content_parts = []
+    partial_calls = {}
+    usage = None
+
+    try:
+        for chunk in stream:
+            if getattr(chunk, "usage", None):
+                usage = chunk.usage
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+
+            if getattr(delta, "content", None):
+                content_parts.append(delta.content)
+                yield ("token", delta.content)
+
+            for fragment in getattr(delta, "tool_calls", None) or []:
+                call = partial_calls.setdefault(
+                    fragment.index, {"id": "", "name": "", "arguments": ""}
+                )
+                if fragment.id:
+                    call["id"] = fragment.id
+                if fragment.function and fragment.function.name:
+                    call["name"] += fragment.function.name
+                if fragment.function and fragment.function.arguments:
+                    call["arguments"] += fragment.function.arguments
+    except Exception as e:
+        yield ("error", f"Error while streaming: {str(e)}")
+        return
+
+    if usage:
+        logger.info("OpenAI streamed tool turn usage: %s", usage)
+
+    message = {
+        "content": "".join(content_parts),
+        "tool_calls": [partial_calls[i] for i in sorted(partial_calls)],
+    }
+    yield ("message", message, usage)
+
+
 # TODO Convert class based structure
 def enhance_resume_experience(user_message: str, language: str = None):
     """

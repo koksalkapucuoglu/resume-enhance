@@ -8,7 +8,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.forms import formset_factory
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.clickjacking import xframe_options_sameorigin
@@ -1447,7 +1447,7 @@ def agent_chat(request):
         profile.save(update_fields=["agent_message_count"])
         return JsonResponse({**result, "user_message": message})
 
-    ctx = _agent_context(request, active_resume, message)
+    ctx = _agent_context(request, active_resume, message, data.get("history"))
     outcome = agent_loop.run_turn(
         request.user, ctx, data.get("history"), message
     )
@@ -1455,6 +1455,137 @@ def agent_chat(request):
     profile.agent_message_count += 1
     profile.save(update_fields=["agent_message_count"])
     return JsonResponse(_agent_response(outcome, active_resume_id, message))
+
+
+def _sse(event, payload):
+    """One server-sent-events frame."""
+    return f"event: {event}\ndata: {json.dumps(payload, default=str)}\n\n"
+
+
+def _stream_agent(events, active_resume_id, user_message, on_done=None):
+    """
+    Turn loop events into an SSE stream.
+
+    Progress is emitted as it happens so the panel fills in while the model is
+    still working, instead of everything landing at once when the turn ends.
+    """
+    try:
+        for event in events:
+            kind = event[0]
+            if kind == "token":
+                yield _sse("token", {"text": event[1]})
+            elif kind == "step":
+                yield _sse("step", {"label": event[1]})
+            elif kind == "effect":
+                yield _sse("effect", event[1])
+            elif kind == "done":
+                outcome = event[1]
+                if on_done:
+                    on_done(outcome)
+                yield _sse(
+                    "done", _agent_response(outcome, active_resume_id, user_message)
+                )
+    except Exception:
+        logger.exception("Agent stream failed")
+        yield _sse(
+            "done",
+            {
+                "type": "agent_turn",
+                "message": "The assistant is unavailable right now. Please try again.",
+                "effects": [],
+                "is_error": True,
+            },
+        )
+
+
+def _sse_response(generator):
+    response = StreamingHttpResponse(
+        generator, content_type="text/event-stream"
+    )
+    response["Cache-Control"] = "no-cache"
+    # Tell reverse proxies not to buffer, or the stream arrives all at once
+    response["X-Accel-Buffering"] = "no"
+    return response
+
+
+@login_required
+@require_http_methods(["POST"])
+def agent_chat_stream(request):
+    """
+    Streaming form of agent_chat. Same contract, delivered as SSE:
+    token / step / effect frames, then a final done frame.
+    """
+    from resume.services import agent_loop
+
+    limited = _agent_rate_limited(request)
+    if limited:
+        return limited
+
+    try:
+        data = json.loads(request.body)
+    except (ValueError, KeyError):
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    message = data.get("message", "").strip()
+    if not message:
+        return JsonResponse({"error": "Empty message"}, status=400)
+
+    quota_response = _agent_quota_exceeded(request, message)
+    if quota_response:
+        return quota_response
+
+    active_resume_id = data.get("active_resume_id")
+    active_resume = (
+        Resume.objects.filter(pk=active_resume_id, user=request.user).first()
+        if active_resume_id
+        else None
+    )
+    ctx = _agent_context(request, active_resume, message, data.get("history"))
+    profile = request.user.profile
+
+    def charge(outcome):
+        profile.agent_message_count += 1
+        profile.save(update_fields=["agent_message_count"])
+
+    events = agent_loop.stream_turn(request.user, ctx, data.get("history"), message)
+    return _sse_response(
+        _stream_agent(events, active_resume_id, message, on_done=charge)
+    )
+
+
+@login_required
+@require_http_methods(["POST"])
+def agent_approve_stream(request):
+    """Streaming form of agent_approve."""
+    from resume.services import agent_loop
+
+    limited = _agent_rate_limited(request)
+    if limited:
+        return limited
+
+    try:
+        data = json.loads(request.body)
+    except (ValueError, KeyError):
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    parked = agent_loop.take_pending(request.user, data.get("token", ""))
+    if not parked:
+        return JsonResponse(
+            {"error": "This confirmation has expired. Please ask again."}, status=410
+        )
+
+    active_resume_id = data.get("active_resume_id")
+    active_resume = (
+        Resume.objects.filter(pk=active_resume_id, user=request.user).first()
+        if active_resume_id
+        else None
+    )
+    ctx = _agent_context(request, active_resume)
+    ctx["lang"] = parked.get("lang", ctx["lang"])
+    events = agent_loop.stream_resume_turn(
+        request.user, ctx, parked, approved=bool(data.get("approved"))
+    )
+    return _sse_response(_stream_agent(events, active_resume_id, ""))
 
 
 @login_required
@@ -1519,7 +1650,8 @@ def agent_approve(request):
         if active_resume_id
         else None
     )
-    ctx = _agent_context(request, active_resume, data.get("message", ""))
+    ctx = _agent_context(request, active_resume, data.get("message", ""), data.get("history"))
+    ctx["lang"] = parked.get("lang", ctx["lang"])
     outcome = agent_loop.resume_turn(
         request.user, ctx, parked, approved=bool(data.get("approved"))
     )
@@ -1558,7 +1690,7 @@ def _agent_quota_exceeded(request, message):
     return JsonResponse({"type": "chat", "message": msg, "quota_exceeded": True})
 
 
-def _agent_context(request, active_resume, message=""):
+def _agent_context(request, active_resume, message="", history=None):
     """Facts handed to the loop: the user's resumes, quota and active resume."""
     from resume.services.agent_service import agent_service
 
@@ -1568,8 +1700,8 @@ def _agent_context(request, active_resume, message=""):
     # Conversation language, not the interface setting: someone chatting in
     # Turkish should get Turkish confirmations even with an English UI.
     lang = (
-        agent_service._detect_language(message)
-        if message
+        agent_service._detect_language(message, history)
+        if message or history
         else (profile.ui_language or "en")
     )
     return {

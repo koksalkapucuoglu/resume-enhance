@@ -19,7 +19,7 @@ import uuid
 from django.conf import settings
 from django.core.cache import cache
 
-from resume.openai_engine import send_openai_tool_turn
+from resume.openai_engine import send_openai_tool_turn, stream_openai_tool_turn
 from resume.services import agent_tools
 
 logger = logging.getLogger(__name__)
@@ -62,6 +62,64 @@ DESTRUCTIVE_COPY = {
         "create_translated_copy": "Çevrilmiş bir kopya oluştur",
     },
 }
+
+
+# Progress wording, in the conversation's language for the same reason as the
+# confirmations above.
+STEP_COPY = {
+    "en": {
+        "_default": "Working...",
+        "list_resumes": "Looking up your resumes...",
+        "find_resume": "Searching your resumes...",
+        "get_resume_details": "Reading the resume...",
+        "preview_resume": "Preparing the preview...",
+        "analyze_resume": "Analyzing the resume...",
+        "compare_resumes": "Comparing the resumes...",
+        "modify_resume": "Applying your edit...",
+        "translate_resume": "Translating...",
+        "create_translated_copy": "Creating the translated copy...",
+        "list_language_versions": "Checking language versions...",
+        "switch_template": "Switching template...",
+        "download_resume": "Preparing the PDF...",
+        "duplicate_resume": "Making a copy...",
+        "check_quota": "Checking your limits...",
+        "edit_resume": "Opening the editor...",
+        "create_blank_resume": "Setting up a new resume...",
+        "start_guided_build": "Starting the guided build...",
+        "upload_resume": "Getting ready for your file...",
+        "delete_resume": "Deleting...",
+        "revert_last_change": "Undoing the last change...",
+    },
+    "tr": {
+        "_default": "Çalışıyorum...",
+        "list_resumes": "CV'lerinize bakıyorum...",
+        "find_resume": "CV'lerinizde arıyorum...",
+        "get_resume_details": "CV'yi okuyorum...",
+        "preview_resume": "Önizleme hazırlanıyor...",
+        "analyze_resume": "CV analiz ediliyor...",
+        "compare_resumes": "CV'ler karşılaştırılıyor...",
+        "modify_resume": "Değişiklik uygulanıyor...",
+        "translate_resume": "Çevriliyor...",
+        "create_translated_copy": "Çevrilmiş kopya oluşturuluyor...",
+        "list_language_versions": "Dil sürümleri kontrol ediliyor...",
+        "switch_template": "Şablon değiştiriliyor...",
+        "download_resume": "PDF hazırlanıyor...",
+        "duplicate_resume": "Kopya oluşturuluyor...",
+        "check_quota": "Limitleriniz kontrol ediliyor...",
+        "edit_resume": "Editör açılıyor...",
+        "create_blank_resume": "Yeni CV hazırlanıyor...",
+        "start_guided_build": "Adım adım kurulum başlıyor...",
+        "upload_resume": "Dosyanız için hazırlanıyorum...",
+        "delete_resume": "Siliniyor...",
+        "revert_last_change": "Son değişiklik geri alınıyor...",
+    },
+}
+
+
+def step_copy(lang, tool_name):
+    """Localized 'what I'm doing right now' line for a tool."""
+    table = STEP_COPY.get(lang, STEP_COPY["en"])
+    return table.get(tool_name) or table["_default"]
 
 
 def approval_copy(lang, tool_name):
@@ -135,20 +193,47 @@ def _build_messages(ctx, history, user_message):
     return messages
 
 
-def _serialise_assistant(message):
+def _normalise(message):
+    """
+    Flatten a turn into (content, calls) regardless of how it arrived.
+
+    The buffered API returns objects; the streamed one reassembles dicts. The
+    loop should not care which.
+    """
+    if isinstance(message, dict):
+        content = message.get("content") or ""
+        calls = [
+            {
+                "id": c["id"],
+                "name": c["name"],
+                "arguments": c.get("arguments") or "{}",
+            }
+            for c in message.get("tool_calls") or []
+        ]
+        return content, calls
+
+    calls = [
+        {
+            "id": c.id,
+            "name": c.function.name,
+            "arguments": c.function.arguments or "{}",
+        }
+        for c in (message.tool_calls or [])
+    ]
+    return message.content or "", calls
+
+
+def _serialise_assistant(content, calls):
     """Assistant turns must go back to the API as plain dicts."""
-    payload = {"role": "assistant", "content": message.content or ""}
-    if message.tool_calls:
+    payload = {"role": "assistant", "content": content}
+    if calls:
         payload["tool_calls"] = [
             {
-                "id": call.id,
+                "id": c["id"],
                 "type": "function",
-                "function": {
-                    "name": call.function.name,
-                    "arguments": call.function.arguments,
-                },
+                "function": {"name": c["name"], "arguments": c["arguments"]},
             }
-            for call in message.tool_calls
+            for c in calls
         ]
     return payload
 
@@ -161,20 +246,19 @@ def _tool_message(call_id, data):
     }
 
 
-def _park(user, messages, call, effects, step):
+def _park(user, messages, call, effects, step, lang):
     """Store the paused loop under a single-use token."""
     token = uuid.uuid4().hex
     cache.set(
         f"agent_pending_{user.id}_{token}",
         {
             "messages": messages,
-            "call": {
-                "id": call.id,
-                "name": call.function.name,
-                "arguments": call.function.arguments,
-            },
+            "call": call,
             "effects": effects,
             "step": step,
+            # Remember the conversation language so the resumed half does not
+            # have to re-detect it from a request that carries no message.
+            "lang": lang,
         },
         PENDING_TTL_SECONDS,
     )
@@ -190,61 +274,106 @@ def take_pending(user, token):
     return parked
 
 
-def _run(user, ctx, messages, effects, start_step, usage_totals):
-    """Drive the loop until the model stops calling tools, or a budget runs out."""
-    tool_calls_made = 0
-    schemas = agent_tools.tool_schemas()
-
-    for step in range(start_step, MAX_STEPS):
+def _llm_turn(messages, schemas, stream, on_token):
+    """One model turn. Returns (content, calls, error, usage)."""
+    if not stream:
         message, usage = send_openai_tool_turn(messages, schemas)
         if message is None:
-            logger.warning("Agent loop LLM failure: %s", usage)
-            return {"status": "error", "message": str(usage), "effects": effects}
+            return None, None, str(usage), None
+        content, calls = _normalise(message)
+        return content, calls, None, usage
+
+    content, calls, usage = None, None, None
+    for event in stream_openai_tool_turn(messages, schemas):
+        kind = event[0]
+        if kind == "token":
+            on_token(event[1])
+        elif kind == "error":
+            return None, None, event[1], None
+        elif kind == "message":
+            content, calls = _normalise(event[1])
+            usage = event[2]
+    return content or "", calls or [], None, usage
+
+
+def _run_events(user, ctx, messages, effects, start_step, usage_totals, stream=False):
+    """
+    Drive the loop, yielding progress as it happens.
+
+    Yields ("token", text), ("step", tool_name) and ("effect", payload) along
+    the way, then exactly one ("done", outcome). The buffered and streaming
+    endpoints share this so there is a single implementation of the loop.
+    """
+    tool_calls_made = 0
+    schemas = agent_tools.tool_schemas()
+    pending_tokens = []
+
+    for step in range(start_step, MAX_STEPS):
+        pending_tokens.clear()
+        content, calls, error, usage = _llm_turn(
+            messages, schemas, stream, pending_tokens.append
+        )
+        # Prose is only emitted once we know the turn ended in an answer rather
+        # than a tool call — otherwise a model that "thinks out loud" before
+        # calling a tool would leak that text into the chat.
+        if error:
+            logger.warning("Agent loop LLM failure: %s", error)
+            yield ("done", {"status": "error", "message": error, "effects": effects})
+            return
         if usage:
             usage_totals["prompt"] += getattr(usage, "prompt_tokens", 0) or 0
             usage_totals["completion"] += getattr(usage, "completion_tokens", 0) or 0
 
-        if not message.tool_calls:
-            return {
-                "status": "done",
-                "message": message.content or "",
-                "effects": effects,
-            }
+        if not calls:
+            for text in pending_tokens:
+                yield ("token", text)
+            yield ("done", {"status": "done", "message": content, "effects": effects})
+            return
 
-        messages.append(_serialise_assistant(message))
+        messages.append(_serialise_assistant(content, calls))
 
-        for call in message.tool_calls:
+        for call in calls:
             tool_calls_made += 1
             if tool_calls_made > MAX_TOOL_CALLS:
-                return {
-                    "status": "budget",
-                    "message": "",
-                    "effects": effects,
-                }
+                yield ("done", {"status": "budget", "message": "", "effects": effects})
+                return
 
-            tool = agent_tools.get_tool(call.function.name)
+            tool = agent_tools.get_tool(call["name"])
             if tool is None:
                 messages.append(
-                    _tool_message(call.id, {"error": f"Unknown tool {call.function.name}"})
+                    _tool_message(call["id"], {"error": f"Unknown tool {call['name']}"})
                 )
                 continue
 
             if tool.destructive:
-                token = _park(user, messages, call, effects, step)
-                return {
-                    "status": "needs_approval",
-                    "token": token,
-                    # Kept for logging and tests; the wire payload carries only
-                    # the localized copy — tool names mean nothing to a user.
-                    "tool": tool.name,
-                    "copy": approval_copy(ctx.get("lang", "en"), tool.name),
-                    "effects": effects,
-                }
+                token = _park(user, messages, call, effects, step, ctx.get("lang", "en"))
+                yield (
+                    "done",
+                    {
+                        "status": "needs_approval",
+                        "token": token,
+                        "tool": tool.name,
+                        "copy": approval_copy(ctx.get("lang", "en"), tool.name),
+                        "effects": effects,
+                    },
+                )
+                return
 
+            yield ("step", step_copy(ctx.get("lang", "en"), tool.name))
             result = _invoke(tool, user, ctx, call)
-            messages.append(_tool_message(call.id, result.data))
-            effects.extend(result.ui)
+            messages.append(_tool_message(call["id"], result.data))
+            for effect in result.ui:
+                effects.append(effect)
+                yield ("effect", effect)
 
+    yield ("done", {"status": "budget", "message": "", "effects": effects})
+
+
+def _run(user, ctx, messages, effects, start_step, usage_totals):
+    """Buffered form: run the loop to completion and return the outcome."""
+    for event in _run_events(user, ctx, messages, effects, start_step, usage_totals):
+        if event[0] == "done":
+            return event[1]
     return {"status": "budget", "message": "", "effects": effects}
 
 
@@ -257,7 +386,7 @@ def _safe_args(raw_arguments):
 
 def _invoke(tool, user, ctx, call):
     """Run a tool, turning any failure into a result the model can read."""
-    arguments = _safe_args(call.function.arguments)
+    arguments = _safe_args(call["arguments"])
     # strict mode sends every property, nulls included — drop them so Python
     # defaults apply instead of overriding them with None.
     arguments = {k: v for k, v in arguments.items() if v is not None}
@@ -271,6 +400,38 @@ def _invoke(tool, user, ctx, call):
         return agent_tools.ToolResult(
             data={"error": "The tool failed unexpectedly. Tell the user to try again."}
         )
+
+
+def stream_turn(user, ctx, history, user_message):
+    """Streaming form of run_turn: yields loop events as they happen."""
+    usage_totals = {"prompt": 0, "completion": 0}
+    messages = _build_messages(ctx, history, user_message)
+    for event in _run_events(
+        user, ctx, messages, [], 0, usage_totals, stream=True
+    ):
+        if event[0] == "done":
+            outcome = dict(event[1])
+            outcome["usage"] = usage_totals
+            yield ("done", outcome)
+            return
+        yield event
+
+
+def stream_resume_turn(user, ctx, parked, approved):
+    """Streaming form of resume_turn."""
+    usage_totals = {"prompt": 0, "completion": 0}
+    messages, effects, new_effects = _prepare_resume(user, ctx, parked, approved)
+    for effect in new_effects:
+        yield ("effect", effect)
+    for event in _run_events(
+        user, ctx, messages, effects, parked["step"], usage_totals, stream=True
+    ):
+        if event[0] == "done":
+            outcome = dict(event[1])
+            outcome["usage"] = usage_totals
+            yield ("done", outcome)
+            return
+        yield event
 
 
 def run_turn(user, ctx, history, user_message):
@@ -291,9 +452,24 @@ def resume_turn(user, ctx, parked, approved):
     the model react to a refusal instead of the conversation dead-ending.
     """
     usage_totals = {"prompt": 0, "completion": 0}
+    messages, effects, _new = _prepare_resume(user, ctx, parked, approved)
+    outcome = _run(user, ctx, messages, effects, parked["step"], usage_totals)
+    outcome["usage"] = usage_totals
+    return outcome
+
+
+def _prepare_resume(user, ctx, parked, approved):
+    """
+    Answer the pending tool call, whether it was approved or refused.
+
+    Returns (messages, effects, new_effects) — the third being what the approved
+    tool just produced, so a streaming caller can emit it instead of leaving it
+    to the final payload.
+    """
     messages = parked["messages"]
     effects = parked["effects"]
     call_info = parked["call"]
+    new_effects = []
 
     if approved:
         tool = agent_tools.get_tool(call_info["name"])
@@ -302,10 +478,10 @@ def resume_turn(user, ctx, parked, approved):
                 _tool_message(call_info["id"], {"error": "Tool no longer available."})
             )
         else:
-            stub = _CallStub(call_info["id"], call_info["name"], call_info["arguments"])
-            result = _invoke(tool, user, ctx, stub)
+            result = _invoke(tool, user, ctx, call_info)
             messages.append(_tool_message(call_info["id"], result.data))
             effects.extend(result.ui)
+            new_effects.extend(result.ui)
     else:
         messages.append(
             _tool_message(
@@ -314,14 +490,5 @@ def resume_turn(user, ctx, parked, approved):
             )
         )
 
-    outcome = _run(user, ctx, messages, effects, parked["step"], usage_totals)
-    outcome["usage"] = usage_totals
-    return outcome
+    return messages, effects, new_effects
 
-
-class _CallStub:
-    """Rebuilds the shape _invoke expects from a parked call."""
-
-    def __init__(self, call_id, name, arguments):
-        self.id = call_id
-        self.function = type("fn", (), {"name": name, "arguments": arguments})()

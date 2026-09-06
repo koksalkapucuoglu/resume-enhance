@@ -1,18 +1,12 @@
 """
-AgentService — Intent classification and execution for the agentic dashboard.
+Resume operations that the agent's tools delegate to.
 
-LLM-first approach:
-1. Every user message is classified by gpt-4o-mini (JSON mode, ~500ms)
-2. The LLM receives full context: user's resumes, quota, active resume
-3. It returns {intent, params, message} — no keyword heuristics needed
-4. Active-resume context: once a resume is selected, subsequent messages
-   are treated as modification instructions for that resume.
-
-Why LLM-only (no keyword map)?
-- Context-aware: "kaldır" in "deneyimimi kaldır" → modify, not delete
-- Multilingual for free: Turkish, English, mixed — all handled naturally
-- Zero maintenance: new intents = update TOOL_CATALOG, no regex/keyword lists
-- Cost: ~$0.0003/message with gpt-4o-mini — negligible at current scale
+Intent classification used to live here: one LLM call picked a single intent and
+a handler map ran it. That is the agent loop's job now (`agent_loop.py`), which
+lets the model call several tools and read their results. What remains is the
+domain logic the tools in `agent_tools.py` wrap, the guided builder — a fixed
+question sequence rather than a model decision — and language detection, used to
+localize confirmations.
 """
 
 import json
@@ -26,99 +20,6 @@ from resume.services import revision_service
 from resume.openai_engine import send_openai_message
 
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Tool catalog — the LLM uses this to pick the right intent
-# ---------------------------------------------------------------------------
-TOOL_CATALOG = [
-    {"intent": "list_resumes", "description": "List all resumes of the user"},
-    {
-        "intent": "get_resume_details",
-        "description": "Get details of a specific resume by ID or name",
-        "params": ["resume_id"],
-    },
-    {
-        "intent": "preview_resume",
-        "description": "Show a preview of a resume in the context panel",
-        "params": ["resume_id"],
-    },
-    {
-        "intent": "download_resume",
-        "description": "Download a resume as PDF",
-        "params": ["resume_id"],
-    },
-    {
-        "intent": "create_blank_resume",
-        "description": "Create a new blank resume (redirects to editor)",
-    },
-    {
-        "intent": "conversational_build",
-        "description": "Start interactive Q&A to build a resume from scratch",
-    },
-    {
-        "intent": "upload_resume",
-        "description": "Upload an existing PDF resume for AI extraction",
-    },
-    {"intent": "upload_linkedin", "description": "Upload a LinkedIn PDF profile"},
-    {
-        "intent": "check_quota",
-        "description": "Show current usage limits and remaining quota",
-    },
-    {
-        "intent": "delete_resume",
-        "description": "Delete an ENTIRE resume permanently (asks for confirmation). Do NOT use for removing individual entries like experiences or skills — use modify_resume for that.",
-        "params": ["resume_id"],
-    },
-    {
-        "intent": "duplicate_resume",
-        "description": "Duplicate a resume",
-        "params": ["resume_id"],
-    },
-    {
-        "intent": "edit_resume",
-        "description": "Open the resume editor for a resume",
-        "params": ["resume_id"],
-    },
-    {
-        "intent": "modify_resume",
-        "description": "Apply natural-language edits to resume content: update fields, add/remove entries (experience, education, skills, projects), rewrite descriptions, optimize for a role, etc.",
-        "params": ["resume_id"],
-    },
-    {
-        "intent": "switch_template",
-        "description": (
-            "Switch the resume template/layout. "
-            "Set 'template' ONLY when the user explicitly names one (e.g. 'modern sidebar', 'faangpath', 'classic'). "
-            "If the request is vague ('change template', 'try another', 'başka şablon') leave 'template' empty so the user can pick."
-        ),
-        "params": ["resume_id", "template"],
-    },
-    {
-        "intent": "analyze_resume",
-        "description": "Analyze and score a resume's strength with feedback and suggestions",
-        "params": ["resume_id"],
-    },
-    {
-        "intent": "find_resume",
-        "description": "Search resumes by content — skills, companies, job titles, keywords",
-        "params": ["query"],
-    },
-    {
-        "intent": "compare_resumes",
-        "description": "Compare two resumes side by side, highlighting differences and strengths",
-        "params": ["resume_id_1", "resume_id_2"],
-    },
-    {
-        "intent": "translate_resume",
-        "description": "Translate the entire resume content to a specified language (Turkish or English). Use when user says 'translate to Turkish/English', 'Türkçeye çevir', 'İngilizceye çevir'.",
-        "params": ["resume_id", "target_language"],
-    },
-    {
-        "intent": "help",
-        "description": "Show available commands and how to use the assistant",
-    },
-    {"intent": "clarify", "description": "Ask the user to clarify their request"},
-]
 
 BUILDER_STEPS = [
     ("ask_name", "full_name", None),
@@ -159,64 +60,6 @@ class AgentService:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
-
-    def classify_intent(self, message: str, context: dict, active_resume=None) -> dict:
-        """
-        Send every message to LLM for intent classification.
-        Returns: {intent, params, lang, llm_message?}
-        """
-        lang = self._detect_language(message)
-        result = self._llm_classify(message, context, lang, active_resume=active_resume)
-        result["lang"] = lang
-        return result
-
-    def execute_intent(
-        self,
-        intent: str,
-        params: dict,
-        user,
-        lang: str = "en",
-        builder_state: dict = None,
-        active_resume=None,
-        user_message: str = "",
-    ) -> dict:
-        handler_map = {
-            "list_resumes": lambda: self._exec_list_resumes(user, lang),
-            "get_resume_details": lambda: self._exec_get_resume_details(
-                user, params, lang
-            ),
-            "preview_resume": lambda: self._exec_preview_resume(
-                user, params, lang, active_resume
-            ),
-            "download_resume": lambda: self._exec_download_resume(user, params, lang),
-            "create_blank_resume": lambda: self._exec_create_blank(lang),
-            "conversational_build": lambda: self._exec_builder_start(
-                lang, builder_state
-            ),
-            "upload_resume": lambda: self._exec_upload_resume(lang),
-            "upload_linkedin": lambda: self._exec_upload_linkedin(lang),
-            "check_quota": lambda: self._exec_check_quota(user, lang),
-            "delete_resume": lambda: self._exec_delete_resume(user, params, lang),
-            "duplicate_resume": lambda: self._exec_duplicate_resume(user, params, lang),
-            "edit_resume": lambda: self._exec_edit_resume(user, params, lang),
-            "modify_resume": lambda: self._exec_modify_resume(
-                user, params, lang, user_message, active_resume
-            ),
-            "switch_template": lambda: self._exec_switch_template(
-                user, params, lang, active_resume
-            ),
-            "analyze_resume": lambda: self._exec_analyze_resume(
-                user, params, lang, active_resume
-            ),
-            "find_resume": lambda: self._exec_find_resume(user, params, lang),
-            "compare_resumes": lambda: self._exec_compare_resumes(user, params, lang),
-            "translate_resume": lambda: self._exec_translate_resume(user, params, lang, active_resume),
-            "help": lambda: self._exec_help(lang),
-        }
-        handler = handler_map.get(intent)
-        if handler:
-            return handler()
-        return self._exec_clarify(lang)
 
     def handle_builder_step(self, message: str, builder_state: dict, user) -> dict:
         lang = builder_state.get("lang", "en")
@@ -269,123 +112,56 @@ class AgentService:
     # Private: language detection
     # ------------------------------------------------------------------
 
-    def _detect_language(self, message: str) -> str:
-        tr_chars_raw = set("çğıöşüÇĞİÖŞÜ")
-        tr_words = {
-            "ve",
-            "ile",
-            "bir",
-            "bu",
-            "de",
-            "da",
-            "mi",
-            "mu",
-            "ne",
-            "icin",
-            "olan",
-            "var",
-            "yok",
-            "evet",
-            "tamam",
-            "merhaba",
-            "selam",
-            "nasil",
-            "lutfen",
-            "al",
-            "son",
-            "kac",
-            "tane",
-        }
-        if any(c in tr_chars_raw for c in message):
+    # Words that reliably mark a Turkish message in this product's vocabulary.
+    # Turkish-specific characters are the strongest signal, but plenty of real
+    # requests ("yeteneklerime AWS ekle") contain none, so the common verbs and
+    # nouns users actually type here are listed too.
+    _TR_CHARS = set("çğıöşüÇĞİÖŞÜ")
+    _TR_WORDS = {
+        # function words
+        "ve", "ile", "bir", "bu", "de", "da", "mi", "mu", "ne", "icin", "için",
+        "olan", "var", "yok", "evet", "hayir", "hayır", "tamam", "merhaba",
+        "selam", "nasil", "nasıl", "lutfen", "lütfen", "son", "kac", "kaç",
+        "tane", "hangi", "bana", "benim", "sadece", "daha", "gibi", "sonra",
+        # things users ask for
+        "ekle", "ekler", "sil", "kaldir", "kaldır", "degistir", "değiştir",
+        "guncelle", "güncelle", "goster", "göster", "listele", "indir",
+        "cevir", "çevir", "olustur", "oluştur", "duzenle", "düzenle",
+        "yaz", "yap", "ac", "aç", "geri", "al", "analiz", "et", "karsilastir",
+        "karşılaştır", "kopyala", "onizle", "önizle", "degistirme",
+        # domain nouns
+        "ozgecmis", "özgeçmiş", "deneyim", "deneyimi", "deneyimlerim",
+        "yetenek", "yetenekler", "yeteneklerime", "yeteneklerim", "egitim",
+        "eğitim", "proje", "projeler", "sablon", "şablon", "dil", "limit",
+        "limitlerim", "kota",
+    }
+
+    def _detect_language(self, message: str, history=None) -> str:
+        """
+        Detect the conversation language.
+
+        Recent history is consulted as well: people rarely switch language
+        mid-conversation, so one terse message ("AWS ekle") should not flip a
+        Turkish conversation into English.
+        """
+        if self._looks_turkish(message):
             return "tr"
-        words = set(message.lower().split())
-        if words & tr_words:
-            return "tr"
+        for turn in reversed(list(history or [])[-6:]):
+            if turn.get("role") != "user":
+                continue
+            if self._looks_turkish(turn.get("content") or ""):
+                return "tr"
         return "en"
+
+    def _looks_turkish(self, text: str) -> bool:
+        if any(c in self._TR_CHARS for c in text):
+            return True
+        words = {w.strip(".,!?;:'\"") for w in text.lower().split()}
+        return bool(words & self._TR_WORDS)
 
     # ------------------------------------------------------------------
     # Private: LLM classification
     # ------------------------------------------------------------------
-
-    def _llm_classify(
-        self, message: str, context: dict, lang: str, active_resume=None
-    ) -> dict:
-        resumes_json = json.dumps(context.get("resumes", []), ensure_ascii=False)
-        quota_json = json.dumps(context.get("quota", {}), ensure_ascii=False)
-        tools_json = json.dumps(TOOL_CATALOG, ensure_ascii=False)
-
-        active_section = ""
-        if active_resume:
-            experiences = active_resume.content.get("experience", [])
-            exp_summary = (
-                ", ".join(
-                    f"'{e.get('title', '?')}' at '{e.get('company', '?')}'"
-                    for e in experiences[:5]
-                )
-                if experiences
-                else "none"
-            )
-
-            active_section = f"""
-ACTIVE RESUME (the user is currently working on this one):
-  ID: {active_resume.id}
-  Name: {active_resume.display_name}
-  Experiences ({len(experiences)} entries): {exp_summary}
-
-IMPORTANT — active resume rules:
-- If the user wants to MODIFY content (add/remove/update experiences, skills, education,
-  projects, descriptions, rewrite for a role, etc.) → use "modify_resume" with resume_id={active_resume.id}.
-- "kaldır", "remove", "sil" referring to a PART of the resume (an experience, a skill, etc.)
-  → use "modify_resume", NOT "delete_resume".
-- "delete_resume" is ONLY for deleting the ENTIRE resume permanently.
-- If the message is a system command (list, download, quota, preview, upload, etc.)
-  → use the appropriate system intent.
-- For actions that need a resume_id and none is specified, default to {active_resume.id}.
-"""
-
-        system_prompt = f"""You are ResuStack, an AI assistant for a resume management app.
-Analyze the user message and choose the best tool.
-
-USER'S RESUMES (rank=1 is the most recently updated):
-{resumes_json}
-
-QUOTA STATUS:
-{quota_json}
-{active_section}
-AVAILABLE TOOLS:
-{tools_json}
-
-Rules:
-- Respond ONLY with valid JSON: {{"intent": "tool_name", "params": {{}}, "message": "reply to user"}}
-- Detect message language and reply in the SAME language.
-- For resume count questions ("how many resumes", "kac tane resume") → use list_resumes.
-- For "last resume" / "son resume" / "en son" without active resume → use the ID where rank=1.
-- Resolve resume references (name, "son", "last", "1.", "#2", positional) to their numeric ID.
-- If you cannot determine which resume → use "clarify".
-- For greetings / general help → use "help".
-- Never invent resume IDs not present in USER'S RESUMES.
-- For template switching, set params.template to one of: "faangpath-simple" or "modern-sidebar".
-  Aliases: faang/klasik/classic/simple → faangpath-simple, modern/sidebar → modern-sidebar.
-"""
-
-        result = send_openai_message(
-            user_message=message,
-            meta_prompt=system_prompt,
-            is_json=True,
-            temperature=0,
-            max_tokens=400,
-        )
-
-        try:
-            parsed = json.loads(result)
-            return {
-                "intent": parsed.get("intent", "clarify"),
-                "params": parsed.get("params", {}),
-                "llm_message": parsed.get("message", ""),
-            }
-        except (ValueError, TypeError):
-            logger.warning("LLM classification failed to parse: %s", result)
-            return {"intent": "clarify", "params": {}, "llm_message": ""}
 
     # ------------------------------------------------------------------
     # Private: intent executors
@@ -427,36 +203,6 @@ Rules:
             "data_type": "resume_list",
             "quick_replies": quick_replies if data else None,
         }
-
-    def _exec_get_resume_details(self, user, params: dict, lang: str) -> dict:
-        resume = self._resolve_resume(user, params)
-        if not resume:
-            return self._resume_not_found(lang, params)
-        content = resume.content or {}
-        user_info = content.get("user_info", {})
-        skills = user_info.get("skills", [])
-        exp_count = len(content.get("experience", []))
-        edu_count = len(content.get("education", []))
-        proj_count = len(content.get("projects_and_publications", []))
-        if lang == "tr":
-            msg = (
-                f"**{resume.display_name}** (ID: {resume.id})\n"
-                f"- Deneyim: {exp_count} kayit\n- Egitim: {edu_count} kayit\n"
-                f"- Projeler: {proj_count} kayit\n"
-                f"- Yetenekler: {', '.join(skills[:5]) if skills else 'Belirtilmemis'}\n"
-                f"- Sablon: {resume.template_selector}\n"
-                f"- Son guncelleme: {resume.updated_at.strftime('%Y-%m-%d')}"
-            )
-        else:
-            msg = (
-                f"**{resume.display_name}** (ID: {resume.id})\n"
-                f"- Experience: {exp_count} entries\n- Education: {edu_count} entries\n"
-                f"- Projects: {proj_count} entries\n"
-                f"- Skills: {', '.join(skills[:5]) if skills else 'None listed'}\n"
-                f"- Template: {resume.template_selector}\n"
-                f"- Last updated: {resume.updated_at.strftime('%Y-%m-%d')}"
-            )
-        return {"type": "chat", "message": msg, "data": {"id": resume.id}}
 
     def _exec_preview_resume(
         self, user, params: dict, lang: str, active_resume=None
@@ -608,22 +354,6 @@ Rules:
             "agent_message_remaining": agent_msg_rem,
         }
         return {"type": "chat", "message": msg, "data": data, "data_type": "quota"}
-
-    def _exec_delete_resume(self, user, params: dict, lang: str) -> dict:
-        resume = self._resolve_resume(user, params)
-        if not resume:
-            return self._resume_not_found(lang, params)
-        msg = {
-            "en": f"Are you sure you want to permanently delete **{resume.display_name}**? This cannot be undone.",
-            "tr": f"**{resume.display_name}**'i kalici olarak silmek istediginizden emin misiniz? Bu islem geri alinamaz.",
-        }.get(lang, f"Delete {resume.display_name}?")
-        return {
-            "type": "confirm",
-            "action": "delete_resume",
-            "params": {"resume_id": resume.id},
-            "resume_name": resume.display_name,
-            "message": msg,
-        }
 
     def _exec_duplicate_resume(self, user, params: dict, lang: str) -> dict:
         resume = self._resolve_resume(user, params)
@@ -1192,64 +922,6 @@ Respond in {"Turkish" if lang == "tr" else "English"}."""
                 "en": "Translation couldn't be completed. Please try again.",
             }.get(lang, "Translation failed.")
             return {"type": "chat", "message": msg}
-
-    def _exec_help(self, lang: str) -> dict:
-        if lang == "tr":
-            msg = (
-                "Merhaba! ResuStack asistaninim. Sunlari yapabilirim:\n\n"
-                "- **Resume'larimi listele** — tum resume'larinizi gorun\n"
-                "- **Resume X'i onizle** — sagda onizleme gosterin\n"
-                "- **Resume X'i indir** — PDF olarak indirin\n"
-                "- **Resume X'i sil** — resume'u silin\n"
-                "- **Resume X'i kopyala** — cogaltin\n"
-                "- **Resume X'i duzenle** — editoru acin\n"
-                "- **Resume X'i analiz et** — guc analizi ve puan goruntuleyin\n"
-                "- **Resume'larda ara** — icerik bazli arama (yetenek, sirket, pozisyon)\n"
-                "- **Resume X ve Y'yi karsilastir** — iki resume'u yan yana karsilastirin\n"
-                "- **Yeni resume olustur** — sifirdan baslayin\n"
-                "- **PDF yukle** — mevcut CV'nizi yukleyin\n"
-                "- **Limitlerimi goster** — kota durumunuzu gorun\n\n"
-                "**Resume duzenlemek icin:** Herhangi bir resume'u secin (onizle veya yukle), "
-                "ardindan dogal dilde degisiklik isteyin:\n"
-                "_'Son tecrubemi guncelle', 'AWS deneyimi ekle', 'DevOps rolleri icin yeniden yaz'_\n\n"
-                "X yerine resume numarasi veya adini yazabilirsiniz."
-            )
-        else:
-            msg = (
-                "Hi! I'm your ResuStack assistant. Here's what I can do:\n\n"
-                "- **List my resumes** — see all your resumes\n"
-                "- **Preview resume X** — show a preview\n"
-                "- **Download resume X** — get the PDF\n"
-                "- **Delete resume X** — remove it\n"
-                "- **Duplicate resume X** — make a copy\n"
-                "- **Edit resume X** — open in editor\n"
-                "- **Analyze resume X** — get a strength score and suggestions\n"
-                "- **Find resumes with Y** — search by skill, company, or keyword\n"
-                "- **Compare resume X and Y** — side-by-side comparison\n"
-                "- **Create new resume** — start from scratch\n"
-                "- **Upload PDF** — import an existing CV\n"
-                "- **Show my limits** — check your quota\n\n"
-                "**To edit a resume:** Select one (preview/load), then give instructions in plain language:\n"
-                "_'Update my last experience', 'Add AWS experience', 'Rewrite for DevOps roles'_\n\n"
-                "Replace X with a resume number or name."
-            )
-        quick_replies = (
-            ["List resumes", "Check quota", "Upload PDF"]
-            if lang == "en"
-            else ["Resume'ları listele", "Kotayı kontrol et", "PDF yükle"]
-        )
-        return {"type": "chat", "message": msg, "quick_replies": quick_replies}
-
-    def _exec_clarify(self, lang: str) -> dict:
-        msg = {
-            "en": "I didn't quite understand that. Could you rephrase? Type 'help' to see what I can do.",
-            "tr": "Tam olarak anlayamadim. Tekrar ifade edebilir misiniz? 'yardim' yazarak neler yapabilecegiimi gorebilirsiniz.",
-        }.get(lang, "Could you rephrase that?")
-        return {"type": "chat", "message": msg}
-
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
 
     def _validate_modify_result(self, result: str):
         """Validate and normalize LLM modify result. Returns parsed dict or None."""

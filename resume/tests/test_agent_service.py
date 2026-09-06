@@ -105,64 +105,46 @@ class AgentServiceTestBase(TestCase):
             "quota": {"tier": "free", "resume_count": 1},
         }
 
+    # Intent dispatch moved to the agent loop, which calls tools directly.
+    # These operations still exist and are what the tools wrap, so the shim
+    # keeps the assertions below pointed at the same behaviour.
+    _OPERATIONS = {
+        "list_resumes": lambda svc, u, p, lang, ar: svc._exec_list_resumes(u, lang),
+        "preview_resume": lambda svc, u, p, lang, ar: svc._exec_preview_resume(u, p, lang, ar),
+        "download_resume": lambda svc, u, p, lang, ar: svc._exec_download_resume(u, p, lang),
+        "duplicate_resume": lambda svc, u, p, lang, ar: svc._exec_duplicate_resume(u, p, lang),
+        "edit_resume": lambda svc, u, p, lang, ar: svc._exec_edit_resume(u, p, lang),
+        "check_quota": lambda svc, u, p, lang, ar: svc._exec_check_quota(u, lang),
+        "create_blank_resume": lambda svc, u, p, lang, ar: svc._exec_create_blank(lang),
+        "conversational_build": lambda svc, u, p, lang, ar: svc._exec_builder_start(lang),
+        "upload_resume": lambda svc, u, p, lang, ar: svc._exec_upload_resume(lang),
+        "upload_linkedin": lambda svc, u, p, lang, ar: svc._exec_upload_linkedin(lang),
+        "find_resume": lambda svc, u, p, lang, ar: svc._exec_find_resume(u, p, lang),
+        "compare_resumes": lambda svc, u, p, lang, ar: svc._exec_compare_resumes(u, p, lang),
+        "analyze_resume": lambda svc, u, p, lang, ar: svc._exec_analyze_resume(u, p, lang, ar),
+        "translate_resume": lambda svc, u, p, lang, ar: svc._exec_translate_resume(u, p, lang, ar),
+        "switch_template": lambda svc, u, p, lang, ar: svc._exec_switch_template(u, p, lang, ar),
+    }
 
-class ClassifyIntentTest(AgentServiceTestBase):
-    """Tests for classify_intent and LLM classification."""
-
-    @patch("resume.services.agent_service.send_openai_message")
-    def test_classify_returns_intent_from_llm(self, mock_llm):
-        mock_llm.return_value = json.dumps(
-            {
-                "intent": "list_resumes",
-                "params": {},
-                "message": "Here are your resumes.",
-            }
-        )
-        result = self.service.classify_intent("show my resumes", self.context)
-        self.assertEqual(result["intent"], "list_resumes")
-        self.assertEqual(result["params"], {})
-        self.assertEqual(result["lang"], "en")
-        mock_llm.assert_called_once()
-
-    @patch("resume.services.agent_service.send_openai_message")
-    def test_classify_json_parse_failure_returns_clarify(self, mock_llm):
-        mock_llm.return_value = "this is not valid json at all"
-        result = self.service.classify_intent("gibberish input", self.context)
-        self.assertEqual(result["intent"], "clarify")
-        self.assertEqual(result["params"], {})
-
-    @patch("resume.services.agent_service.send_openai_message")
-    def test_classify_with_active_resume_context(self, mock_llm):
-        mock_llm.return_value = json.dumps(
-            {
-                "intent": "modify_resume",
-                "params": {"resume_id": self.resume.id},
-                "message": "Updating experience.",
-            }
-        )
-        result = self.service.classify_intent(
-            "remove my last experience", self.context, active_resume=self.resume
-        )
-        self.assertEqual(result["intent"], "modify_resume")
-
-    @patch("resume.services.agent_service.send_openai_message")
-    def test_classify_preserves_llm_message(self, mock_llm):
-        mock_llm.return_value = json.dumps(
-            {
-                "intent": "help",
-                "params": {},
-                "message": "Hello! How can I help?",
-            }
-        )
-        result = self.service.classify_intent("hi", self.context)
-        self.assertEqual(result["llm_message"], "Hello! How can I help?")
+    def execute_intent(
+        self, intent, params=None, user=None, lang="en", active_resume=None,
+        user_message="", **kwargs,
+    ):
+        if intent == "modify_resume":
+            return self.service._exec_modify_resume(
+                user, params or {}, lang, user_message, active_resume
+            )
+        operation = self._OPERATIONS.get(intent)
+        if operation is None:
+            raise AssertionError(f"No operation for intent {intent!r}")
+        return operation(self.service, user, params or {}, lang, active_resume)
 
 
 class ExecuteIntentTest(AgentServiceTestBase):
     """Tests for execute_intent dispatching and individual _exec_* methods."""
 
     def test_list_resumes_returns_resume_data(self):
-        result = self.service.execute_intent("list_resumes", {}, self.user, lang="en")
+        result = self.execute_intent("list_resumes", {}, self.user, lang="en")
         self.assertEqual(result["type"], "chat")
         self.assertEqual(result["data_type"], "resume_list")
         self.assertEqual(len(result["data"]), 1)
@@ -171,12 +153,12 @@ class ExecuteIntentTest(AgentServiceTestBase):
 
     def test_list_resumes_empty(self):
         self.resume.delete()
-        result = self.service.execute_intent("list_resumes", {}, self.user, lang="en")
+        result = self.execute_intent("list_resumes", {}, self.user, lang="en")
         self.assertIn("don't have any resumes", result["message"])
         self.assertIsNone(result.get("quick_replies"))
 
     def test_preview_resume_returns_preview_type(self):
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "preview_resume", {"resume_id": self.resume.id}, self.user, lang="en"
         )
         self.assertEqual(result["type"], "preview")
@@ -184,29 +166,14 @@ class ExecuteIntentTest(AgentServiceTestBase):
         self.assertIn("preview", result["message"].lower())
 
     def test_preview_resume_not_found(self):
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "preview_resume", {"resume_id": 99999}, self.user, lang="en"
         )
         self.assertEqual(result["type"], "chat")
         self.assertIn("99999", result["message"])
 
-    def test_delete_resume_returns_confirm(self):
-        result = self.service.execute_intent(
-            "delete_resume", {"resume_id": self.resume.id}, self.user, lang="en"
-        )
-        self.assertEqual(result["type"], "confirm")
-        self.assertEqual(result["action"], "delete_resume")
-        self.assertEqual(result["params"]["resume_id"], self.resume.id)
-        self.assertIn("permanently delete", result["message"])
-
-    def test_delete_resume_not_found(self):
-        result = self.service.execute_intent(
-            "delete_resume", {"resume_id": 99999}, self.user, lang="en"
-        )
-        self.assertEqual(result["type"], "chat")
-
     def test_duplicate_resume_creates_copy(self):
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "duplicate_resume", {"resume_id": self.resume.id}, self.user, lang="en"
         )
         self.assertEqual(result["type"], "redirect")
@@ -221,7 +188,7 @@ class ExecuteIntentTest(AgentServiceTestBase):
         for i in range(2):
             Resume.objects.create(user=self.user, title=f"Extra {i}", content={})
         self.assertEqual(Resume.objects.filter(user=self.user).count(), 3)
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "duplicate_resume", {"resume_id": self.resume.id}, self.user, lang="en"
         )
         self.assertEqual(result["type"], "chat")
@@ -233,7 +200,7 @@ class ExecuteIntentTest(AgentServiceTestBase):
         self.profile.download_count = 2
         self.profile.agent_message_count = 5
         self.profile.save()
-        result = self.service.execute_intent("check_quota", {}, self.user, lang="en")
+        result = self.execute_intent("check_quota", {}, self.user, lang="en")
         self.assertEqual(result["type"], "chat")
         self.assertEqual(result["data"]["tier"], "free")
         self.assertEqual(result["data"]["import_remaining"], 1)  # 2 - 1
@@ -245,25 +212,12 @@ class ExecuteIntentTest(AgentServiceTestBase):
     def test_check_quota_pro_tier(self):
         self.profile.tier = "pro"
         self.profile.save()
-        result = self.service.execute_intent("check_quota", {}, self.user, lang="en")
+        result = self.execute_intent("check_quota", {}, self.user, lang="en")
         self.assertEqual(result["data"]["tier"], "pro")
         self.assertIn("Pro plan", result["message"])
 
-    def test_help_returns_chat_with_commands(self):
-        result = self.service.execute_intent("help", {}, self.user, lang="en")
-        self.assertEqual(result["type"], "chat")
-        self.assertIn("List my resumes", result["message"])
-        self.assertIn("quick_replies", result)
-
-    def test_unknown_intent_falls_back_to_clarify(self):
-        result = self.service.execute_intent(
-            "nonexistent_intent", {}, self.user, lang="en"
-        )
-        self.assertEqual(result["type"], "chat")
-        self.assertIn("rephrase", result["message"].lower())
-
     def test_download_resume_returns_url(self):
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "download_resume", {"resume_id": self.resume.id}, self.user, lang="en"
         )
         self.assertEqual(result["type"], "download")
@@ -272,14 +226,14 @@ class ExecuteIntentTest(AgentServiceTestBase):
         self.assertIn("Jane_Doe", result["filename"])
 
     def test_edit_resume_returns_redirect(self):
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "edit_resume", {"resume_id": self.resume.id}, self.user, lang="en"
         )
         self.assertEqual(result["type"], "redirect")
         self.assertIn(str(self.resume.id), result["url"])
 
     def test_create_blank_returns_create_choice(self):
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "create_blank_resume", {}, self.user, lang="en"
         )
         self.assertEqual(result["type"], "create_choice")
@@ -290,13 +244,13 @@ class ExecuteIntentTest(AgentServiceTestBase):
 
     def test_upload_resume_asks_for_a_file(self):
         """Redirecting to the POST-only upload view bounced the user out of chat."""
-        result = self.service.execute_intent("upload_resume", {}, self.user, lang="en")
+        result = self.execute_intent("upload_resume", {}, self.user, lang="en")
         self.assertEqual(result["type"], "request_upload")
         self.assertEqual(result["source"], "pdf")
         self.assertIn("upload", result["upload_url"])
 
     def test_upload_linkedin_asks_for_a_file(self):
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "upload_linkedin", {}, self.user, lang="en"
         )
         self.assertEqual(result["type"], "request_upload")
@@ -304,7 +258,7 @@ class ExecuteIntentTest(AgentServiceTestBase):
         self.assertIn("linkedin", result["upload_url"])
 
     def test_switch_template_valid(self):
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "switch_template",
             {"resume_id": self.resume.id, "template": "modern-sidebar"},
             self.user,
@@ -316,7 +270,7 @@ class ExecuteIntentTest(AgentServiceTestBase):
         self.assertEqual(self.resume.template_selector, "modern-sidebar")
 
     def test_switch_template_alias(self):
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "switch_template",
             {"resume_id": self.resume.id, "template": "classic"},
             self.user,
@@ -325,7 +279,7 @@ class ExecuteIntentTest(AgentServiceTestBase):
         self.assertEqual(result["template"], "faangpath-simple")
 
     def test_switch_template_unknown_shows_picker(self):
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "switch_template",
             {"resume_id": self.resume.id, "template": "unknown-template"},
             self.user,
@@ -352,7 +306,7 @@ class ModifyResumeTest(AgentServiceTestBase):
                 "response_message": "Added AWS to your skills list.",
             }
         )
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "modify_resume",
             {"resume_id": self.resume.id},
             self.user,
@@ -383,7 +337,7 @@ class ModifyResumeTest(AgentServiceTestBase):
                 "response_message": "Done.",
             }
         )
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "modify_resume",
             {"resume_id": self.resume.id},
             self.user,
@@ -411,7 +365,7 @@ class ModifyResumeTest(AgentServiceTestBase):
                 }
             ),
         ]
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "modify_resume",
             {"resume_id": self.resume.id},
             self.user,
@@ -426,7 +380,7 @@ class ModifyResumeTest(AgentServiceTestBase):
     @patch("resume.services.agent_service.send_openai_message")
     def test_modify_resume_both_attempts_fail(self, mock_llm):
         mock_llm.return_value = "invalid json"
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "modify_resume",
             {"resume_id": self.resume.id},
             self.user,
@@ -447,7 +401,7 @@ class ModifyResumeTest(AgentServiceTestBase):
                 "response_message": "test",
             }
         )
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "modify_resume",
             {"resume_id": self.resume.id},
             self.user,
@@ -469,7 +423,7 @@ class ModifyResumeTest(AgentServiceTestBase):
                 "response_message": "Done.",
             }
         )
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "modify_resume",
             {},  # No resume_id
             self.user,
@@ -482,7 +436,7 @@ class ModifyResumeTest(AgentServiceTestBase):
 
     def test_modify_resume_no_resumes_at_all(self):
         self.resume.delete()
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "modify_resume",
             {},
             self.user,
@@ -537,7 +491,7 @@ class AnalyzeResumeTest(AgentServiceTestBase):
                 "response_message": "Your resume scores 72/100.",
             }
         )
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "analyze_resume", {"resume_id": self.resume.id}, self.user, lang="en"
         )
         self.assertEqual(result["type"], "analyze_resume")
@@ -550,7 +504,7 @@ class AnalyzeResumeTest(AgentServiceTestBase):
     @patch("resume.services.agent_service.send_openai_message")
     def test_analyze_llm_parse_failure(self, mock_llm):
         mock_llm.return_value = "not json"
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "analyze_resume", {"resume_id": self.resume.id}, self.user, lang="en"
         )
         self.assertEqual(result["type"], "chat")
@@ -566,7 +520,7 @@ class AnalyzeResumeTest(AgentServiceTestBase):
                 "response_message": "Analysis done.",
             }
         )
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "analyze_resume",
             {},  # No resume_id
             self.user,
@@ -581,7 +535,7 @@ class FindResumeTest(AgentServiceTestBase):
     """Tests for _exec_find_resume — content-based search."""
 
     def test_find_by_skill(self):
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "find_resume", {"query": "Django"}, self.user, lang="en"
         )
         self.assertEqual(result["data_type"], "resume_list")
@@ -589,33 +543,33 @@ class FindResumeTest(AgentServiceTestBase):
         self.assertEqual(result["data"][0]["id"], self.resume.id)
 
     def test_find_by_company(self):
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "find_resume", {"query": "acme"}, self.user, lang="en"
         )
         self.assertEqual(len(result["data"]), 1)
 
     def test_find_no_matches(self):
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "find_resume", {"query": "nonexistentkeyword"}, self.user, lang="en"
         )
         self.assertEqual(result["type"], "chat")
         self.assertIn("No resumes found", result["message"])
 
     def test_find_empty_query(self):
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "find_resume", {"query": ""}, self.user, lang="en"
         )
         self.assertEqual(result["type"], "chat")
         self.assertIn("search for", result["message"].lower())
 
     def test_find_by_school(self):
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "find_resume", {"query": "mit"}, self.user, lang="en"
         )
         self.assertEqual(len(result["data"]), 1)
 
     def test_find_by_project_name(self):
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "find_resume", {"query": "my tool"}, self.user, lang="en"
         )
         self.assertEqual(len(result["data"]), 1)
@@ -641,7 +595,7 @@ class CompareResumesTest(AgentServiceTestBase):
                 "recommendation": "Depends on the target role.",
             }
         )
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "compare_resumes",
             {"resume_id_1": self.resume.id, "resume_id_2": self.resume2.id},
             self.user,
@@ -654,7 +608,7 @@ class CompareResumesTest(AgentServiceTestBase):
     @patch("resume.services.agent_service.send_openai_message")
     def test_compare_llm_parse_failure(self, mock_llm):
         mock_llm.return_value = "not json"
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "compare_resumes",
             {"resume_id_1": self.resume.id, "resume_id_2": self.resume2.id},
             self.user,
@@ -664,14 +618,14 @@ class CompareResumesTest(AgentServiceTestBase):
         self.assertIn("couldn't compare", result["message"].lower())
 
     def test_compare_missing_ids(self):
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "compare_resumes", {"resume_id_1": self.resume.id}, self.user, lang="en"
         )
         self.assertEqual(result["type"], "chat")
         self.assertIn("two resumes", result["message"].lower())
 
     def test_compare_resume_not_found(self):
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "compare_resumes",
             {"resume_id_1": self.resume.id, "resume_id_2": 99999},
             self.user,
@@ -738,7 +692,7 @@ class BuilderStepTest(AgentServiceTestBase):
         self.assertEqual(new_resume.content["user_info"]["full_name"], "Jane Doe")
 
     def test_builder_start_returns_first_prompt(self):
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "conversational_build", {}, self.user, lang="en"
         )
         self.assertEqual(result["type"], "multi_step")
@@ -760,11 +714,10 @@ class LanguageDetectionTest(AgentServiceTestBase):
         lang = self.service._detect_language("show my resumes")
         self.assertEqual(lang, "en")
 
-    def test_turkish_special_chars(self):
+    def test_turkish_without_special_chars(self):
+        """Plenty of real Turkish requests carry no Turkish-only letters."""
         lang = self.service._detect_language("ozgecmisimi goster")
-        # No special chars, but "goster" is not in tr_words
-        # This should be 'en' because there are no Turkish markers
-        self.assertEqual(lang, "en")
+        self.assertEqual(lang, "tr")
 
     def test_turkish_chars_detected(self):
         lang = self.service._detect_language("ozgecmisimi gosterebilir misiniz lufen")
@@ -787,13 +740,14 @@ class LanguageDetectionTest(AgentServiceTestBase):
         # "ve" is in tr_words
         self.assertEqual(lang, "tr")
 
-    def test_turkish_cedilla_detection(self):
-        # 'o' and 'u' are ASCII, no Turkish chars
-        # Now with actual Turkish char:
-        lang2 = self.service._detect_language("ozgecmislerimi guncelle")
-        self.assertEqual(lang2, "en")  # Still no Turkish markers
-        lang3 = self.service._detect_language("ozgecmislerimi guncellestir lutfen")
-        self.assertEqual(lang3, "tr")  # "lutfen" is a Turkish word
+    def test_turkish_verbs_are_recognised(self):
+        """"guncelle" is a request users actually type, with or without diacritics."""
+        self.assertEqual(
+            self.service._detect_language("ozgecmislerimi guncelle"), "tr"
+        )
+        self.assertEqual(
+            self.service._detect_language("ozgecmislerimi guncellestir lutfen"), "tr"
+        )
 
     def test_mixed_with_turkish_char(self):
         lang = self.service._detect_language("Resume'umu guncelle")
@@ -809,17 +763,13 @@ class QuickRepliesTest(AgentServiceTestBase):
     """Tests for quick_replies in various responses."""
 
     def test_list_resumes_has_quick_replies(self):
-        result = self.service.execute_intent("list_resumes", {}, self.user, lang="en")
+        result = self.execute_intent("list_resumes", {}, self.user, lang="en")
         self.assertIn("quick_replies", result)
         self.assertIsInstance(result["quick_replies"], list)
         self.assertTrue(len(result["quick_replies"]) > 0)
 
-    def test_help_has_quick_replies(self):
-        result = self.service.execute_intent("help", {}, self.user, lang="en")
-        self.assertIn("quick_replies", result)
-
     def test_preview_has_quick_replies(self):
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "preview_resume", {"resume_id": self.resume.id}, self.user, lang="en"
         )
         self.assertIn("quick_replies", result)
@@ -834,7 +784,7 @@ class QuickRepliesTest(AgentServiceTestBase):
                 "response_message": "Done.",
             }
         )
-        result = self.service.execute_intent(
+        result = self.execute_intent(
             "modify_resume",
             {"resume_id": self.resume.id},
             self.user,
@@ -845,21 +795,11 @@ class QuickRepliesTest(AgentServiceTestBase):
         self.assertIn("Preview changes", result["quick_replies"])
 
     def test_list_resumes_turkish_quick_replies(self):
-        result = self.service.execute_intent("list_resumes", {}, self.user, lang="tr")
+        result = self.execute_intent("list_resumes", {}, self.user, lang="tr")
         self.assertIn("quick_replies", result)
         # Turkish quick replies should not contain English text
         for reply in result["quick_replies"]:
             self.assertNotIn("Preview first", reply)
-
-    def test_help_turkish_quick_replies(self):
-        result = self.service.execute_intent("help", {}, self.user, lang="tr")
-        replies = result["quick_replies"]
-        # Should contain Turkish text
-        self.assertTrue(any("listele" in r.lower() for r in replies))
-
-
-class ResumeResolutionTest(AgentServiceTestBase):
-    """Tests for _resolve_resume and IDOR protection."""
 
     def test_resolve_own_resume(self):
         resume = self.service._resolve_resume(self.user, {"resume_id": self.resume.id})
