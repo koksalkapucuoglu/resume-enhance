@@ -28,7 +28,8 @@ from resume.services.pdf_service import (
     PdfGenerationError,
     resume_pdf_service,
 )
-from resume.models import Resume
+from resume.models import Resume, ResumeRevision
+from resume.services import diff_service, revision_service
 
 logger = logging.getLogger(__name__)
 
@@ -695,6 +696,10 @@ class ResumeFormView(TemplateView):
             try:
                 # SECURITY: Filter by user to prevent IDOR on save
                 resume = Resume.objects.get(pk=pk, user=self.request.user)
+                # Record a restore point before overwriting the previous state
+                revision_service.snapshot(
+                    resume, source=ResumeRevision.SOURCE_MANUAL
+                )
                 resume.content = updated_content
                 resume.template_selector = template_selector
                 if resume_title:
@@ -1517,6 +1522,125 @@ def agent_chat(request):
 # ---------------------------------------------------------------------------
 # Agentic dashboard — toggle UI mode
 # ---------------------------------------------------------------------------
+
+
+def _get_owned_resume(request, pk):
+    """Fetch a resume owned by the caller, or None. SECURITY: prevents IDOR."""
+    return Resume.objects.filter(pk=pk, user=request.user).first()
+
+
+@login_required
+@require_http_methods(["GET"])
+def resume_revisions(request, pk):
+    """
+    List restore points for a resume, newest first.
+    GET /resume/<pk>/revisions/
+    """
+    resume = _get_owned_resume(request, pk)
+    if not resume:
+        return JsonResponse({"error": "Resume not found."}, status=404)
+
+    revisions = [
+        {
+            "id": rev.pk,
+            "source": rev.source,
+            "source_label": rev.get_source_display(),
+            "tool_name": rev.tool_name,
+            "summary": rev.summary,
+            "created_at": rev.created_at.isoformat(),
+            "created_at_display": rev.created_at.strftime("%d %b %Y, %H:%M"),
+        }
+        for rev in revision_service.history(resume)
+    ]
+    return JsonResponse(
+        {
+            "resume_id": resume.pk,
+            "resume_name": resume.display_name,
+            "revisions": revisions,
+            "retention": (
+                None
+                if request.user.profile.is_pro()
+                else settings.FREE_TIER_LIMITS["revision_history"]
+            ),
+        }
+    )
+
+
+@login_required
+@require_http_methods(["GET"])
+def resume_revision_diff(request, pk, revision_id):
+    """
+    Field-level diff between a revision and the resume's current state.
+    GET /resume/<pk>/revisions/<revision_id>/diff/
+    """
+    resume = _get_owned_resume(request, pk)
+    if not resume:
+        return JsonResponse({"error": "Resume not found."}, status=404)
+
+    revision = ResumeRevision.objects.filter(pk=revision_id, resume=resume).first()
+    if not revision:
+        return JsonResponse({"error": "Revision not found."}, status=404)
+
+    changes = diff_service.diff_resume_content(revision.content, resume.content)
+    return JsonResponse(
+        {
+            "revision_id": revision.pk,
+            "created_at_display": revision.created_at.strftime("%d %b %Y, %H:%M"),
+            "source_label": revision.get_source_display(),
+            "tool_name": revision.tool_name,
+            "template_changed": revision.template_selector != resume.template_selector,
+            "template_before": revision.template_selector,
+            "template_after": resume.template_selector,
+            "changes": changes,
+            "summary": diff_service.summarize(changes),
+        }
+    )
+
+
+@login_required
+@require_http_methods(["GET"])
+def resume_latest_diff(request, pk):
+    """
+    Diff of the most recent change — "what did that last edit do?".
+    GET /resume/<pk>/revisions/latest/diff/
+    """
+    resume = _get_owned_resume(request, pk)
+    if not resume:
+        return JsonResponse({"error": "Resume not found."}, status=404)
+
+    revision = revision_service.history(resume).first()
+    if not revision:
+        return JsonResponse(
+            {"revision_id": None, "changes": [], "summary": "No changes yet"}
+        )
+    return resume_revision_diff(request, pk, revision.pk)
+
+
+@login_required
+@require_http_methods(["POST"])
+def revert_resume(request, pk, revision_id):
+    """
+    Roll a resume back to a revision. The pre-restore state is snapshotted
+    first, so the restore itself can be undone.
+    POST /resume/<pk>/revert/<revision_id>/
+    """
+    resume = _get_owned_resume(request, pk)
+    if not resume:
+        return JsonResponse({"error": "Resume not found."}, status=404)
+
+    revision = ResumeRevision.objects.filter(pk=revision_id, resume=resume).first()
+    if not revision:
+        return JsonResponse({"error": "Revision not found."}, status=404)
+
+    undo_point = revision_service.restore(resume, revision)
+    return JsonResponse(
+        {
+            "success": True,
+            "resume_id": resume.pk,
+            "restored_from": revision.pk,
+            "undo_revision_id": undo_point.pk if undo_point else None,
+        }
+    )
 
 
 @login_required

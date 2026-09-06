@@ -194,6 +194,16 @@
                     {{ UI.unsaved_changes }}
                 </span>
                 
+                <!-- History Button (only meaningful for a saved resume) -->
+                {% if resume_id %}
+                <button type="button" id="historyButton" onclick="openHistory()"
+                        title="{{ UI.history_title }}"
+                        class="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-all">
+                    <span class="material-symbols-outlined text-lg">history</span>
+                    <span class="hidden md:inline">{{ UI.history }}</span>
+                </button>
+                {% endif %}
+
                 <!-- Save Button -->
                 <button type="button"
                         id="saveButton"
@@ -1328,6 +1338,24 @@
   </div>
 </div>
 
+<!-- History Modal -->
+<div id="history-modal" class="hidden fixed inset-0 z-[60] items-center justify-center p-4">
+  <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onclick="closeHistory()"></div>
+  <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden">
+    <div class="px-6 py-4 border-b border-slate-200 flex items-start justify-between gap-4">
+      <div>
+        <h3 class="text-lg font-bold text-slate-900">{{ UI.history_title }}</h3>
+        <p class="text-sm text-slate-500 mt-0.5">{{ UI.history_hint }}</p>
+      </div>
+      <button onclick="closeHistory()" class="p-1 rounded hover:bg-slate-100 transition-colors">
+        <span class="material-symbols-outlined text-slate-500">close</span>
+      </button>
+    </div>
+    <div id="history-body" class="flex-1 overflow-y-auto p-6 space-y-3"></div>
+    <div id="history-footer" class="px-6 py-3 border-t border-slate-200 bg-slate-50 text-xs text-slate-500"></div>
+  </div>
+</div>
+
 <script>
 function setRating(value) {
   document.getElementById('feedback-rating').value = value;
@@ -1382,6 +1410,165 @@ async function switchToAgentic() {
     window.location.href = data.redirect_url || '{% url "resume:dashboard" %}';
   } catch (e) {
     btn.disabled = false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Revision history
+// ---------------------------------------------------------------------------
+const HISTORY_LABELS = {
+  empty: `{{ UI.history_empty|escapejs }}`,
+  retention: `{{ UI.history_retention|escapejs }}`,
+  viewChanges: `{{ UI.history_view_changes|escapejs }}`,
+  restore: `{{ UI.history_restore|escapejs }}`,
+  noChanges: `{{ UI.history_no_changes|escapejs }}`,
+  before: `{{ UI.history_before|escapejs }}`,
+  after: `{{ UI.history_after|escapejs }}`,
+  added: `{{ UI.history_added|escapejs }}`,
+  removed: `{{ UI.history_removed|escapejs }}`,
+  changed: `{{ UI.history_changed|escapejs }}`,
+  template: `{{ UI.history_template_change|escapejs }}`,
+  confirmRestore: `{{ UI.history_confirm_restore|escapejs }}`,
+};
+
+function escapeHistoryHtml(value) {
+  const div = document.createElement('div');
+  div.textContent = value == null ? '' : String(value);
+  return div.innerHTML;
+}
+
+function openHistory() {
+  const modal = document.getElementById('history-modal');
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+  loadHistory();
+}
+
+function closeHistory() {
+  const modal = document.getElementById('history-modal');
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeHistory();
+});
+
+async function loadHistory() {
+  const body = document.getElementById('history-body');
+  const footer = document.getElementById('history-footer');
+  body.innerHTML = '<p class="text-slate-400 text-sm text-center py-6">...</p>';
+  try {
+    const res = await fetch(`/resume/${EDITING_RESUME_ID}/revisions/`);
+    const data = await res.json();
+    if (!data.revisions || data.revisions.length === 0) {
+      body.innerHTML = `<p class="text-slate-400 text-sm text-center py-6">${escapeHistoryHtml(HISTORY_LABELS.empty)}</p>`;
+      footer.textContent = '';
+      return;
+    }
+    body.innerHTML = data.revisions.map(rev => {
+      const label = rev.tool_name ? `${rev.source_label} - ${rev.tool_name}` : rev.source_label;
+      const note = rev.summary ? `<p class="text-xs text-slate-500 mt-1">${escapeHistoryHtml(rev.summary)}</p>` : '';
+      return `
+        <div class="border border-slate-200 rounded-xl overflow-hidden">
+          <div class="flex items-center justify-between gap-3 px-4 py-3 bg-white">
+            <div class="min-w-0">
+              <p class="text-sm font-semibold text-slate-800">${escapeHistoryHtml(rev.created_at_display)}</p>
+              <p class="text-xs text-slate-400">${escapeHistoryHtml(label)}</p>
+              ${note}
+            </div>
+            <div class="flex items-center gap-2 flex-shrink-0">
+              <button onclick="toggleDiff(${rev.id})"
+                      class="px-3 py-1.5 text-xs font-semibold text-primary bg-primary/10 rounded-lg hover:bg-primary/20 transition-colors">
+                ${escapeHistoryHtml(HISTORY_LABELS.viewChanges)}
+              </button>
+              <button onclick="restoreRevision(${rev.id})"
+                      class="px-3 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors">
+                ${escapeHistoryHtml(HISTORY_LABELS.restore)}
+              </button>
+            </div>
+          </div>
+          <div id="diff-${rev.id}" class="hidden border-t border-slate-100 bg-slate-50 px-4 py-3"></div>
+        </div>`;
+    }).join('');
+    footer.textContent = data.retention
+      ? HISTORY_LABELS.retention.replace('%(count)s', data.retention)
+      : '';
+  } catch (e) {
+    body.innerHTML = '<p class="text-red-500 text-sm text-center py-6">Error loading history.</p>';
+  }
+}
+
+async function toggleDiff(revisionId) {
+  const panel = document.getElementById(`diff-${revisionId}`);
+  if (!panel.classList.contains('hidden')) {
+    panel.classList.add('hidden');
+    return;
+  }
+  panel.classList.remove('hidden');
+  panel.innerHTML = '<p class="text-slate-400 text-xs">...</p>';
+  try {
+    const res = await fetch(`/resume/${EDITING_RESUME_ID}/revisions/${revisionId}/diff/`);
+    panel.innerHTML = renderDiff(await res.json());
+  } catch (e) {
+    panel.innerHTML = '<p class="text-red-500 text-xs">Error loading changes.</p>';
+  }
+}
+
+function renderDiff(data) {
+  const rows = [];
+  if (data.template_changed) {
+    rows.push(diffRow(HISTORY_LABELS.template, '', 'changed', data.template_before, data.template_after));
+  }
+  (data.changes || []).forEach(c => {
+    rows.push(diffRow([c.section, c.item].filter(Boolean).join(' - '), c.field, c.kind, c.before, c.after));
+  });
+  if (rows.length === 0) {
+    return `<p class="text-slate-400 text-xs">${escapeHistoryHtml(HISTORY_LABELS.noChanges)}</p>`;
+  }
+  return `<p class="text-xs font-semibold text-slate-500 mb-2">${escapeHistoryHtml(data.summary)}</p>` + rows.join('');
+}
+
+function diffRow(heading, field, kind, before, after) {
+  const badge = {
+    added:   ['bg-green-100 text-green-700', HISTORY_LABELS.added],
+    removed: ['bg-red-100 text-red-700',     HISTORY_LABELS.removed],
+    changed: ['bg-amber-100 text-amber-700', HISTORY_LABELS.changed],
+  }[kind] || ['bg-slate-100 text-slate-600', kind];
+
+  const beforeBlock = before
+    ? `<div class="flex-1 min-w-0">
+         <p class="text-[10px] uppercase tracking-wide text-slate-400 mb-0.5">${escapeHistoryHtml(HISTORY_LABELS.before)}</p>
+         <p class="text-xs text-red-700 bg-red-50 rounded px-2 py-1 whitespace-pre-wrap break-words">${escapeHistoryHtml(before)}</p>
+       </div>` : '';
+  const afterBlock = after
+    ? `<div class="flex-1 min-w-0">
+         <p class="text-[10px] uppercase tracking-wide text-slate-400 mb-0.5">${escapeHistoryHtml(HISTORY_LABELS.after)}</p>
+         <p class="text-xs text-green-800 bg-green-50 rounded px-2 py-1 whitespace-pre-wrap break-words">${escapeHistoryHtml(after)}</p>
+       </div>` : '';
+
+  return `
+    <div class="mb-3 last:mb-0">
+      <div class="flex items-center gap-2 mb-1">
+        <span class="text-xs font-semibold text-slate-700">${escapeHistoryHtml(heading)}</span>
+        ${field ? `<span class="text-xs text-slate-400">${escapeHistoryHtml(field)}</span>` : ''}
+        <span class="text-[10px] px-1.5 py-0.5 rounded-full ${badge[0]} font-medium">${escapeHistoryHtml(badge[1])}</span>
+      </div>
+      <div class="flex gap-2">${beforeBlock}${afterBlock}</div>
+    </div>`;
+}
+
+async function restoreRevision(revisionId) {
+  if (!confirm(HISTORY_LABELS.confirmRestore)) return;
+  try {
+    const res = await fetch(`/resume/${EDITING_RESUME_ID}/revert/${revisionId}/`, {
+      method: 'POST',
+      headers: {'X-CSRFToken': getCookie('csrftoken')},
+    });
+    if (!res.ok) throw new Error('revert failed');
+    window.location.reload();   // reload so form fields show the restored content
+  } catch (e) {
+    alert('Error. Please try again.');
   }
 }
 </script>

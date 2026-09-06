@@ -21,7 +21,8 @@ import logging
 from django.conf import settings
 from django.urls import reverse
 
-from resume.models import Resume
+from resume.models import Resume, ResumeRevision
+from resume.services import revision_service
 from resume.openai_engine import send_openai_message
 
 logger = logging.getLogger(__name__)
@@ -715,6 +716,12 @@ Respond ONLY with valid JSON:
 
         validated = self._validate_modify_result(result)
         if validated:
+            revision_service.snapshot(
+                resume,
+                source=ResumeRevision.SOURCE_AGENT,
+                tool_name="modify_resume",
+                summary=validated.get("changes_summary", ""),
+            )
             resume.content = validated["modified_resume"]
             resume.save(update_fields=["content", "updated_at"])
             quick_replies = (
@@ -745,6 +752,12 @@ User request: {user_message}"""
         )
         validated = self._validate_modify_result(retry_result)
         if validated:
+            revision_service.snapshot(
+                resume,
+                source=ResumeRevision.SOURCE_AGENT,
+                tool_name="modify_resume",
+                summary=validated.get("changes_summary", ""),
+            )
             resume.content = validated["modified_resume"]
             resume.save(update_fields=["content", "updated_at"])
             quick_replies = (
@@ -823,6 +836,12 @@ User request: {user_message}"""
                 ],
             }
 
+        revision_service.snapshot(
+            resume,
+            source=ResumeRevision.SOURCE_AGENT,
+            tool_name="switch_template",
+            summary=f"Before switching to {template_key}",
+        )
         resume.template_selector = template_key
         resume.save(update_fields=["template_selector", "updated_at"])
 
@@ -1133,6 +1152,12 @@ Respond in {"Turkish" if lang == "tr" else "English"}."""
             translated = json.loads(result_str)
             if not isinstance(translated, dict) or "user_info" not in translated:
                 raise ValueError("Invalid structure")
+            revision_service.snapshot(
+                resume,
+                source=ResumeRevision.SOURCE_AGENT,
+                tool_name="translate_resume",
+                summary=f"Before translating to {target_language}",
+            )
             resume.content = translated
             resume.save(update_fields=["content", "updated_at"])
             msg = {

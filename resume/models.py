@@ -55,6 +55,46 @@ class Resume(models.Model):
         return f"{self.user.username} - {self.title}"
 
 
+class ResumeRevision(models.Model):
+    """
+    A restore point for a Resume: the state it was in *before* a change.
+
+    Written immediately before any mutation of Resume.content or
+    Resume.template_selector, so restoring a revision undoes exactly one step.
+    Free accounts keep a bounded number of these (see revision_service.prune).
+    """
+
+    SOURCE_MANUAL = "manual"
+    SOURCE_AGENT = "agent"
+    SOURCE_IMPORT = "import"
+    SOURCE_REVERT = "revert"
+    SOURCE_CHOICES = [
+        (SOURCE_MANUAL, "Manual edit"),
+        (SOURCE_AGENT, "Agent"),
+        (SOURCE_IMPORT, "Import"),
+        (SOURCE_REVERT, "Revert"),
+    ]
+
+    resume = models.ForeignKey(
+        Resume, on_delete=models.CASCADE, related_name="revisions"
+    )
+    content = models.JSONField()
+    template_selector = models.CharField(max_length=50, default="faangpath-simple")
+    source = models.CharField(
+        max_length=20, choices=SOURCE_CHOICES, default=SOURCE_MANUAL
+    )
+    tool_name = models.CharField(max_length=50, blank=True, default="")
+    summary = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [models.Index(fields=["resume", "-created_at"])]
+
+    def __str__(self):
+        return f"{self.resume_id} @ {self.created_at:%Y-%m-%d %H:%M} ({self.source})"
+
+
 class Feedback(models.Model):
     RATING_CHOICES = [(i, i) for i in range(1, 6)]
     user = models.ForeignKey(
