@@ -17,6 +17,23 @@
 **veya** `premium_until` gelecekte (satın alınan süre). Süre dolunca hesap
 ücretsiz plana düşer, veri durur.
 
+## Şu anki durum: `coming_soon`
+
+`PAYMENT_STATUS` varsayılan olarak `coming_soon`. Bu haldeyken:
+
+- `/pricing/` planları ve fiyatları **gösteriyor** (Pro'nun ne kadar olacağı
+  yine de yararlı bilgi), üstünde "Pro henüz satışta değil" bandı var
+- Satın alma butonu yerine **"Hazır olunca haber ver"** — tıklayan kişi
+  `Feedback` kaydına `page="pricing"` ile düşüyor. Hangi planın istendiği
+  sağlayıcı ve fiyat kararının en iyi girdisi
+- Elle POST atılsa bile `/checkout/<plan>/` reddediyor
+- `/webhooks/payments/` **503** dönüyor — henüz kimse çağırmıyor, gelen şey
+  varsa da işlem yapılmamalı
+- Admin panelinden `tier="pro"` yaparak erişim vermek çalışmaya devam ediyor.
+  Kapalı olan ödeme, erişim değil
+
+Satışa açmak için: aşağıdaki adımları tamamla, sonra `PAYMENT_STATUS=live`.
+
 ## Yapılması gerekenler (senin yapman gereken kısım)
 
 Hesap açma ve ödeme bilgisi girme işlemlerini ben yapamam — bunlar sende.
@@ -34,6 +51,7 @@ Hesap açma ve ödeme bilgisi girme işlemlerini ben yapamam — bunlar sende.
 5. `.env.prod`'a şunları ekle:
 
 ```
+PAYMENT_STATUS=live
 PAYMENT_PROVIDER=lemonsqueezy
 PAYMENT_WEBHOOK_SECRET=<signing secret>
 CHECKOUT_URL_PRO_3M=<3 aylık checkout link>
@@ -68,3 +86,23 @@ bilmiyor.
 **Iyzico notu:** TR kartları ve TL fiyatlandırma için daha uygun olabilir ama
 merchant of record değil — vergi yükümlülüğü sende kalır. TR nişine
 geçildiğinde tekrar değerlendirilmeli.
+
+## Sağlayıcı ararken
+
+**"Şirketim yok" tek başına engel olmayabilir.** LemonSqueezy ve Paddle gibi
+merchant-of-record sağlayıcılar birçok ülkede şahıs olarak hesap açtırıyor —
+satış argümanlarından biri bu. Ancak ülke uygunluğu sağlayıcıdan sağlayıcıya
+değişiyor; Türkiye'den şahıs başvurusunun kabul edilip edilmediğini başvurmadan
+önce doğrula. Bakılacaklar:
+
+- Şahıs (sole proprietor / individual) başvurusu kabul ediliyor mu
+- Türkiye desteklenen ülkeler listesinde mi
+- Ödeme çıkışı (payout) nasıl geliyor — banka havalesi, Wise, Payoneer
+- Komisyon: merchant of record tipik olarak daha yüksek keser ama KDV/VAT
+  yükümlülüğünü üstlenir
+
+Waitlist kayıtları biriktikçe hangi planın istendiğini görebilirsin:
+
+```bash
+docker compose exec web python manage.py shell -c "from resume.models import Feedback; [print(f.created_at, f.user, f.message) for f in Feedback.objects.filter(page='pricing')]"
+```

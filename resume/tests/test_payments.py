@@ -42,7 +42,7 @@ def sign(body):
 
 @override_settings(
     PREMIUM_PLANS=PLANS,
-    PAYMENTS={"PROVIDER": "lemonsqueezy", "WEBHOOK_SECRET": SECRET},
+    PAYMENTS={"STATUS": "live", "PROVIDER": "lemonsqueezy", "WEBHOOK_SECRET": SECRET},
 )
 class PremiumGrantTest(TestCase):
     def setUp(self):
@@ -84,7 +84,7 @@ class PremiumGrantTest(TestCase):
 
 @override_settings(
     PREMIUM_PLANS=PLANS,
-    PAYMENTS={"PROVIDER": "lemonsqueezy", "WEBHOOK_SECRET": SECRET},
+    PAYMENTS={"STATUS": "live", "PROVIDER": "lemonsqueezy", "WEBHOOK_SECRET": SECRET},
 )
 class RecordPurchaseTest(TestCase):
     def setUp(self):
@@ -130,7 +130,7 @@ class RecordPurchaseTest(TestCase):
 
 @override_settings(
     PREMIUM_PLANS=PLANS,
-    PAYMENTS={"PROVIDER": "lemonsqueezy", "WEBHOOK_SECRET": SECRET},
+    PAYMENTS={"STATUS": "live", "PROVIDER": "lemonsqueezy", "WEBHOOK_SECRET": SECRET},
 )
 class WebhookTest(TestCase):
     def setUp(self):
@@ -206,7 +206,9 @@ class WebhookTest(TestCase):
     def test_get_is_not_allowed(self):
         self.assertEqual(self.client.get(self.url).status_code, 405)
 
-    @override_settings(PAYMENTS={"PROVIDER": "lemonsqueezy", "WEBHOOK_SECRET": ""})
+    @override_settings(
+        PAYMENTS={"STATUS": "live", "PROVIDER": "lemonsqueezy", "WEBHOOK_SECRET": ""}
+    )
     def test_missing_secret_refuses_everything(self):
         body = order_payload(self.user.id)
         resp = self.client.post(self.url, body, content_type="application/json",
@@ -216,7 +218,7 @@ class WebhookTest(TestCase):
 
 @override_settings(
     PREMIUM_PLANS=PLANS,
-    PAYMENTS={"PROVIDER": "lemonsqueezy", "WEBHOOK_SECRET": SECRET},
+    PAYMENTS={"STATUS": "live", "PROVIDER": "lemonsqueezy", "WEBHOOK_SECRET": SECRET},
 )
 class PricingAndCheckoutTest(TestCase):
     def setUp(self):
@@ -262,7 +264,7 @@ class PricingAndCheckoutTest(TestCase):
 
 @override_settings(
     PREMIUM_PLANS=PLANS,
-    PAYMENTS={"PROVIDER": "lemonsqueezy", "WEBHOOK_SECRET": SECRET},
+    PAYMENTS={"STATUS": "live", "PROVIDER": "lemonsqueezy", "WEBHOOK_SECRET": SECRET},
 )
 class PurchasedAccessUnlocksFeaturesTest(TestCase):
     """A bought period must unlock the same things a staff-set tier does."""
@@ -302,3 +304,77 @@ class PurchasedAccessUnlocksFeaturesTest(TestCase):
         self.user.profile.grant_premium(90)
         html = self.client.get(reverse("resume:jobs")).content.decode()
         self.assertNotIn("jobs_pro_title", html)
+
+
+@override_settings(
+    PREMIUM_PLANS=PLANS,
+    PAYMENTS={"STATUS": "coming_soon", "PROVIDER": "lemonsqueezy",
+              "WEBHOOK_SECRET": SECRET},
+)
+class ComingSoonTest(TestCase):
+    """Before a provider is chosen, nothing may try to take money."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("ada", password="x")
+        self.client.force_login(self.user)
+
+    def test_is_live_is_false(self):
+        self.assertFalse(payment_service.is_live())
+
+    def test_pricing_still_shows_the_plans_and_says_it_is_coming(self):
+        html = self.client.get(reverse("resume:pricing")).content.decode()
+        self.assertIn("Pro · 3 months", html)
+        self.assertIn("$9", html)
+        self.assertIn("not on sale yet", html)
+
+    def test_no_buy_button_is_offered(self):
+        html = self.client.get(reverse("resume:pricing")).content.decode()
+        self.assertNotIn(reverse("resume:start_checkout", args=["pro_3m"]), html)
+        self.assertIn(reverse("resume:register_premium_interest"), html)
+
+    def test_a_hand_made_checkout_post_is_refused(self):
+        resp = self.client.post(reverse("resume:start_checkout", args=["pro_3m"]))
+        self.assertRedirects(resp, reverse("resume:pricing"))
+
+    def test_webhook_is_closed(self):
+        body = order_payload(self.user.id)
+        resp = self.client.post(
+            reverse("resume:payment_webhook"), body,
+            content_type="application/json", HTTP_X_SIGNATURE=sign(body),
+        )
+        self.assertEqual(resp.status_code, 503)
+        self.assertFalse(Purchase.objects.exists())
+        self.user.profile.refresh_from_db()
+        self.assertFalse(self.user.profile.is_pro())
+
+    def test_interest_is_recorded_against_the_plan(self):
+        from resume.models import Feedback
+
+        self.client.post(
+            reverse("resume:register_premium_interest"), {"plan": "pro_12m"}
+        )
+        entry = Feedback.objects.get()
+        self.assertEqual(entry.user, self.user)
+        self.assertEqual(entry.page, "pricing")
+        self.assertIn("12 months", entry.message)
+
+    def test_unknown_plan_records_nothing(self):
+        from resume.models import Feedback
+
+        self.client.post(reverse("resume:register_premium_interest"), {"plan": "nope"})
+        self.assertFalse(Feedback.objects.exists())
+
+    def test_interest_requires_post_and_login(self):
+        self.assertEqual(
+            self.client.get(reverse("resume:register_premium_interest")).status_code, 405
+        )
+        self.client.logout()
+        self.assertEqual(
+            self.client.post(reverse("resume:register_premium_interest")).status_code, 302
+        )
+
+    def test_staff_can_still_grant_pro_by_hand(self):
+        """Coming-soon gates payment, not access."""
+        self.user.profile.tier = "pro"
+        self.user.profile.save()
+        self.assertTrue(self.user.profile.is_pro())

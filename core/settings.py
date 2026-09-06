@@ -311,6 +311,10 @@ PREMIUM_PLANS = [
 ]
 
 PAYMENTS = {
+    # "coming_soon" until a provider is chosen: the plans are shown so people
+    # know what Pro will cost, but nothing tries to take money. Flip to "live"
+    # once checkout URLs and a webhook secret are configured.
+    "STATUS": os.environ.get("PAYMENT_STATUS", "coming_soon"),
     "PROVIDER": os.environ.get("PAYMENT_PROVIDER", "lemonsqueezy"),
     "WEBHOOK_SECRET": os.environ.get("PAYMENT_WEBHOOK_SECRET", ""),
 }

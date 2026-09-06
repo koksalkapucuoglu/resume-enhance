@@ -30,7 +30,7 @@ from resume.services.pdf_service import (
     PdfGenerationError,
     resume_pdf_service,
 )
-from resume.models import JobPosting, Resume, ResumeRevision
+from resume.models import Feedback, JobPosting, Resume, ResumeRevision
 from resume.services import diff_service, revision_service
 
 logger = logging.getLogger(__name__)
@@ -1412,12 +1412,43 @@ def pricing_page(request):
         "resume/pricing.html",
         {
             "plans": payment_service.plans(),
+            "payments_live": payment_service.is_live(),
             "is_pro": profile.is_pro(),
             "premium_until": profile.premium_until,
             "days_left": profile.premium_days_left,
             "settings": settings,
         },
     )
+
+
+@login_required
+@require_http_methods(["POST"])
+def register_premium_interest(request):
+    """
+    Note that someone wanted to buy while checkout is still coming.
+
+    Which plan people reach for is the most useful input into choosing a
+    provider and a price, and it costs them nothing to tell us.
+    """
+    from resume.services import payment_service
+
+    plan = payment_service.get_plan(request.POST.get("plan", ""))
+    if plan:
+        Feedback.objects.create(
+            user=request.user,
+            message=f"Waitlist: {plan['name']}",
+            page="pricing",
+        )
+        messages.success(request, str(UI_WAITLIST_THANKS.get(
+            request.user.profile.ui_language, UI_WAITLIST_THANKS["en"]
+        )))
+    return redirect("resume:pricing")
+
+
+UI_WAITLIST_THANKS = {
+    "en": "Noted — we'll email you when Pro goes on sale.",
+    "tr": "Not aldık — Pro satışa çıkınca size e-posta atacağız.",
+}
 
 
 @login_required
@@ -1430,6 +1461,11 @@ def start_checkout(request, plan_code):
     the outcome over the webhook.
     """
     from resume.services import payment_service
+
+    if not payment_service.is_live():
+        # Reachable only by a hand-made POST; the page offers no buy button.
+        messages.error(request, "Checkout is not open yet.")
+        return redirect("resume:pricing")
 
     plan = payment_service.get_plan(plan_code)
     if not plan:
@@ -1457,6 +1493,12 @@ def payment_webhook(request):
     unsigned is refused before the body is read as data.
     """
     from resume.services import payment_service
+
+    if not payment_service.is_live():
+        # No provider is configured to call this yet, so anything arriving here
+        # is not something to act on.
+        logger.warning("Payment webhook received while checkout is not live")
+        return HttpResponse(status=503)
 
     provider = payment_service.get_provider()
     try:

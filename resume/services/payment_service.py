@@ -27,6 +27,17 @@ class PaymentError(Exception):
     """Raised when a webhook cannot be trusted or understood."""
 
 
+def is_live():
+    """
+    Whether money can actually change hands.
+
+    False while a provider is still being chosen. The plans stay visible — what
+    Pro costs is useful information either way — but every path that would
+    start a payment stops here instead.
+    """
+    return settings.PAYMENTS.get("STATUS") == "live"
+
+
 def plans():
     """Purchasable plans, in display order."""
     return settings.PREMIUM_PLANS
