@@ -84,6 +84,10 @@ TRANSLATIONS = {
         "history_template_change": "Template",
         "history_confirm_restore": "Restore this version? The current state is kept, so you can undo it.",
         "history_last_change": "See last change",
+        # Agent approval
+        "approval_title": "This will change your resume. Continue?",
+        "approval_approve": "Yes, go ahead",
+        "approval_decline": "No, cancel",
         "context_resumes_title": "Your Resumes",
         "context_preview_title": "Preview",
         "context_quota_title": "Usage Limits",
@@ -194,6 +198,10 @@ TRANSLATIONS = {
         "history_template_change": "Şablon",
         "history_confirm_restore": "Bu sürüme dönülsün mü? Mevcut hali saklanır, geri alabilirsiniz.",
         "history_last_change": "Son değişikliği gör",
+        # Agent approval
+        "approval_title": "Bu işlem CV'nizi değiştirecek. Devam edilsin mi?",
+        "approval_approve": "Evet, devam et",
+        "approval_decline": "Hayır, iptal",
         "context_resumes_title": "Özgeçmişleriniz",
         "context_preview_title": "Önizleme",
         "context_quota_title": "Kullanım Limitleri",

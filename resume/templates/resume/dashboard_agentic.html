@@ -340,6 +340,11 @@ const PROACTIVE_SUGGESTIONS = {{ proactive_suggestions|default:"[]"|safe }};
 const BADGE_MODERN = "{{ UI.badge_modern }}";
 const BADGE_CLASSIC = "{{ UI.badge_classic }}";
 // Set when arriving via /dashboard/?resume=<pk> (e.g. handed over by the editor)
+const APPROVAL_LABELS = {
+  title:   `{{ UI.approval_title|escapejs }}`,
+  approve: `{{ UI.approval_approve|escapejs }}`,
+  decline: `{{ UI.approval_decline|escapejs }}`,
+};
 const INITIAL_RESUME = {{ initial_resume|default:"null"|safe }};
 const HAS_RESUMES = {{ has_resumes|yesno:"true,false" }};
 
@@ -730,7 +735,7 @@ async function sendMessage(text) {
         if (data.quota_exceeded || data.rate_limited || data.error) {
             appendMessage('bot', data.message || data.error || 'An error occurred.', true);
         } else {
-            handleResponse(data);
+            handleAgentPayload(data);
         }
     } catch (err) {
         hideTyping();
@@ -752,6 +757,95 @@ const quickActionLabels = {
 
 function sendQuickAction(intentLabel) {
     sendMessage(quickActionLabels[intentLabel] || intentLabel);
+}
+
+// ---------------------------------------------------------------------------
+// Agent loop payloads
+//
+// The loop returns the model's prose plus a list of UI effects — each effect is
+// one of the response shapes handleResponse already knows, so a turn that ran
+// three tools renders three panels without any new rendering code.
+// ---------------------------------------------------------------------------
+function handleAgentPayload(data) {
+    if (data.type === 'approval_required') {
+        (data.effects || []).forEach(applyEffect);
+        renderApprovalPrompt(data);
+        return;
+    }
+    if (data.type === 'agent_turn') {
+        (data.effects || []).forEach(applyEffect);
+        if (data.message) appendMessage('bot', data.message, data.is_error);
+        return;
+    }
+    // Builder steps and other legacy single-shot responses
+    handleResponse(data);
+}
+
+function applyEffect(effect) {
+    if (!effect || !effect.type) return;
+    if (effect.type === 'resume_deleted') {
+        if (activeResumeId == effect.resume_id) clearActiveResume();
+        return;
+    }
+    // Effects carry no prose of their own — the model writes the message.
+    handleResponse({...effect, message: ''});
+}
+
+function renderApprovalPrompt(data) {
+    const container = document.getElementById('chat-messages');
+    const div = document.createElement('div');
+    div.className = 'ml-9 mt-1.5 p-3 rounded-xl border border-amber-200 bg-amber-50';
+    div.dataset.approvalToken = data.token;
+    const args = Object.entries(data.arguments || {})
+        .filter(([, v]) => v !== null && v !== '')
+        .map(([k, v]) => `${escHtml(k)}: ${escHtml(String(v))}`)
+        .join(' · ');
+    div.innerHTML = `
+      <p class="text-sm text-amber-900 font-semibold mb-1">${escHtml(APPROVAL_LABELS.title)}</p>
+      <p class="text-xs text-amber-800 mb-2"><span class="font-mono">${escHtml(data.tool)}</span>${args ? ' — ' + args : ''}</p>
+      <div class="flex gap-2">
+        <button class="px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary-hover transition-colors">
+          ${escHtml(APPROVAL_LABELS.approve)}
+        </button>
+        <button class="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50 transition-colors">
+          ${escHtml(APPROVAL_LABELS.decline)}
+        </button>
+      </div>`;
+    const [approveBtn, declineBtn] = div.querySelectorAll('button');
+    approveBtn.addEventListener('click', () => resolveApproval(div, data.token, true));
+    declineBtn.addEventListener('click', () => resolveApproval(div, data.token, false));
+    container.appendChild(div);
+    scrollToBottom();
+}
+
+async function resolveApproval(promptEl, token, approved) {
+    promptEl.querySelectorAll('button').forEach(b => b.disabled = true);
+    promptEl.remove();
+    showTyping();
+    try {
+        const body = {token, approved};
+        if (activeResumeId) body.active_resume_id = activeResumeId;
+        const resp = await fetch('{% url "resume:agent_approve" %}', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN},
+            body: JSON.stringify(body),
+        });
+        const data = await resp.json();
+        hideTyping();
+        if (data.error) {
+            appendMessage('bot', data.error, true);
+            return;
+        }
+        if (data.active_resume_id) {
+            setActiveResume(data.active_resume_id, activeResumeName);
+        }
+        conversationHistory.push({role: 'assistant', content: data.message || '', timestamp: new Date().toISOString()});
+        persistChat();
+        handleAgentPayload(data);
+    } catch (err) {
+        hideTyping();
+        appendMessage('bot', 'Error connecting to assistant. Please try again.', true);
+    }
 }
 
 // ---------------------------------------------------------------------------

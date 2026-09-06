@@ -67,6 +67,45 @@ def send_openai_message(
         return f"Error: {str(e)}"
 
 
+def send_openai_tool_turn(
+    messages: list,
+    tools: list,
+    model: str = "gpt-4o-mini",
+    temperature: float = 0.2,
+    max_tokens: int = 1200,
+):
+    """
+    One turn of a tool-calling loop.
+
+    Unlike send_openai_message this returns the raw assistant message so the
+    caller can read .tool_calls and append it back to the conversation.
+
+    Returns:
+        (message, usage) on success, or (None, error_string) on failure. The
+        caller decides how to surface the error — never raises.
+    """
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            tools=tools,
+            tool_choice="auto",
+            temperature=temperature,
+            max_tokens=max_tokens,
+            timeout=90,
+        )
+        usage = getattr(response, "usage", None)
+        if usage:
+            logger.info("OpenAI tool turn usage: %s", usage)
+        return response.choices[0].message, usage
+    except openai.RateLimitError as e:
+        return None, f"OpenAI API request exceeded rate limit: {e}"
+    except openai.APIError as e:
+        return None, f"OpenAI API returned an API Error: {e}"
+    except Exception as e:
+        return None, f"Error: {str(e)}"
+
+
 # TODO Convert class based structure
 def enhance_resume_experience(user_message: str, language: str = None):
     """
