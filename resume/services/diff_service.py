@@ -56,6 +56,44 @@ _LIST_SECTIONS = {
 }
 
 
+# Wording for rendering a diff. Kept next to the diff itself so the agentic
+# panel (conversation language) and the editor's history modal (interface
+# language) render the same thing from one source.
+DIFF_COPY = {
+    "en": {
+        "title": "Change history",
+        "see_last_change": "See last change",
+        "restore": "Restore",
+        "restored": "Restored.",
+        "no_changes": "No changes",
+        "before": "Before",
+        "after": "After",
+        "added": "added",
+        "removed": "removed",
+        "changed": "changed",
+        "template": "Template",
+    },
+    "tr": {
+        "title": "Değişiklik geçmişi",
+        "see_last_change": "Son değişikliği gör",
+        "restore": "Geri yükle",
+        "restored": "Geri yüklendi.",
+        "no_changes": "Değişiklik yok",
+        "before": "Önce",
+        "after": "Sonra",
+        "added": "eklendi",
+        "removed": "kaldırıldı",
+        "changed": "değişti",
+        "template": "Şablon",
+    },
+}
+
+
+def copy(lang):
+    """Localized labels for rendering a diff."""
+    return DIFF_COPY.get(lang, DIFF_COPY["en"])
+
+
 def _as_text(value):
     """Render any resume value as comparable, displayable text."""
     if value is None:

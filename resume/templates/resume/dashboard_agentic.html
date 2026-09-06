@@ -210,7 +210,7 @@
                 <div class="px-4 py-3 border-b border-slate-200 bg-white flex items-center justify-between gap-2">
                     <div class="flex items-center gap-2 min-w-0">
                         <span class="material-symbols-outlined text-slate-500">difference</span>
-                        <h3 class="font-semibold text-slate-700 text-sm truncate">{{ UI.history_title }}</h3>
+                        <h3 id="context-diff-title" class="font-semibold text-slate-700 text-sm truncate">{{ UI.history_title }}</h3>
                     </div>
                     <button onclick="closeDiffPanel()" class="p-1 rounded hover:bg-slate-100 transition-colors">
                         <span class="material-symbols-outlined text-slate-400 !text-[18px]">close</span>
@@ -451,20 +451,23 @@ document.addEventListener('DOMContentLoaded', () => {
 // ---------------------------------------------------------------------------
 // Change review — inspect and undo what the agent just did
 // ---------------------------------------------------------------------------
-const DIFF_LABELS = {
-  viewChanges: `{{ UI.history_view_changes|escapejs }}`,
+// Diff wording comes from the server so it follows the conversation language,
+// the same way confirmations and progress do. Seeded with the interface
+// language for the first render, then replaced by each agent turn.
+let DIFF_LABELS = {
+  see_last_change: `{{ UI.history_last_change|escapejs }}`,
   restore: `{{ UI.history_restore|escapejs }}`,
-  noChanges: `{{ UI.history_no_changes|escapejs }}`,
+  restored: `{{ UI.history_restored|escapejs }}`,
+  no_changes: `{{ UI.history_no_changes|escapejs }}`,
   before: `{{ UI.history_before|escapejs }}`,
   after: `{{ UI.history_after|escapejs }}`,
   added: `{{ UI.history_added|escapejs }}`,
   removed: `{{ UI.history_removed|escapejs }}`,
   changed: `{{ UI.history_changed|escapejs }}`,
   template: `{{ UI.history_template_change|escapejs }}`,
-  lastChange: `{{ UI.history_last_change|escapejs }}`,
-  restored: `{{ UI.history_restored|escapejs }}`,
-  historyTitle: `{{ UI.history_title|escapejs }}`,
+  title: `{{ UI.history_title|escapejs }}`,
 };
+let conversationLang = "{{ ui_lang }}";
 
 // Inline "see what changed / undo" affordance under the bot's reply
 function appendChangeReviewBar(resumeId) {
@@ -475,7 +478,7 @@ function appendChangeReviewBar(resumeId) {
   div.innerHTML = `
     <button onclick="showLatestDiff(${resumeId})"
             class="px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-medium hover:bg-slate-200 transition-colors flex items-center gap-1">
-      <span class="material-symbols-outlined !text-[13px]">difference</span>${escHtml(DIFF_LABELS.lastChange)}
+      <span class="material-symbols-outlined !text-[13px]">difference</span>${escHtml(DIFF_LABELS.see_last_change)}
     </button>
     <button onclick="undoLatestChange(${resumeId})"
             class="px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-medium hover:bg-slate-200 transition-colors flex items-center gap-1">
@@ -492,14 +495,16 @@ async function showLatestDiff(resumeId) {
   panel.classList.add('flex');
   if (mobileActiveTab === 'chat') showContextBadge();
 
+  document.getElementById('context-diff-title').textContent = DIFF_LABELS.title;
   const body = document.getElementById('context-diff-body');
   const actions = document.getElementById('context-diff-actions');
   body.innerHTML = '<p class="text-slate-400 text-sm text-center py-6">...</p>';
   actions.classList.add('hidden');
 
   try {
-    const res = await fetch(`/resume/${resumeId}/revisions/latest/diff/`);
+    const res = await fetch(`/resume/${resumeId}/revisions/latest/diff/?lang=${encodeURIComponent(conversationLang)}`);
     const data = await res.json();
+    if (data.copy) DIFF_LABELS = data.copy;
     body.innerHTML = renderDiffPanel(data);
     if (data.revision_id) {
       actions.classList.remove('hidden');
@@ -528,7 +533,7 @@ function renderDiffPanel(data) {
     rows.push(diffPanelRow([c.section, c.item].filter(Boolean).join(' - '), c.field, c.kind, c.before, c.after));
   });
   if (rows.length === 0) {
-    return `<p class="text-slate-400 text-sm text-center py-6">${escHtml(DIFF_LABELS.noChanges)}</p>`;
+    return `<p class="text-slate-400 text-sm text-center py-6">${escHtml(DIFF_LABELS.no_changes)}</p>`;
   }
   return `<p class="text-xs font-semibold text-slate-500 mb-3">${escHtml(data.summary)}</p>` + rows.join('');
 }
@@ -564,10 +569,11 @@ function diffPanelRow(heading, field, kind, before, after) {
 
 async function undoLatestChange(resumeId) {
   try {
-    const res = await fetch(`/resume/${resumeId}/revisions/latest/diff/`);
+    const res = await fetch(`/resume/${resumeId}/revisions/latest/diff/?lang=${encodeURIComponent(conversationLang)}`);
     const data = await res.json();
+    if (data.copy) DIFF_LABELS = data.copy;
     if (!data.revision_id) {
-      appendMessage('bot', DIFF_LABELS.noChanges);
+      appendMessage('bot', DIFF_LABELS.no_changes);
       return;
     }
     restoreRevisionAgentic(resumeId, data.revision_id);
@@ -885,6 +891,8 @@ function hideStepIndicator() {
 // three tools renders three panels without any new rendering code.
 // ---------------------------------------------------------------------------
 function handleAgentPayload(data, opts = {}) {
+    if (data.lang) conversationLang = data.lang;
+    if (data.diff_copy) DIFF_LABELS = data.diff_copy;
     // Streamed turns render effects as they arrive; the done frame repeats them
     // so the buffered path stays usable, but replaying would duplicate panels.
     const effects = opts.alreadyRendered ? [] : (data.effects || []);
