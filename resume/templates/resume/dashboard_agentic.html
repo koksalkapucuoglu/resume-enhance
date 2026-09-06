@@ -205,6 +205,21 @@
                 </div>
             </div>
 
+            <!-- Change Review Panel -->
+            <div id="context-diff" class="hidden flex-col flex-1 overflow-hidden">
+                <div class="px-4 py-3 border-b border-slate-200 bg-white flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="material-symbols-outlined text-slate-500">difference</span>
+                        <h3 class="font-semibold text-slate-700 text-sm truncate">{{ UI.history_title }}</h3>
+                    </div>
+                    <button onclick="closeDiffPanel()" class="p-1 rounded hover:bg-slate-100 transition-colors">
+                        <span class="material-symbols-outlined text-slate-400 !text-[18px]">close</span>
+                    </button>
+                </div>
+                <div id="context-diff-body" class="flex-1 overflow-y-auto p-4 chat-scroll"></div>
+                <div id="context-diff-actions" class="px-4 py-3 border-t border-slate-200 bg-white hidden"></div>
+            </div>
+
             <!-- Resume List Panel -->
             <div id="context-resume-list" class="hidden flex-col flex-1 overflow-hidden">
                 <div class="px-4 py-3 border-b border-slate-200 bg-white flex items-center gap-2">
@@ -423,6 +438,149 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Change review — inspect and undo what the agent just did
+// ---------------------------------------------------------------------------
+const DIFF_LABELS = {
+  viewChanges: `{{ UI.history_view_changes|escapejs }}`,
+  restore: `{{ UI.history_restore|escapejs }}`,
+  noChanges: `{{ UI.history_no_changes|escapejs }}`,
+  before: `{{ UI.history_before|escapejs }}`,
+  after: `{{ UI.history_after|escapejs }}`,
+  added: `{{ UI.history_added|escapejs }}`,
+  removed: `{{ UI.history_removed|escapejs }}`,
+  changed: `{{ UI.history_changed|escapejs }}`,
+  template: `{{ UI.history_template_change|escapejs }}`,
+  lastChange: `{{ UI.history_last_change|escapejs }}`,
+  restored: `{{ UI.history_restored|escapejs }}`,
+  historyTitle: `{{ UI.history_title|escapejs }}`,
+};
+
+// Inline "see what changed / undo" affordance under the bot's reply
+function appendChangeReviewBar(resumeId) {
+  if (!resumeId) return;
+  const container = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.className = 'flex flex-wrap gap-1.5 ml-9 mt-1.5';
+  div.innerHTML = `
+    <button onclick="showLatestDiff(${resumeId})"
+            class="px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-medium hover:bg-slate-200 transition-colors flex items-center gap-1">
+      <span class="material-symbols-outlined !text-[13px]">difference</span>${escHtml(DIFF_LABELS.lastChange)}
+    </button>
+    <button onclick="undoLatestChange(${resumeId})"
+            class="px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-medium hover:bg-slate-200 transition-colors flex items-center gap-1">
+      <span class="material-symbols-outlined !text-[13px]">undo</span>${escHtml(DIFF_LABELS.restore)}
+    </button>`;
+  container.appendChild(div);
+  scrollToBottom();
+}
+
+async function showLatestDiff(resumeId) {
+  hideAllContextPanels();
+  const panel = document.getElementById('context-diff');
+  panel.classList.remove('hidden');
+  panel.classList.add('flex');
+  if (mobileActiveTab === 'chat') showContextBadge();
+
+  const body = document.getElementById('context-diff-body');
+  const actions = document.getElementById('context-diff-actions');
+  body.innerHTML = '<p class="text-slate-400 text-sm text-center py-6">...</p>';
+  actions.classList.add('hidden');
+
+  try {
+    const res = await fetch(`/resume/${resumeId}/revisions/latest/diff/`);
+    const data = await res.json();
+    body.innerHTML = renderDiffPanel(data);
+    if (data.revision_id) {
+      actions.classList.remove('hidden');
+      actions.innerHTML = `
+        <button onclick="restoreRevisionAgentic(${resumeId}, ${data.revision_id})"
+                class="w-full px-4 py-2 rounded-lg bg-slate-100 text-slate-700 text-sm font-semibold hover:bg-slate-200 transition-colors flex items-center justify-center gap-1.5">
+          <span class="material-symbols-outlined !text-[16px]">undo</span>${escHtml(DIFF_LABELS.restore)}
+        </button>`;
+    }
+  } catch (e) {
+    body.innerHTML = '<p class="text-red-500 text-sm text-center py-6">Error loading changes.</p>';
+  }
+}
+
+function closeDiffPanel() {
+  if (activeResumeId) loadPreviewPanel(activeResumeId, activeResumeName);
+  else showContextDefault();
+}
+
+function renderDiffPanel(data) {
+  const rows = [];
+  if (data.template_changed) {
+    rows.push(diffPanelRow(DIFF_LABELS.template, '', 'changed', data.template_before, data.template_after));
+  }
+  (data.changes || []).forEach(c => {
+    rows.push(diffPanelRow([c.section, c.item].filter(Boolean).join(' - '), c.field, c.kind, c.before, c.after));
+  });
+  if (rows.length === 0) {
+    return `<p class="text-slate-400 text-sm text-center py-6">${escHtml(DIFF_LABELS.noChanges)}</p>`;
+  }
+  return `<p class="text-xs font-semibold text-slate-500 mb-3">${escHtml(data.summary)}</p>` + rows.join('');
+}
+
+function diffPanelRow(heading, field, kind, before, after) {
+  const badge = {
+    added:   ['bg-green-100 text-green-700', DIFF_LABELS.added],
+    removed: ['bg-red-100 text-red-700',     DIFF_LABELS.removed],
+    changed: ['bg-amber-100 text-amber-700', DIFF_LABELS.changed],
+  }[kind] || ['bg-slate-100 text-slate-600', kind];
+
+  const beforeBlock = before
+    ? `<div>
+         <p class="text-[10px] uppercase tracking-wide text-slate-400 mb-0.5">${escHtml(DIFF_LABELS.before)}</p>
+         <p class="text-xs text-red-700 bg-red-50 rounded px-2 py-1 whitespace-pre-wrap break-words">${escHtml(before)}</p>
+       </div>` : '';
+  const afterBlock = after
+    ? `<div class="mt-1">
+         <p class="text-[10px] uppercase tracking-wide text-slate-400 mb-0.5">${escHtml(DIFF_LABELS.after)}</p>
+         <p class="text-xs text-green-800 bg-green-50 rounded px-2 py-1 whitespace-pre-wrap break-words">${escHtml(after)}</p>
+       </div>` : '';
+
+  return `
+    <div class="mb-3 last:mb-0 bg-white border border-slate-200 rounded-lg p-3">
+      <div class="flex items-center gap-2 mb-1.5 flex-wrap">
+        <span class="text-xs font-semibold text-slate-700">${escHtml(heading)}</span>
+        ${field ? `<span class="text-xs text-slate-400">${escHtml(field)}</span>` : ''}
+        <span class="text-[10px] px-1.5 py-0.5 rounded-full ${badge[0]} font-medium">${escHtml(badge[1])}</span>
+      </div>
+      ${beforeBlock}${afterBlock}
+    </div>`;
+}
+
+async function undoLatestChange(resumeId) {
+  try {
+    const res = await fetch(`/resume/${resumeId}/revisions/latest/diff/`);
+    const data = await res.json();
+    if (!data.revision_id) {
+      appendMessage('bot', DIFF_LABELS.noChanges);
+      return;
+    }
+    restoreRevisionAgentic(resumeId, data.revision_id);
+  } catch (e) {
+    appendMessage('bot', 'Error. Please try again.', true);
+  }
+}
+
+async function restoreRevisionAgentic(resumeId, revisionId) {
+  try {
+    const res = await fetch(`/resume/${resumeId}/revert/${revisionId}/`, {
+      method: 'POST',
+      headers: {'X-CSRFToken': CSRF_TOKEN},
+    });
+    if (!res.ok) throw new Error('revert failed');
+    appendMessage('bot', DIFF_LABELS.restored);
+    loadPreviewPanel(resumeId, activeResumeName);
+    appendChangeReviewBar(resumeId);   // the restore is itself undoable
+  } catch (e) {
+    appendMessage('bot', 'Error. Please try again.', true);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Mode toggle
 // ---------------------------------------------------------------------------
 async function switchMode(mode) {
@@ -628,6 +786,7 @@ function handleResponse(data) {
             appendMessage('bot', msg);
             setActiveResume(data.resume_id, data.resume_name || activeResumeName);
             refreshPreviewAfterModify(data.resume_id, data.resume_name);
+            appendChangeReviewBar(data.resume_id);
             showContextBadge();
             break;
 
@@ -635,6 +794,7 @@ function handleResponse(data) {
             appendMessage('bot', msg);
             setActiveResume(data.resume_id, data.resume_name || activeResumeName);
             refreshPreviewAfterModify(data.resume_id, data.resume_name);
+            appendChangeReviewBar(data.resume_id);
             showContextBadge();
             break;
 
@@ -726,7 +886,7 @@ function showContextDefault() {
 
 function hideAllContextPanels() {
     ['context-default','context-empty','context-resume-list','context-preview',
-     'context-quota','context-confirm','context-analysis'].forEach(id => {
+     'context-quota','context-confirm','context-analysis','context-diff'].forEach(id => {
         const el = document.getElementById(id);
         el.classList.add('hidden');
         el.classList.remove('flex');

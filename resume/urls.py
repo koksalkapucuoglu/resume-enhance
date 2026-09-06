@@ -27,6 +27,26 @@ urlpatterns = [
         views.preview_saved_resume,
         name="preview_saved_resume",
     ),
+    path(
+        "resume/<int:pk>/revisions/",
+        views.resume_revisions,
+        name="resume_revisions",
+    ),
+    path(
+        "resume/<int:pk>/revisions/latest/diff/",
+        views.resume_latest_diff,
+        name="resume_latest_diff",
+    ),
+    path(
+        "resume/<int:pk>/revisions/<int:revision_id>/diff/",
+        views.resume_revision_diff,
+        name="resume_revision_diff",
+    ),
+    path(
+        "resume/<int:pk>/revert/<int:revision_id>/",
+        views.revert_resume,
+        name="revert_resume",
+    ),
     path("agent/chat/", views.agent_chat, name="agent_chat"),
     path("agent/toggle-mode/", views.toggle_agent_mode, name="toggle_agent_mode"),
     path("agent/toggle-language/", views.toggle_ui_language, name="toggle_ui_language"),

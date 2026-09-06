@@ -2,7 +2,7 @@
 
 > **Canlı doküman.** Her faz bitiminde "Kullanıcı Ne Yapabiliyor" bölümü güncellenir.
 > Karar gerekçeleri: fiyatlandırma → tek seferlik ödeme, paywall iş akışında (bkz. `PRODUCT.md`).
-> Son güncelleme: 2026-09-06 — **Faz 1 tamamlandı.**
+> Son güncelleme: 2026-09-06 — **Faz 1 ve Faz 2 tamamlandı.**
 
 ---
 
@@ -11,7 +11,7 @@
 | # | Faz | Amaç | Ücret ilişkisi |
 |---|---|---|---|
 | 1 | ✅ Navigasyon & mod bütünlüğü | İki modu tek ürün gibi hissettirmek | — |
-| 2 | Revizyon: diff / geri alma | AI'ya güven | **Free** |
+| 2 | ✅ Revizyon: diff / geri alma | AI'ya güven | **Free** |
 | 3 | Agent loop | Çok adımlı işi tek mesajda bitirmek | — (retention) |
 | 4 | JD matching + ilan↔CV mapping | İş arama iş akışı | **Paywall burada** |
 | 5 | Tek seferlik ödeme | Gelir | — |
@@ -62,16 +62,23 @@ class ResumeRevision(models.Model):
 ```
 
 **İş kalemleri:**
-- [ ] `ResumeRevision` modeli + migration
-- [ ] Yazma noktalarına snapshot: `_exec_modify_resume`, `_exec_translate_resume`, `_exec_switch_template`, `enhance_experience`, `enhance_project`, `ResumeFormView.post`
-- [ ] `services/diff_service.py` — iki resume JSON'u → alan bazlı önce/sonra farkı
-- [ ] Revizyon geçmişi UI: agentic'te chat mesajı altında "Değişiklikleri gör", standartta editör header'ında "Geçmiş"
-- [ ] `POST /resume/<pk>/revert/<rev_id>/` — geri alma (kendisi de revizyon yazar, geri almanın geri alması çalışsın)
-- [ ] Saklama: free son 5 revizyon, premium sınırsız *(değer premium'da ama özellik free)*
+- [x] `ResumeRevision` modeli + migration `0010_resumerevision` (content **ve** `template_selector` snapshot'lanır)
+- [x] `services/revision_service.py` — `snapshot()` / `prune()` / `restore()` / `history()`
+- [x] `services/diff_service.py` — alan bazlı önce/sonra; liste bölümleri konuma göre değil **kimliğe göre** eşleşiyor (sıralama değişikliği fark sayılmıyor)
+- [x] Beş yazma noktasına snapshot: `ResumeFormView.post` (manual), `modify_resume` ×2 (ilk deneme + retry), `translate_resume`, `switch_template`
+- [x] 4 endpoint: `revisions/`, `revisions/<id>/diff/`, `revisions/latest/diff/`, `revert/<id>/`
+- [x] Standart mod: editör header'ında "Geçmiş" → modal, her revizyonda "Değişiklikleri gör" (açılır diff) + "Geri yükle"
+- [x] Agentic mod: modify/switch_template yanıtının altında "Son değişikliği gör" + "Geri yükle" çipleri; sağ panelde diff görünümü
+- [x] Geri alma kendisi de revizyon yazıyor → geri almanın geri alınması çalışıyor
+- [x] Saklama: `FREE_TIER_LIMITS["revision_history"] = 5`, Pro sınırsız
+
+**Not:** `enhance_experience` / `enhance_project` DB'ye yazmıyor — sadece HTMX fragment döndürüyor, içerik ancak form kaydedilince kalıcı oluyor. Bu yüzden snapshot manuel kayıt yolunda alınıyor, enhance view'larında değil.
+
+**Doğrulama:** 105 test geçiyor (26'sı yeni: `test_revisions.py` — servis, diff, endpoint, IDOR, retention). Tarayıcıda uçtan uca: editörde geçmiş modalı → diff ("1 added, 2 changed", Full Name / Skills / Experience Description satırları) → Geri yükle → form geri yüklenmiş içerikle açılıyor; agentic panelde aynı diff + geri yükleme, sonrasında yeni geri-alma noktası oluşuyor.
 
 **Dokunulacak:** `resume/models.py`, yeni migration, `resume/services/diff_service.py`, `agent_service.py`, `views.py`, iki dashboard + editör template'i
 
-### ✅ Faz 2 sonunda kullanıcı ne yapabiliyor
+### ✅ Faz 2 sonunda kullanıcı ne yapabiliyor *(canlı — 2026-09-06)*
 - Faz 1'in tamamı, **artı:**
 - Her AI değişikliğinden sonra **tam olarak neyin değiştiğini** alan bazlı önce/sonra olarak görür
 - Beğenmediği değişikliği **tek tıkla geri alır** — hem agentic hem standart modda
@@ -196,6 +203,6 @@ class JobPosting(models.Model):
 | Konu | Seçenekler | Tavsiyem |
 |---|---|---|
 | ~~Free resume limiti~~ | ~~3 / 5~~ | ✅ **3** seçildi (2026-09-06) |
-| Revizyon saklama (free) | son 3 / 5 / süresiz | **Son 5.** Geri alma güven özelliği, kısmasak da olur ama sınırsız depolama bedava olmamalı. |
+| ~~Revizyon saklama (free)~~ | ~~son 3 / 5 / süresiz~~ | ✅ **Son 5** (`FREE_TIER_LIMITS["revision_history"]`) |
 | ~~`ui_mode` mevcut kullanıcılar~~ | ~~hepsi agentic'e / açık seçim korunsun~~ | ✅ Açık seçim korunuyor; `null` = seçilmemiş → agentic |
 | Premium süresi | 1 ay / 3 ay / 6 ay | **3 ay.** İş arama döngüsünün ortalama uzunluğu. |
