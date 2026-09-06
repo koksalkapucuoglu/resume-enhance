@@ -718,30 +718,23 @@ async function sendMessage(text) {
         if (builderState) body.builder_state = builderState;
         if (activeResumeId) body.active_resume_id = activeResumeId;
 
-        const resp = await fetch('{% url "resume:agent_chat" %}', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN},
-            body: JSON.stringify(body),
-        });
-        const data = await resp.json();
+        const data = await runAgentStream('{% url "resume:agent_chat_stream" %}', body);
 
         const now = new Date().toISOString();
         conversationHistory.push({role: 'user', content: msg, timestamp: now});
         conversationHistory.push({role: 'assistant', content: data.message || '', timestamp: now});
         persistChat();
 
-        // Sync active resume from response
         if (data.active_resume_id) {
             setActiveResume(data.active_resume_id, data.resume_name || activeResumeName);
         }
 
         hideTyping();
 
-        // Handle quota / rate limit / error
         if (data.quota_exceeded || data.rate_limited || data.error) {
             appendMessage('bot', data.message || data.error || 'An error occurred.', true);
         } else {
-            handleAgentPayload(data);
+            handleAgentPayload(data, {alreadyRendered: true, streamedText: data.streamedText});
         }
     } catch (err) {
         hideTyping();
@@ -766,28 +759,150 @@ function sendQuickAction(intentLabel) {
 }
 
 // ---------------------------------------------------------------------------
+// Streaming transport
+//
+// The loop reports progress as it goes — which tool it is running, each panel
+// as it is produced, and the reply a token at a time — so a multi-step turn
+// shows its work instead of sitting behind a spinner.
+// ---------------------------------------------------------------------------
+let streamedBubble = null;
+
+async function runAgentStream(url, body) {
+    const resp = await fetch(url, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN},
+        body: JSON.stringify(body),
+    });
+
+    // Quota, rate limit and validation failures still answer with plain JSON
+    const contentType = resp.headers.get('Content-Type') || '';
+    if (!contentType.includes('text/event-stream')) {
+        return await resp.json();
+    }
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let done = null;
+    streamedBubble = null;
+
+    while (true) {
+        const {value, done: finished} = await reader.read();
+        if (finished) break;
+        buffer += decoder.decode(value, {stream: true});
+
+        let split;
+        while ((split = buffer.indexOf('\n\n')) !== -1) {
+            const frame = buffer.slice(0, split);
+            buffer = buffer.slice(split + 2);
+            const parsed = parseSseFrame(frame);
+            if (!parsed) continue;
+            if (parsed.event === 'done') {
+                done = parsed.data;
+            } else {
+                applyStreamEvent(parsed);
+            }
+        }
+    }
+
+    const streamedText = streamedBubble !== null;
+    streamedBubble = null;
+    if (done) done.streamedText = streamedText;
+    return done || {type: 'agent_turn', message: '', effects: []};
+}
+
+function parseSseFrame(frame) {
+    let event = 'message';
+    const dataLines = [];
+    for (const line of frame.split('\n')) {
+        if (line.startsWith('event:')) event = line.slice(6).trim();
+        else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+    }
+    if (!dataLines.length) return null;
+    try {
+        return {event, data: JSON.parse(dataLines.join('\n'))};
+    } catch (e) {
+        return null;
+    }
+}
+
+function applyStreamEvent(parsed) {
+    if (parsed.event === 'step') {
+        showStepIndicator(parsed.data.label);
+    } else if (parsed.event === 'effect') {
+        hideStepIndicator();
+        applyEffect(parsed.data);
+    } else if (parsed.event === 'token') {
+        hideTyping();
+        hideStepIndicator();
+        appendStreamedToken(parsed.data.text);
+    }
+}
+
+function appendStreamedToken(text) {
+    if (!streamedBubble) {
+        const container = document.getElementById('chat-messages');
+        const wrapper = document.createElement('div');
+        wrapper.className = 'flex items-start gap-2';
+        wrapper.innerHTML = `
+            <div class="w-7 h-7 rounded-full bg-primary flex items-center justify-center flex-shrink-0 mt-0.5">
+                <span class="material-symbols-outlined !text-[14px] text-white">auto_awesome</span>
+            </div>
+            <div class="max-w-[85%]">
+                <div class="bubble bubble-bot"></div>
+            </div>`;
+        container.appendChild(wrapper);
+        streamedBubble = {el: wrapper.querySelector('.bubble'), text: ''};
+    }
+    streamedBubble.text += text;
+    streamedBubble.el.innerHTML = formatMessage(streamedBubble.text);
+    scrollToBottom();
+}
+
+function showStepIndicator(label) {
+    let el = document.getElementById('step-indicator');
+    if (!el) {
+        const container = document.getElementById('chat-messages');
+        el = document.createElement('div');
+        el.id = 'step-indicator';
+        el.className = 'ml-9 mt-1 flex items-center gap-2 text-xs text-slate-400';
+        container.appendChild(el);
+    }
+    el.innerHTML = `<span class="material-symbols-outlined !text-[14px] animate-spin">progress_activity</span>${escHtml(label)}`;
+    scrollToBottom();
+}
+
+function hideStepIndicator() {
+    const el = document.getElementById('step-indicator');
+    if (el) el.remove();
+}
+
+// ---------------------------------------------------------------------------
 // Agent loop payloads
 //
 // The loop returns the model's prose plus a list of UI effects — each effect is
 // one of the response shapes handleResponse already knows, so a turn that ran
 // three tools renders three panels without any new rendering code.
 // ---------------------------------------------------------------------------
-function handleAgentPayload(data) {
+function handleAgentPayload(data, opts = {}) {
+    // Streamed turns render effects as they arrive; the done frame repeats them
+    // so the buffered path stays usable, but replaying would duplicate panels.
+    const effects = opts.alreadyRendered ? [] : (data.effects || []);
+    const allEffects = data.effects || [];
+
     if (data.type === 'approval_required') {
-        (data.effects || []).forEach(applyEffect);
+        effects.forEach(applyEffect);
         renderApprovalPrompt(data);
         return;
     }
     if (data.type === 'agent_turn') {
-        const effects = data.effects || [];
-        const interactive = effects.some(e => e && INTERACTIVE_EFFECTS.has(e.type));
+        const interactive = allEffects.some(e => e && INTERACTIVE_EFFECTS.has(e.type));
         effects.forEach(applyEffect);
-        if (data.message && !interactive) {
+        if (data.message && !interactive && !opts.streamedText) {
             appendMessage('bot', data.message, data.is_error);
         }
         return;
     }
-    // Builder steps and other legacy single-shot responses
     handleResponse(data);
 }
 
@@ -843,12 +958,7 @@ async function resolveApproval(promptEl, token, approved) {
     try {
         const body = {token, approved};
         if (activeResumeId) body.active_resume_id = activeResumeId;
-        const resp = await fetch('{% url "resume:agent_approve" %}', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN},
-            body: JSON.stringify(body),
-        });
-        const data = await resp.json();
+        const data = await runAgentStream('{% url "resume:agent_approve_stream" %}', body);
         hideTyping();
         if (data.error) {
             appendMessage('bot', data.error, true);
@@ -859,7 +969,7 @@ async function resolveApproval(promptEl, token, approved) {
         }
         conversationHistory.push({role: 'assistant', content: data.message || '', timestamp: new Date().toISOString()});
         persistChat();
-        handleAgentPayload(data);
+        handleAgentPayload(data, {alreadyRendered: true, streamedText: data.streamedText});
     } catch (err) {
         hideTyping();
         appendMessage('bot', 'Error connecting to assistant. Please try again.', true);

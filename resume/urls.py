@@ -48,6 +48,12 @@ urlpatterns = [
         name="revert_resume",
     ),
     path("agent/chat/", views.agent_chat, name="agent_chat"),
+    path("agent/chat/stream/", views.agent_chat_stream, name="agent_chat_stream"),
+    path(
+        "agent/approve/stream/",
+        views.agent_approve_stream,
+        name="agent_approve_stream",
+    ),
     path("agent/approve/", views.agent_approve, name="agent_approve"),
     path(
         "agent/builder/start/",

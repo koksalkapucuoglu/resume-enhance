@@ -423,3 +423,368 @@ class BuilderEntryTest(TestCase):
             content_type="application/json",
         )
         self.assertEqual(resp.status_code, 302)
+
+
+class StreamingTest(TestCase):
+    """The SSE path must carry the same outcome as the buffered one."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("ada", password="x")
+        self.resume = Resume.objects.create(user=self.user, title="CV", content=content())
+        self.client.force_login(self.user)
+        self.ctx = {
+            "lang": "en",
+            "active_resume": self.resume,
+            "resumes": [],
+            "quota": {},
+        }
+
+    @staticmethod
+    def _stream(*turns):
+        """Replay one scripted stream per model turn."""
+        remaining = list(turns)
+
+        def fake(messages, tools, **kwargs):
+            yield from remaining.pop(0)
+
+        return fake
+
+    @staticmethod
+    def _frames(body):
+        """Parse an SSE body into (event, payload) pairs."""
+        out = []
+        for frame in body.strip().split("\n\n"):
+            event, data = "message", []
+            for line in frame.split("\n"):
+                if line.startswith("event:"):
+                    event = line[6:].strip()
+                elif line.startswith("data:"):
+                    data.append(line[5:].strip())
+            if data:
+                out.append((event, json.loads("\n".join(data))))
+        return out
+
+    def test_tokens_then_done(self):
+        from resume.services import agent_loop
+
+        turn = [("token", "Hel"), ("token", "lo"), ("message", {"content": "Hello", "tool_calls": []}, USAGE)]
+        with patch(
+            "resume.services.agent_loop.stream_openai_tool_turn",
+            side_effect=self._stream(turn),
+        ):
+            events = list(agent_loop.stream_turn(self.user, self.ctx, [], "hi"))
+
+        kinds = [e[0] for e in events]
+        self.assertEqual(kinds, ["token", "token", "done"])
+        self.assertEqual("".join(e[1] for e in events if e[0] == "token"), "Hello")
+        self.assertEqual(events[-1][1]["status"], "done")
+
+    def test_step_and_effect_are_emitted_before_the_answer(self):
+        from resume.services import agent_loop
+
+        first = [
+            ("message", {"content": "", "tool_calls": [
+                {"id": "c1", "name": "list_resumes", "arguments": "{}"}
+            ]}, USAGE)
+        ]
+        second = [("token", "Done."), ("message", {"content": "Done.", "tool_calls": []}, USAGE)]
+        with patch(
+            "resume.services.agent_loop.stream_openai_tool_turn",
+            side_effect=self._stream(first, second),
+        ):
+            events = list(agent_loop.stream_turn(self.user, self.ctx, [], "list"))
+
+        kinds = [e[0] for e in events]
+        self.assertEqual(kinds.index("step"), 0)
+        self.assertLess(kinds.index("effect"), kinds.index("token"))
+        self.assertEqual(kinds[-1], "done")
+
+    def test_thinking_aloud_before_a_tool_call_is_not_shown(self):
+        """Prose from a turn that ends in a tool call must not leak into chat."""
+        from resume.services import agent_loop
+
+        first = [
+            ("token", "Let me check that."),
+            ("message", {"content": "Let me check that.", "tool_calls": [
+                {"id": "c1", "name": "list_resumes", "arguments": "{}"}
+            ]}, USAGE),
+        ]
+        second = [("token", "You have 1."), ("message", {"content": "You have 1.", "tool_calls": []}, USAGE)]
+        with patch(
+            "resume.services.agent_loop.stream_openai_tool_turn",
+            side_effect=self._stream(first, second),
+        ):
+            events = list(agent_loop.stream_turn(self.user, self.ctx, [], "list"))
+
+        tokens = "".join(e[1] for e in events if e[0] == "token")
+        self.assertEqual(tokens, "You have 1.")
+
+    def test_stream_pauses_for_a_destructive_tool(self):
+        from resume.services import agent_loop
+
+        turn = [("message", {"content": "", "tool_calls": [
+            {"id": "c1", "name": "delete_resume",
+             "arguments": json.dumps({"resume_id": self.resume.id})}
+        ]}, USAGE)]
+        with patch(
+            "resume.services.agent_loop.stream_openai_tool_turn",
+            side_effect=self._stream(turn),
+        ):
+            events = list(agent_loop.stream_turn(self.user, self.ctx, [], "delete"))
+        self.assertEqual(events[-1][1]["status"], "needs_approval")
+        self.assertTrue(Resume.objects.filter(pk=self.resume.pk).exists())
+
+    def test_stream_error_ends_the_turn(self):
+        from resume.services import agent_loop
+
+        turn = [("error", "OpenAI API returned an API Error: nope")]
+        with patch(
+            "resume.services.agent_loop.stream_openai_tool_turn",
+            side_effect=self._stream(turn),
+        ):
+            events = list(agent_loop.stream_turn(self.user, self.ctx, [], "hi"))
+        self.assertEqual(events[-1][1]["status"], "error")
+
+    def test_endpoint_returns_sse_frames(self):
+        turn = [("token", "Hi."), ("message", {"content": "Hi.", "tool_calls": []}, USAGE)]
+        with patch(
+            "resume.services.agent_loop.stream_openai_tool_turn",
+            side_effect=self._stream(turn),
+        ):
+            resp = self.client.post(
+                reverse("resume:agent_chat_stream"),
+                json.dumps({"message": "hello"}),
+                content_type="application/json",
+            )
+            body = b"".join(resp.streaming_content).decode()
+
+        self.assertEqual(resp["Content-Type"], "text/event-stream")
+        self.assertEqual(resp["X-Accel-Buffering"], "no")
+        self.assertIn("event: token", body)
+        self.assertIn("event: done", body)
+        self.assertIn('"type": "agent_turn"', body)
+
+    def test_endpoint_charges_one_message(self):
+        turn = [("message", {"content": "Hi.", "tool_calls": []}, USAGE)]
+        with patch(
+            "resume.services.agent_loop.stream_openai_tool_turn",
+            side_effect=self._stream(turn),
+        ):
+            resp = self.client.post(
+                reverse("resume:agent_chat_stream"),
+                json.dumps({"message": "hello"}),
+                content_type="application/json",
+            )
+            b"".join(resp.streaming_content)
+        self.user.profile.refresh_from_db()
+        self.assertEqual(self.user.profile.agent_message_count, 1)
+
+    def test_quota_answers_with_json_not_a_stream(self):
+        with patch.object(
+            type(self.user.profile), "can_send_agent_message", return_value=False
+        ):
+            resp = self.client.post(
+                reverse("resume:agent_chat_stream"),
+                json.dumps({"message": "hello"}),
+                content_type="application/json",
+            )
+        self.assertIn("application/json", resp["Content-Type"])
+        self.assertTrue(resp.json()["quota_exceeded"])
+
+    def test_approve_stream_round_trip(self):
+        pause = [("message", {"content": "", "tool_calls": [
+            {"id": "c1", "name": "delete_resume",
+             "arguments": json.dumps({"resume_id": self.resume.id})}
+        ]}, USAGE)]
+        after = [("message", {"content": "Deleted.", "tool_calls": []}, USAGE)]
+
+        with patch(
+            "resume.services.agent_loop.stream_openai_tool_turn",
+            side_effect=self._stream(pause),
+        ):
+            first = b"".join(
+                self.client.post(
+                    reverse("resume:agent_chat_stream"),
+                    json.dumps({"message": "delete it"}),
+                    content_type="application/json",
+                ).streaming_content
+            ).decode()
+        done = next(p for e, p in self._frames(first) if e == "done")
+        self.assertEqual(done["type"], "approval_required")
+        token = done["token"]
+
+        with patch(
+            "resume.services.agent_loop.stream_openai_tool_turn",
+            side_effect=self._stream(after),
+        ):
+            b"".join(
+                self.client.post(
+                    reverse("resume:agent_approve_stream"),
+                    json.dumps({"token": token, "approved": True}),
+                    content_type="application/json",
+                ).streaming_content
+            )
+        self.assertFalse(Resume.objects.filter(pk=self.resume.pk).exists())
+
+
+class ProgressCopyTest(TestCase):
+    """Progress wording follows the conversation, like the confirmations do."""
+
+    def test_step_copy_is_localized(self):
+        from resume.services import agent_loop
+
+        self.assertIn("Analyzing", agent_loop.step_copy("en", "analyze_resume"))
+        self.assertIn("analiz", agent_loop.step_copy("tr", "analyze_resume"))
+
+    def test_unknown_tool_falls_back(self):
+        from resume.services import agent_loop
+
+        self.assertEqual(
+            agent_loop.step_copy("tr", "brand_new_tool"),
+            agent_loop.STEP_COPY["tr"]["_default"],
+        )
+
+    def test_every_tool_has_progress_copy_in_both_languages(self):
+        from resume.services import agent_loop
+
+        for lang in ("en", "tr"):
+            for name in agent_tools.TOOL_REGISTRY:
+                self.assertIn(
+                    name, agent_loop.STEP_COPY[lang], f"{name} missing {lang} progress copy"
+                )
+
+    def test_stream_emits_localized_step(self):
+        from resume.services import agent_loop
+
+        first = [("message", {"content": "", "tool_calls": [
+            {"id": "c1", "name": "list_resumes", "arguments": "{}"}
+        ]}, USAGE)]
+        second = [("message", {"content": "ok", "tool_calls": []}, USAGE)]
+        remaining = [first, second]
+
+        def fake(messages, tools, **kwargs):
+            yield from remaining.pop(0)
+
+        user = User.objects.create_user("ada", password="x")
+        ctx = {"lang": "tr", "active_resume": None, "resumes": [], "quota": {}}
+        with patch("resume.services.agent_loop.stream_openai_tool_turn", side_effect=fake):
+            events = list(agent_loop.stream_turn(user, ctx, [], "listele"))
+        step = next(e[1] for e in events if e[0] == "step")
+        self.assertIn("CV'lerinize", step)
+
+
+class LanguageDetectionTest(TestCase):
+    """Terse follow-ups must not flip the conversation language."""
+
+    def setUp(self):
+        from resume.services.agent_service import agent_service
+        self.detect = agent_service._detect_language
+
+    def test_turkish_special_characters(self):
+        self.assertEqual(self.detect("CV'mi güncelle"), "tr")
+
+    def test_turkish_without_special_characters(self):
+        """'yeteneklerime AWS ekle' has no Turkish-only letters."""
+        self.assertEqual(self.detect("yeteneklerime AWS ekle"), "tr")
+
+    def test_plain_english(self):
+        self.assertEqual(self.detect("add AWS to my skills"), "en")
+
+    def test_history_keeps_the_conversation_turkish(self):
+        history = [
+            {"role": "user", "content": "CV'mi analiz et"},
+            {"role": "assistant", "content": "..."},
+        ]
+        self.assertEqual(self.detect("AWS", history), "tr")
+
+    def test_history_does_not_make_english_turkish(self):
+        history = [{"role": "user", "content": "analyze my resume"}]
+        self.assertEqual(self.detect("add AWS", history), "en")
+
+    def test_assistant_turns_are_ignored(self):
+        history = [{"role": "assistant", "content": "CV'niz analiz edildi"}]
+        self.assertEqual(self.detect("download it", history), "en")
+
+
+class ParkedLanguageTest(TestCase):
+    """The resumed half of a paused turn keeps speaking the same language."""
+
+    def test_language_is_parked_with_the_pending_call(self):
+        from resume.services import agent_loop
+
+        user = User.objects.create_user("ada", password="x")
+        resume = Resume.objects.create(user=user, title="CV", content=content())
+        ctx = {"lang": "tr", "active_resume": resume, "resumes": [], "quota": {}}
+        turn = (assistant(tool_calls=[call("delete_resume", {"resume_id": resume.id})]), USAGE)
+        with patch("resume.services.agent_loop.send_openai_tool_turn", return_value=turn):
+            out = agent_loop.run_turn(user, ctx, [], "sil")
+        self.assertIn("Devam", out["copy"]["title"])
+        parked = agent_loop.take_pending(user, out["token"])
+        self.assertEqual(parked["lang"], "tr")
+
+
+class ApprovedEffectStreamTest(TestCase):
+    """What the approved tool produced must reach a streaming client."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("ada", password="x")
+        self.resume = Resume.objects.create(user=self.user, title="CV", content=content())
+        self.ctx = {
+            "lang": "en",
+            "active_resume": self.resume,
+            "resumes": [],
+            "quota": {},
+        }
+
+    def test_effects_are_emitted_before_the_continuation(self):
+        from resume.services import agent_loop
+
+        pause = (
+            assistant(tool_calls=[call("switch_template",
+                                       {"resume_id": self.resume.id,
+                                        "template": "modern-sidebar"})]),
+            USAGE,
+        )
+        with patch("resume.services.agent_loop.send_openai_tool_turn", return_value=pause):
+            out = agent_loop.run_turn(self.user, self.ctx, [], "switch template")
+        parked = agent_loop.take_pending(self.user, out["token"])
+
+        after = [("message", {"content": "Switched.", "tool_calls": []}, USAGE)]
+        remaining = [after]
+
+        def fake(messages, tools, **kwargs):
+            yield from remaining.pop(0)
+
+        with patch("resume.services.agent_loop.stream_openai_tool_turn", side_effect=fake):
+            events = list(
+                agent_loop.stream_resume_turn(self.user, self.ctx, parked, approved=True)
+            )
+
+        kinds = [e[0] for e in events]
+        self.assertIn("effect", kinds)
+        self.assertLess(kinds.index("effect"), kinds.index("done"))
+        self.resume.refresh_from_db()
+        self.assertEqual(self.resume.template_selector, "modern-sidebar")
+
+    def test_a_declined_call_emits_no_effect(self):
+        from resume.services import agent_loop
+
+        pause = (
+            assistant(tool_calls=[call("delete_resume", {"resume_id": self.resume.id})]),
+            USAGE,
+        )
+        with patch("resume.services.agent_loop.send_openai_tool_turn", return_value=pause):
+            out = agent_loop.run_turn(self.user, self.ctx, [], "delete it")
+        parked = agent_loop.take_pending(self.user, out["token"])
+
+        remaining = [[("message", {"content": "Cancelled.", "tool_calls": []}, USAGE)]]
+
+        def fake(messages, tools, **kwargs):
+            yield from remaining.pop(0)
+
+        with patch("resume.services.agent_loop.stream_openai_tool_turn", side_effect=fake):
+            events = list(
+                agent_loop.stream_resume_turn(self.user, self.ctx, parked, approved=False)
+            )
+        self.assertNotIn("effect", [e[0] for e in events])
+        self.assertTrue(Resume.objects.filter(pk=self.resume.pk).exists())
