@@ -9,6 +9,11 @@ urlpatterns = [
     path("dashboard/", views.DashboardView.as_view(), name="dashboard"),
     path("pricing/", views.pricing_page, name="pricing"),
     path("checkout/<str:plan_code>/", views.start_checkout, name="start_checkout"),
+    path(
+        "pricing/notify/",
+        views.register_premium_interest,
+        name="register_premium_interest",
+    ),
     path("webhooks/payments/", views.payment_webhook, name="payment_webhook"),
     path("jobs/", views.JobListView.as_view(), name="jobs"),
     path("jobs/<int:pk>/update/", views.update_job_posting, name="update_job_posting"),

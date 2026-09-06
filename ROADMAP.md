@@ -2,7 +2,7 @@
 
 > **Canlı doküman.** Her faz bitiminde "Kullanıcı Ne Yapabiliyor" bölümü güncellenir.
 > Karar gerekçeleri: fiyatlandırma → tek seferlik ödeme, paywall iş akışında (bkz. `PRODUCT.md`).
-> Son güncelleme: 2026-09-06 — **Faz 1-5 tamamlandı.** Sırada: TR nişi.
+> Son güncelleme: 2026-09-06 — **Faz 1-5 tamamlandı**, ödeme `coming_soon` modunda (sağlayıcı seçilmedi). Sırada: TR nişi.
 
 ---
 
@@ -14,7 +14,7 @@
 | 2 | ✅ Revizyon: diff / geri alma | AI'ya güven | **Free** |
 | 3 | ✅ Agent loop | Çok adımlı işi tek mesajda bitirmek | — (retention) |
 | 4 | ✅ JD matching + ilan↔CV mapping | İş arama iş akışı | **Paywall burada** |
-| 5 | ✅ Tek seferlik ödeme | Gelir | — |
+| 5 | ✅ Tek seferlik ödeme *(altyapı hazır, `coming_soon`)* | Gelir | — |
 | — | TR nişi | Ertelendi, 1-5 sonrası konuşulacak | — |
 
 ---
@@ -194,6 +194,8 @@ class JobPosting(models.Model):
 - [x] Süre uzatma: bitmemiş bakiye varken tekrar satın alma süreyi **ekliyor**, sıfırlamıyor
 
 **Planlar:** Pro 3 ay $9 (varsayılan — bir iş arama döngüsü), Pro 12 ay $24.
+
+**Şu an `coming_soon`:** Sağlayıcı seçilmedi. Fiyat sayfası planları gösteriyor ama satın alma yerine "Hazır olunca haber ver" butonu var — tıklayanlar kaydediliyor, hangi planın istendiği sağlayıcı ve fiyat kararının girdisi olacak. Checkout ve webhook kapalı; admin'den elle Pro vermek çalışıyor.
 
 **Kurulum:** Kod tarafı hazır ama **canlı hesap kurulumu bende değil** — hesap açma, ürün oluşturma ve ödeme bilgisi girme adımları `.claude/PAYMENTS.md`'de. `CHECKOUT_URL_*` boşken fiyat kartı "kurulmadı" gösteriyor, yarım kurulumla kimse ödeme ekranına düşmüyor.
 
