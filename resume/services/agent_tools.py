@@ -16,6 +16,7 @@ Business logic still lives on AgentService; tools are the typed, schema-checked
 surface the model is allowed to reach it through.
 """
 
+import copy as copy_module
 import logging
 from dataclasses import dataclass, field
 from typing import Callable
@@ -136,6 +137,8 @@ def _resume_facts(resume):
     return {
         "id": resume.id,
         "name": resume.display_name,
+        "language": resume.language,
+        "is_translation_of": resume.translation_of_id,
         "template": resume.template_selector,
         "experience_count": len(content.get("experience", [])),
         "education_count": len(content.get("education", [])),
@@ -332,7 +335,11 @@ def start_guided_build(user, ctx):
 
 @tool(
     name="upload_resume",
-    description="Send the user to the import page to upload an existing resume PDF. Use source 'linkedin' for a LinkedIn profile export, otherwise 'pdf'.",
+    description=(
+        "Ask the user to pick a resume file to import. Default source to 'pdf'; "
+        "use 'linkedin' ONLY when the user mentions LinkedIn. Do not ask which "
+        "one they mean — plain 'upload' or 'import my CV' means 'pdf'."
+    ),
     parameters={"source": {"type": "string", "enum": ["pdf", "linkedin"]}},
 )
 def upload_resume(user, ctx, source="pdf"):
@@ -426,7 +433,11 @@ def switch_template(user, ctx, template, resume_id=None):
 
 @tool(
     name="translate_resume",
-    description="Translate a resume's whole content into another language.",
+    description=(
+        "Translate a resume IN PLACE, replacing its content — the original wording "
+        "is gone (recoverable only through the change history). Prefer "
+        "create_translated_copy when the user wants to keep both languages."
+    ),
     parameters={"resume_id": INT_OR_NULL, "target_language": {"type": "string"}},
     destructive=True,
 )
@@ -443,6 +454,103 @@ def translate_resume(user, ctx, target_language, resume_id=None):
     return ToolResult(
         data={"ok": True, "resume_id": resume.id, "language": target_language},
         ui=[legacy],
+    )
+
+
+@tool(
+    name="create_translated_copy",
+    description=(
+        "Create a linked copy of a resume in another language, keeping the original "
+        "untouched. Use this when the user wants the same resume available in both "
+        "languages. Translated copies do not count against the resume limit."
+    ),
+    parameters={
+        "resume_id": INT_OR_NULL,
+        "target_language": {"type": "string", "enum": ["en", "tr"]},
+    },
+    destructive=True,
+)
+def create_translated_copy(user, ctx, target_language, resume_id=None):
+    source, error = _resume_or_error(user, resume_id, ctx)
+    if error:
+        return error
+
+    target_language = Resume.normalize_language(target_language)
+    if source.language == target_language:
+        return ToolResult(
+            data={"error": f"This resume is already in {target_language}."}
+        )
+
+    family = source.language_family()
+    existing = family.filter(language=target_language).first()
+    if existing:
+        return ToolResult(
+            data={
+                "error": f"A {target_language} version already exists (id {existing.id}).",
+                "existing_resume_id": existing.id,
+            }
+        )
+
+    copy = Resume.objects.create(
+        user=user,
+        title=f"{source.title} ({target_language.upper()})",
+        content=copy_module.deepcopy(source.content),
+        template_selector=source.template_selector,
+        language=source.language,
+        translation_of=source.root,
+    )
+    legacy = _service()._exec_translate_resume(
+        user,
+        {"resume_id": copy.id, "target_language": target_language},
+        ctx["lang"],
+        copy,
+    )
+    copy.refresh_from_db()
+    copy.language = target_language
+    copy.save(update_fields=["language"])
+
+    return ToolResult(
+        data={
+            "ok": True,
+            "source_resume_id": source.id,
+            "new_resume_id": copy.id,
+            "language": target_language,
+            "counts_against_limit": False,
+        },
+        ui=[
+            {
+                "type": "preview",
+                "resume_id": copy.id,
+                "resume_name": copy.display_name,
+                "message": "",
+            }
+        ],
+    )
+
+
+@tool(
+    name="list_language_versions",
+    description="Show which language versions exist for a resume and how they are linked.",
+    parameters={"resume_id": INT_OR_NULL},
+)
+def list_language_versions(user, ctx, resume_id=None):
+    resume, error = _resume_or_error(user, resume_id, ctx)
+    if error:
+        return error
+    return ToolResult(
+        data={
+            "root_id": resume.root.id,
+            "versions": [
+                {
+                    "id": r.id,
+                    "name": r.display_name,
+                    "language": r.language,
+                    "is_original": r.translation_of_id is None,
+                    "updated_at": r.updated_at.strftime("%Y-%m-%d %H:%M"),
+                }
+                for r in resume.language_family()
+            ],
+        }
     )
 
 

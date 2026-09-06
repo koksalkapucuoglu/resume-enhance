@@ -49,6 +49,11 @@ urlpatterns = [
     ),
     path("agent/chat/", views.agent_chat, name="agent_chat"),
     path("agent/approve/", views.agent_approve, name="agent_approve"),
+    path(
+        "agent/builder/start/",
+        views.agent_builder_start,
+        name="agent_builder_start",
+    ),
     path("agent/toggle-mode/", views.toggle_agent_mode, name="toggle_agent_mode"),
     path("agent/toggle-language/", views.toggle_ui_language, name="toggle_ui_language"),
 ]

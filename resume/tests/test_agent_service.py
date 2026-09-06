@@ -288,17 +288,20 @@ class ExecuteIntentTest(AgentServiceTestBase):
         self.assertIn("conversational_build", actions)
         self.assertIn("redirect", actions)
 
-    def test_upload_resume_returns_redirect(self):
+    def test_upload_resume_asks_for_a_file(self):
+        """Redirecting to the POST-only upload view bounced the user out of chat."""
         result = self.service.execute_intent("upload_resume", {}, self.user, lang="en")
-        self.assertEqual(result["type"], "redirect")
-        self.assertIn("upload", result["url"])
+        self.assertEqual(result["type"], "request_upload")
+        self.assertEqual(result["source"], "pdf")
+        self.assertIn("upload", result["upload_url"])
 
-    def test_upload_linkedin_returns_redirect(self):
+    def test_upload_linkedin_asks_for_a_file(self):
         result = self.service.execute_intent(
             "upload_linkedin", {}, self.user, lang="en"
         )
-        self.assertEqual(result["type"], "redirect")
-        self.assertIn("linkedin", result["url"])
+        self.assertEqual(result["type"], "request_upload")
+        self.assertEqual(result["source"], "linkedin")
+        self.assertIn("linkedin", result["upload_url"])
 
     def test_switch_template_valid(self):
         result = self.service.execute_intent(

@@ -365,3 +365,61 @@ class AgentEndpointTest(TestCase):
             content_type="application/json",
         )
         self.assertEqual(resp.status_code, 302)
+
+
+class BuilderEntryTest(TestCase):
+    """The guided builder is reached directly, not via LLM classification."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("ada", password="x")
+        self.client.force_login(self.user)
+
+    def test_start_returns_the_first_question_without_an_llm_call(self):
+        with patch("resume.services.agent_loop.send_openai_tool_turn") as llm:
+            resp = self.client.post(
+                reverse("resume:agent_builder_start"),
+                json.dumps({"lang": "en"}),
+                content_type="application/json",
+            )
+        body = resp.json()
+        self.assertEqual(body["type"], "multi_step")
+        self.assertEqual(body["step"], "ask_name")
+        self.assertTrue(body["message"])
+        llm.assert_not_called()
+
+    def test_start_does_not_spend_message_quota(self):
+        self.client.post(
+            reverse("resume:agent_builder_start"),
+            json.dumps({"lang": "en"}),
+            content_type="application/json",
+        )
+        self.user.profile.refresh_from_db()
+        self.assertEqual(self.user.profile.agent_message_count, 0)
+
+    def test_start_respects_the_resume_limit(self):
+        with patch.object(
+            type(self.user.profile), "can_create_resume", return_value=False
+        ):
+            resp = self.client.post(
+                reverse("resume:agent_builder_start"),
+                json.dumps({"lang": "en"}),
+                content_type="application/json",
+            )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_language_falls_back_for_an_unknown_code(self):
+        resp = self.client.post(
+            reverse("resume:agent_builder_start"),
+            json.dumps({"lang": "klingon"}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+
+    def test_requires_login(self):
+        self.client.logout()
+        resp = self.client.post(
+            reverse("resume:agent_builder_start"),
+            json.dumps({}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 302)

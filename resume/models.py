@@ -14,10 +14,29 @@ class Resume(models.Model):
     Content is stored as JSON to allow flexible schema (AI output).
     """
 
+    LANGUAGE_CHOICES = [("en", "English"), ("tr", "Türkçe")]
+
+    # Full language names as the AI extractor emits them, mapped to our codes.
+    _LANGUAGE_ALIASES = {
+        "english": "en", "ingilizce": "en", "en": "en",
+        "turkish": "tr", "türkçe": "tr", "turkce": "tr", "tr": "tr",
+    }
+
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="resumes")
     title = models.CharField(max_length=255, default="My Resume")
     content = models.JSONField(default=dict)
     template_selector = models.CharField(max_length=50, default="faangpath-simple")
+    # The language the resume is WRITTEN in — unrelated to the interface language.
+    language = models.CharField(max_length=5, choices=LANGUAGE_CHOICES, default="en")
+    # Set when this resume is a translated variant of another. Variants are the
+    # same document in another language, so they do not consume a resume slot.
+    translation_of = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="translations",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -45,6 +64,34 @@ class Resume(models.Model):
             return f"{full_name} · {self.created_at.strftime('%b %Y')}"
 
         return self.title or "Untitled Resume"
+
+    @classmethod
+    def normalize_language(cls, value, default="en"):
+        """Map whatever the AI or the user called a language onto a code."""
+        return cls._LANGUAGE_ALIASES.get(str(value or "").strip().lower(), default)
+
+    def sync_language_from_content(self):
+        """Adopt the language the extractor detected, if we recognise it."""
+        detected = (self.content or {}).get("language")
+        if detected:
+            self.language = self.normalize_language(detected, self.language)
+        return self.language
+
+    @property
+    def language_label(self):
+        return dict(self.LANGUAGE_CHOICES).get(self.language, self.language)
+
+    @property
+    def root(self):
+        """The original resume in a translation family — itself if it is one."""
+        return self.translation_of or self
+
+    def language_family(self):
+        """This resume and every translation sharing its root, oldest first."""
+        root = self.root
+        return Resume.objects.filter(
+            models.Q(pk=root.pk) | models.Q(translation_of=root)
+        ).order_by("created_at")
 
     @property
     def owner_name(self):
@@ -203,12 +250,17 @@ class UserProfile(models.Model):
         )
 
     def can_create_resume(self):
-        """Check if user can create a new resume."""
+        """
+        Check if user can create a new resume.
+
+        Translated variants are the same document in another language, so they
+        are not counted — a bilingual user is not penalised for keeping both.
+        """
         if self.is_pro():
             return True
         from django.conf import settings
 
-        count = self.user.resumes.count()
+        count = self.user.resumes.filter(translation_of__isnull=True).count()
         return count < settings.FREE_TIER_LIMITS["resume_count"]
 
     def __str__(self):

@@ -127,6 +127,10 @@ class DashboardView(LoginRequiredMixin, ListView):
                 if match:
                     initial_resume = {"id": match.pk, "name": match.display_name}
             context["initial_resume"] = json.dumps(initial_resume)
+            # Ids the browser is allowed to restore as "active". A stale
+            # localStorage entry — a deleted resume, or another account's on a
+            # shared browser — would otherwise render "Resume not found".
+            context["owned_resume_ids"] = json.dumps([r.pk for r in resumes])
             if not resumes:
                 suggestions.append(
                     {
@@ -201,6 +205,7 @@ def duplicate_resume(request, pk):
         # Create a copy with modified title
         new_resume = Resume.objects.create(
             user=request.user,
+            language=original_resume.language,
             title=f"{original_resume.title} (Copy)",
             content=original_resume.content.copy(),  # Deep copy the JSON content
         )
@@ -1063,6 +1068,7 @@ def upload_cv(request):
                 user=request.user,
                 title=_auto_title_from_content(extracted_json),
                 content=extracted_json,
+                language=Resume.normalize_language(extracted_json.get("language")),
             )
 
             # QUOTA: Increment counters
@@ -1156,6 +1162,7 @@ def upload_linkedin_cv(request):
                 user=request.user,
                 title=_auto_title_from_content(extracted_json, prefix="LinkedIn"),
                 content=extracted_json,
+                language=Resume.normalize_language(extracted_json.get("language")),
             )
 
             # QUOTA: Increment import counter
@@ -1440,7 +1447,7 @@ def agent_chat(request):
         profile.save(update_fields=["agent_message_count"])
         return JsonResponse({**result, "user_message": message})
 
-    ctx = _agent_context(request, active_resume)
+    ctx = _agent_context(request, active_resume, message)
     outcome = agent_loop.run_turn(
         request.user, ctx, data.get("history"), message
     )
@@ -1448,6 +1455,35 @@ def agent_chat(request):
     profile.agent_message_count += 1
     profile.save(update_fields=["agent_message_count"])
     return JsonResponse(_agent_response(outcome, active_resume_id, message))
+
+
+@login_required
+@require_http_methods(["POST"])
+def agent_builder_start(request):
+    """
+    Start the guided resume builder.
+
+    The builder is a fixed question sequence, not something the model decides,
+    so the "step by step" button reaches it directly — no LLM call, no message
+    quota, and no chance of the label being classified as something else.
+    """
+    from resume.services.agent_service import agent_service
+
+    if not request.user.profile.can_create_resume():
+        return JsonResponse(
+            {
+                "type": "chat",
+                "message": f"Resume limit reached. The free plan allows {settings.FREE_TIER_LIMITS['resume_count']} resumes.",
+            },
+            status=403,
+        )
+
+    try:
+        lang = json.loads(request.body).get("lang", "en")
+    except (ValueError, KeyError):
+        lang = "en"
+    lang = lang if lang in ("en", "tr") else "en"
+    return JsonResponse(agent_service._exec_builder_start(lang))
 
 
 @login_required
@@ -1483,7 +1519,7 @@ def agent_approve(request):
         if active_resume_id
         else None
     )
-    ctx = _agent_context(request, active_resume)
+    ctx = _agent_context(request, active_resume, data.get("message", ""))
     outcome = agent_loop.resume_turn(
         request.user, ctx, parked, approved=bool(data.get("approved"))
     )
@@ -1522,19 +1558,30 @@ def _agent_quota_exceeded(request, message):
     return JsonResponse({"type": "chat", "message": msg, "quota_exceeded": True})
 
 
-def _agent_context(request, active_resume):
+def _agent_context(request, active_resume, message=""):
     """Facts handed to the loop: the user's resumes, quota and active resume."""
+    from resume.services.agent_service import agent_service
+
     profile = request.user.profile
     limits = settings.FREE_TIER_LIMITS
     resume_qs = list(Resume.objects.filter(user=request.user).order_by("-updated_at"))
+    # Conversation language, not the interface setting: someone chatting in
+    # Turkish should get Turkish confirmations even with an English UI.
+    lang = (
+        agent_service._detect_language(message)
+        if message
+        else (profile.ui_language or "en")
+    )
     return {
-        "lang": profile.ui_language or "en",
+        "lang": lang,
         "active_resume": active_resume,
         "resumes": [
             {
                 "rank": idx + 1,
                 "id": r.id,
                 "display_name": r.display_name,
+                "language": r.language,
+                "translation_of": r.translation_of_id,
                 "template": r.template_selector,
                 "updated_at": r.updated_at.strftime("%Y-%m-%d %H:%M"),
             }
@@ -1562,8 +1609,7 @@ def _agent_response(outcome, active_resume_id, user_message):
         payload = {
             "type": "approval_required",
             "token": outcome["token"],
-            "tool": outcome["tool"],
-            "arguments": outcome["arguments"],
+            "copy": outcome["copy"],
             "effects": effects,
         }
     elif status == "error":

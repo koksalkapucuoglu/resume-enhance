@@ -28,11 +28,59 @@ MAX_STEPS = 5
 MAX_TOOL_CALLS = 8
 PENDING_TTL_SECONDS = 300
 
+# Approval copy follows the language the user is chatting in, not the interface
+# setting — a Turkish conversation should not sprout English buttons.
+APPROVAL_COPY = {
+    "en": {
+        "title": "This will change your resume. Continue?",
+        "approve": "Yes, go ahead",
+        "decline": "No, cancel",
+    },
+    "tr": {
+        "title": "Bu işlem CV'nizi değiştirecek. Devam edilsin mi?",
+        "approve": "Evet, devam et",
+        "decline": "Hayır, iptal",
+    },
+}
+
+# Shown instead of the raw tool name and arguments, which mean nothing to a user.
+DESTRUCTIVE_COPY = {
+    "en": {
+        "modify_resume": "Edit the resume's content",
+        "switch_template": "Change the resume's template",
+        "translate_resume": "Translate the whole resume",
+        "delete_resume": "Delete the resume permanently",
+        "revert_last_change": "Undo the most recent change",
+        "create_translated_copy": "Create a translated copy",
+    },
+    "tr": {
+        "modify_resume": "CV içeriğini düzenle",
+        "switch_template": "CV şablonunu değiştir",
+        "translate_resume": "CV'nin tamamını çevir",
+        "delete_resume": "CV'yi kalıcı olarak sil",
+        "revert_last_change": "Son değişikliği geri al",
+        "create_translated_copy": "Çevrilmiş bir kopya oluştur",
+    },
+}
+
+
+def approval_copy(lang, tool_name):
+    """Localized confirmation text for a destructive tool."""
+    copy = APPROVAL_COPY.get(lang, APPROVAL_COPY["en"])
+    action = DESTRUCTIVE_COPY.get(lang, DESTRUCTIVE_COPY["en"]).get(tool_name)
+    return {**copy, "action": action or ""}
+
 SYSTEM_PROMPT = """You are ResuStack's resume assistant.
 
 You help the user manage and improve their resumes by calling tools. Rules:
 
 - Always reply in the same language as the user's message.
+- A resume has its own written language, separate from the chat language. When
+  editing or writing resume content, write it in THAT resume's language unless
+  the user asks otherwise — a Turkish resume gets Turkish bullet points even if
+  the user is chatting in English.
+- To give the user the same resume in a second language, use
+  create_translated_copy — it keeps the original. translate_resume overwrites.
 - Prefer acting over asking. If the user's intent is clear, call the tool.
 - Chain tools when a request needs several steps, then summarise what you did.
 - Never invent a resume id. Use the ids listed below, or omit resume_id to act
@@ -55,9 +103,14 @@ def _context_block(ctx):
         summary = ", ".join(
             f"{e.get('title', '?')} at {e.get('company', '?')}" for e in experiences[:5]
         )
+        versions = [
+            f"{r.language}(id={r.id})" for r in active.language_family()
+        ]
         lines.append(
             f"Active resume: id={active.id}, name={active.display_name}, "
-            f"template={active.template_selector}, experiences=[{summary or 'none'}]. "
+            f"written in '{active.language}', template={active.template_selector}, "
+            f"experiences=[{summary or 'none'}]. "
+            f"Language versions of this resume: {', '.join(versions)}. "
             "Tools called without resume_id act on this one."
         )
     else:
@@ -181,8 +234,10 @@ def _run(user, ctx, messages, effects, start_step, usage_totals):
                 return {
                     "status": "needs_approval",
                     "token": token,
+                    # Kept for logging and tests; the wire payload carries only
+                    # the localized copy — tool names mean nothing to a user.
                     "tool": tool.name,
-                    "arguments": _safe_args(call.function.arguments),
+                    "copy": approval_copy(ctx.get("lang", "en"), tool.name),
                     "effects": effects,
                 }
 

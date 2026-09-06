@@ -340,12 +340,15 @@ const PROACTIVE_SUGGESTIONS = {{ proactive_suggestions|default:"[]"|safe }};
 const BADGE_MODERN = "{{ UI.badge_modern }}";
 const BADGE_CLASSIC = "{{ UI.badge_classic }}";
 // Set when arriving via /dashboard/?resume=<pk> (e.g. handed over by the editor)
-const APPROVAL_LABELS = {
-  title:   `{{ UI.approval_title|escapejs }}`,
-  approve: `{{ UI.approval_approve|escapejs }}`,
-  decline: `{{ UI.approval_decline|escapejs }}`,
+const CHAT_LANG = "{{ ui_lang }}";
+const UPLOAD_LABELS = {
+  choose:    `{{ UI.upload_choose|escapejs }}`,
+  uploading: `{{ UI.upload_uploading|escapejs }}`,
+  done:      `{{ UI.upload_done|escapejs }}`,
+  failed:    `{{ UI.upload_failed|escapejs }}`,
 };
 const INITIAL_RESUME = {{ initial_resume|default:"null"|safe }};
+const OWNED_RESUME_IDS = new Set({{ owned_resume_ids|default:"[]"|safe }});
 const HAS_RESUMES = {{ has_resumes|yesno:"true,false" }};
 
 // ---------------------------------------------------------------------------
@@ -392,10 +395,13 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         try {
             const stored = JSON.parse(localStorage.getItem(LS_ACTIVE));
-            if (stored && stored.id) {
+            // Only restore a resume this account still owns — the entry can
+            // outlive the resume, or belong to another user of this browser.
+            if (stored && stored.id && OWNED_RESUME_IDS.has(Number(stored.id))) {
                 setActiveResume(stored.id, stored.name);
                 loadPreviewPanel(stored.id, stored.name);
             } else {
+                if (stored) localStorage.removeItem(LS_ACTIVE);
                 showContextDefault();
             }
         } catch(e) {
@@ -773,13 +779,21 @@ function handleAgentPayload(data) {
         return;
     }
     if (data.type === 'agent_turn') {
-        (data.effects || []).forEach(applyEffect);
-        if (data.message) appendMessage('bot', data.message, data.is_error);
+        const effects = data.effects || [];
+        const interactive = effects.some(e => e && INTERACTIVE_EFFECTS.has(e.type));
+        effects.forEach(applyEffect);
+        if (data.message && !interactive) {
+            appendMessage('bot', data.message, data.is_error);
+        }
         return;
     }
     // Builder steps and other legacy single-shot responses
     handleResponse(data);
 }
+
+// Effects that prompt the user for something carry their own wording; the rest
+// are data panels the model narrates itself.
+const INTERACTIVE_EFFECTS = new Set(['multi_step', 'create_choice', 'request_upload']);
 
 function applyEffect(effect) {
     if (!effect || !effect.type) return;
@@ -787,7 +801,10 @@ function applyEffect(effect) {
         if (activeResumeId == effect.resume_id) clearActiveResume();
         return;
     }
-    // Effects carry no prose of their own — the model writes the message.
+    if (INTERACTIVE_EFFECTS.has(effect.type)) {
+        handleResponse(effect);
+        return;
+    }
     handleResponse({...effect, message: ''});
 }
 
@@ -796,19 +813,20 @@ function renderApprovalPrompt(data) {
     const div = document.createElement('div');
     div.className = 'ml-9 mt-1.5 p-3 rounded-xl border border-amber-200 bg-amber-50';
     div.dataset.approvalToken = data.token;
-    const args = Object.entries(data.arguments || {})
-        .filter(([, v]) => v !== null && v !== '')
-        .map(([k, v]) => `${escHtml(k)}: ${escHtml(String(v))}`)
-        .join(' · ');
+    // Copy comes from the server in the conversation's language; the tool name
+    // and raw arguments stay out of the UI — the sentence already says it.
+    const copy = data.copy || {};
+    const action = copy.action
+        ? `<p class="text-xs text-amber-800 mb-2">${escHtml(copy.action)}</p>` : '';
     div.innerHTML = `
-      <p class="text-sm text-amber-900 font-semibold mb-1">${escHtml(APPROVAL_LABELS.title)}</p>
-      <p class="text-xs text-amber-800 mb-2"><span class="font-mono">${escHtml(data.tool)}</span>${args ? ' — ' + args : ''}</p>
+      <p class="text-sm text-amber-900 font-semibold mb-1">${escHtml(copy.title || '')}</p>
+      ${action}
       <div class="flex gap-2">
         <button class="px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary-hover transition-colors">
-          ${escHtml(APPROVAL_LABELS.approve)}
+          ${escHtml(copy.approve || 'OK')}
         </button>
         <button class="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50 transition-colors">
-          ${escHtml(APPROVAL_LABELS.decline)}
+          ${escHtml(copy.decline || 'Cancel')}
         </button>
       </div>`;
     const [approveBtn, declineBtn] = div.querySelectorAll('button');
@@ -920,6 +938,11 @@ function handleResponse(data) {
             appendMessage('bot', msg);
             renderCreateChoice(data.choices);
             if (!activeResumeId) showContextDefault();
+            break;
+
+        case 'request_upload':
+            appendMessage('bot', msg);
+            renderUploadPrompt(data);
             break;
 
         case 'confirm':
@@ -1158,11 +1181,94 @@ function renderCreateChoice(choices) {
                 if (c.action === 'redirect') {
                     return `<a href="${c.url}" class="px-4 py-2.5 rounded-xl border-2 border-primary text-primary font-semibold text-sm hover:bg-primary hover:text-white transition-all text-center">${escHtml(c.label)}</a>`;
                 }
-                return `<button onclick="sendMessage('${escHtml(c.label)}')" class="px-4 py-2.5 rounded-xl border-2 border-primary text-primary font-semibold text-sm hover:bg-primary hover:text-white transition-all">${escHtml(c.label)}</button>`;
+                return `<button data-action="${escHtml(c.action || '')}" data-label="${escHtml(c.label)}" class="choice-btn px-4 py-2.5 rounded-xl border-2 border-primary text-primary font-semibold text-sm hover:bg-primary hover:text-white transition-all">${escHtml(c.label)}</button>`;
             }).join('')}
         </div>`;
+    div.querySelectorAll('.choice-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (btn.dataset.action === 'conversational_build') {
+                startGuidedBuilder();
+            } else {
+                sendMessage(btn.dataset.label);
+            }
+        });
+    });
     container.appendChild(div);
     scrollToBottom();
+}
+
+// The builder is a fixed question sequence, so it is requested directly rather
+// than described to the model and hopefully classified back into itself.
+async function startGuidedBuilder() {
+    showTyping();
+    try {
+        const resp = await fetch('{% url "resume:agent_builder_start" %}', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN},
+            body: JSON.stringify({lang: CHAT_LANG}),
+        });
+        const data = await resp.json();
+        hideTyping();
+        if (!resp.ok) {
+            appendMessage('bot', data.message || 'Could not start the builder.', true);
+            return;
+        }
+        handleResponse(data);
+    } catch (e) {
+        hideTyping();
+        appendMessage('bot', 'Error connecting to assistant. Please try again.', true);
+    }
+}
+
+function renderUploadPrompt(data) {
+    const container = document.getElementById('chat-messages');
+    const div = document.createElement('div');
+    div.className = 'ml-9 mt-1.5';
+    div.innerHTML = `
+      <input type="file" accept="application/pdf" class="hidden">
+      <button class="px-4 py-2 rounded-xl border-2 border-primary text-primary font-semibold text-sm hover:bg-primary hover:text-white transition-all flex items-center gap-1.5">
+        <span class="material-symbols-outlined !text-[16px]">upload_file</span>${escHtml(UPLOAD_LABELS.choose)}
+      </button>`;
+    const input = div.querySelector('input');
+    const button = div.querySelector('button');
+    button.addEventListener('click', () => input.click());
+    input.addEventListener('change', () => uploadResumeFile(input, button, data));
+    container.appendChild(div);
+    scrollToBottom();
+}
+
+async function uploadResumeFile(input, button, data) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    button.disabled = true;
+    button.textContent = UPLOAD_LABELS.uploading;
+    appendMessage('user', file.name);
+    showTyping();
+
+    const form = new FormData();
+    // upload_cv reads "cv_file"; upload_linkedin_cv reads "linkedin_file"
+    form.append(data.source === 'linkedin' ? 'linkedin_file' : 'cv_file', file);
+    try {
+        const resp = await fetch(data.upload_url, {
+            method: 'POST',
+            headers: {'X-CSRFToken': CSRF_TOKEN, 'X-Requested-With': 'XMLHttpRequest'},
+            body: form,
+        });
+        const body = await resp.json();
+        hideTyping();
+        button.remove();
+        if (!resp.ok || body.error) {
+            appendMessage('bot', body.error || UPLOAD_LABELS.failed, true);
+            return;
+        }
+        appendMessage('bot', UPLOAD_LABELS.done);
+        setActiveResume(body.resume_id, null);
+        loadPreviewPanel(body.resume_id, null);
+    } catch (e) {
+        hideTyping();
+        button.disabled = false;
+        appendMessage('bot', UPLOAD_LABELS.failed, true);
+    }
 }
 
 function showConfirmPanel(data) {
