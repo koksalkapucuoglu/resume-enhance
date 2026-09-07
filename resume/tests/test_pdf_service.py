@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from django.test import RequestFactory, TestCase
+from django.urls import reverse
 
 from resume.services.pdf_service import (
     HtmlToPdfConverter,
@@ -265,3 +266,71 @@ class PdfSanityCheckTestCase(TestCase):
         self.assertTrue(
             self.service.generate_resume_pdf({}, "faangpath-simple", None)
         )
+
+
+class EditorExportContractTest(TestCase):
+    """
+    The editor exports through fetch, not a POST navigation.
+
+    /form/<id>/ answers a POST with a PDF and a GET with the editor HTML. A PDF
+    served inline from a POSTed URL makes Chrome's viewer re-request the
+    document with GET, which hands it 90KB of HTML — "Invalid PDF structure",
+    and a blank tab. A blob URL never makes that second request.
+    """
+
+    def setUp(self):
+        from django.contrib.auth.models import User
+
+        from resume.models import Resume
+
+        self.user = User.objects.create_user("ada", password="x")
+        self.user.profile.tier = "pro"
+        self.user.profile.save()
+        self.resume = Resume.objects.create(
+            user=self.user,
+            title="CV",
+            content={
+                "user_info": {"full_name": "Ada", "email": "a@b.com",
+                              "skills": ["Python"]},
+                "experience": [], "education": [], "projects_and_publications": [],
+            },
+        )
+        self.client.force_login(self.user)
+        self.url = reverse("resume:resume_form_edit", args=[self.resume.pk])
+
+    def _payload(self, **overrides):
+        data = {
+            "export_format": "pdf", "template": "faangpath-simple",
+            "resume_title": "CV", "full_name": "Ada", "email": "a@b.com",
+            "phone": "", "github": "", "linkedin": "", "skills": "Python",
+        }
+        for prefix in ("education", "experience", "project"):
+            data[f"{prefix}-TOTAL_FORMS"] = "0"
+            data[f"{prefix}-INITIAL_FORMS"] = "0"
+            data[f"{prefix}-MIN_NUM_FORMS"] = "0"
+            data[f"{prefix}-MAX_NUM_FORMS"] = "1000"
+        data.update(overrides)
+        return data
+
+    def test_the_same_url_answers_a_get_with_html_and_a_post_with_a_pdf(self):
+        get = self.client.get(self.url)
+        self.assertIn("text/html", get["Content-Type"])
+
+        post = self.client.post(self.url, self._payload())
+        self.assertEqual(post["Content-Type"], "application/pdf")
+        self.assertTrue(post.content.startswith(b"%PDF"))
+
+    def test_the_editor_does_not_export_by_navigating(self):
+        html = self.client.get(self.url).content.decode()
+        self.assertIn("async function exportResume", html)
+        self.assertIn("URL.createObjectURL", html)
+        self.assertNotIn("form.target = '_blank'", html)
+
+    def test_a_quota_block_answers_with_the_page_not_a_broken_pdf(self):
+        self.user.profile.tier = "free"
+        self.user.profile.download_count = 99
+        self.user.profile.save()
+
+        resp = self.client.post(self.url, self._payload())
+        self.assertIn("text/html", resp["Content-Type"])
+        self.assertIn("download limit reached", resp.content.decode())
