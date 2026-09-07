@@ -210,6 +210,28 @@ class JobPosting(models.Model):
 
 ---
 
+## Faz 6 — MCP Sunucusu *(planlandı, başlanmadı)*
+
+Kullanıcı ResuStack hesabıyla kendi Claude Code'undan CV'lerini yönetebilsin:
+listeleme, oluşturma, düzenleme, ilan eşleştirme, indirme. Kota normal
+kullanıcıda olduğu gibi işler.
+
+**Neden:** Arayüzümüzü beğenmeyen ya da zaten bir ajanın içinde çalışan
+kullanıcı, işi kendi ortamında yapıp sonucu bizim üzerimizden görüntüler veya
+indirir. Ürünün değeri arayüz değil, versiyonlanmış belge deposu ve render
+hattı — MCP bunu erişilebilir kılar, arayüzü zorunlu kılmadan.
+
+- [ ] `rest_framework.authtoken` + profil sayfasında token göster/yenile
+- [ ] `mcp_server/` (FastMCP): `list_resumes`, `get_resume`, `create_resume`,
+      `update_resume`, `match_job`, `download_resume`, `check_quota`
+- [ ] Token bazlı kota — arayüzdekiyle aynı sayaçlar
+- [ ] `resumes://list` ve `resumes://{id}/content` kaynakları
+
+**Not:** `.claude/AGENTIC.md`'deki eski "Faz 3 — MCP Server" planı bunun ilk
+taslağı; oradaki tool listesi güncellenmeli, çünkü tool seti Faz 3-4'te değişti.
+
+---
+
 ## Hedef Freemium Tablosu (Faz 5 sonunda)
 
 | Yetenek | Free | Premium |
