@@ -954,13 +954,87 @@
             }
             formatInput.value = format;
 
-            if (preview || openInNewTab) {
-                const originalTarget = form.target;
-                form.target = '_blank';
-                form.submit();
-                setTimeout(() => { form.target = originalTarget || '_self'; }, 100);
+            exportResume(form, format, openInNewTab);
+        }
+
+        /*
+         * Export through fetch rather than a native POST navigation.
+         *
+         * A PDF served inline from a POSTed URL makes Chrome's viewer re-request
+         * the document with GET — and a GET to /form/<id>/ returns the editor
+         * HTML, which the viewer then reports as an invalid PDF and renders as
+         * a blank tab. A blob URL has no such second request. It also lets us
+         * look at the response before deciding what to do with it, so a
+         * validation failure or a quota block says so instead of silently
+         * producing an empty page.
+         */
+        async function exportResume(form, format, openInNewTab) {
+            const button = document.getElementById('downloadButton');
+            const original = button ? button.innerHTML : null;
+            if (button) {
+                button.disabled = true;
+                button.innerHTML = '<span class="material-symbols-outlined text-lg animate-spin">progress_activity</span>';
+            }
+
+            try {
+                const response = await fetch(form.action || window.location.pathname, {
+                    method: 'POST',
+                    body: new FormData(form),
+                    headers: {'X-Requested-With': 'XMLHttpRequest'},
+                });
+                const contentType = (response.headers.get('Content-Type') || '').toLowerCase();
+
+                if (contentType.includes('application/pdf')) {
+                    const blob = await response.blob();
+                    const url = URL.createObjectURL(blob);
+                    const filename = filenameFrom(response) || `resume.${format}`;
+                    if (openInNewTab) {
+                        window.open(url, '_blank');
+                    } else {
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = filename;
+                        link.click();
+                    }
+                    setTimeout(() => URL.revokeObjectURL(url), 60000);
+                    return;
+                }
+
+                if (contentType.includes('application/json')) {
+                    const body = await response.json();
+                    showExportError(body.error || 'Could not create the PDF.');
+                    return;
+                }
+
+                // The server re-rendered the form: validation errors or a quota
+                // block. Show that page rather than swallowing the reason.
+                document.open();
+                document.write(await response.text());
+                document.close();
+            } catch (err) {
+                showExportError('Could not reach the server. Please try again.');
+            } finally {
+                if (button && original !== null) {
+                    button.disabled = false;
+                    button.innerHTML = original;
+                }
+            }
+        }
+
+        function filenameFrom(response) {
+            const header = response.headers.get('Content-Disposition') || '';
+            const match = header.match(/filename="?([^"';]+)"?/i);
+            return match ? match[1] : null;
+        }
+
+        function showExportError(message) {
+            const container = document.getElementById('form-messages-container');
+            const markup = `<div class="px-4 py-3 rounded-lg text-sm bg-red-50 text-red-700 border border-red-200">${message}</div>`;
+            if (container) {
+                container.insertAdjacentHTML('afterbegin', markup);
+                container.scrollIntoView({behavior: 'smooth', block: 'nearest'});
             } else {
-                form.submit();
+                alert(message);
             }
         }
 
