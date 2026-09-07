@@ -30,6 +30,8 @@ JOB_COPY = {
         "jobs_empty": "No applications tracked yet.",
         "groups_title": "Which resume for which role",
         "groups_empty": "Apply to a few jobs and I'll show the pattern here.",
+        "one_use": "1 application",
+        "many_uses": "applications",
         "status": {
             "saved": "Saved", "applied": "Applied", "interview": "Interview",
             "offer": "Offer", "rejected": "Rejected",
@@ -46,6 +48,8 @@ JOB_COPY = {
         "jobs_empty": "Henüz takip edilen başvuru yok.",
         "groups_title": "Hangi rol için hangi CV",
         "groups_empty": "Birkaç ilana başvurun, deseni burada göstereyim.",
+        "one_use": "1 başvuru",
+        "many_uses": "başvuru",
         "status": {
             "saved": "Kaydedildi", "applied": "Başvuruldu", "interview": "Mülakat",
             "offer": "Teklif", "rejected": "Reddedildi",
@@ -59,8 +63,45 @@ def copy(lang):
     return JOB_COPY.get(lang, JOB_COPY["en"])
 
 
+# Labels almost every posting carries, so grouping by them tells the user
+# nothing. Kept only when there is nothing more specific.
+GENERIC_TAGS = {
+    "senior", "junior", "mid", "mid-level", "lead", "remote", "hybrid",
+    "onsite", "full-time", "fulltime", "part-time", "contract", "engineer",
+    "developer", "software",
+}
+
+MAX_TAGS = 3
+
+
+def _distinctive_tags(tags):
+    """Keep what separates one role from another; fall back if that is all there is."""
+    cleaned = JobPosting.normalize_tags(tags)
+    specific = [t for t in cleaned if t not in GENERIC_TAGS]
+    return (specific or cleaned)[:MAX_TAGS]
+
+
 def _resume_text(resume):
     return json.dumps(resume.content or {}, ensure_ascii=False)
+
+
+def cached_analysis(user_id, fingerprint):
+    """A recent analysis of this posting, if one is waiting to be applied."""
+    from django.core.cache import cache
+
+    return cache.get(f"job_match_{user_id}_{fingerprint}")
+
+
+def remember_analysis(user_id, fingerprint, result, seconds=900):
+    """
+    Hold an analysis briefly.
+
+    When a posting collides with one already tracked we ask the user what they
+    meant; their answer should not cost a second look at the same text.
+    """
+    from django.core.cache import cache
+
+    cache.set(f"job_match_{user_id}_{fingerprint}", result, seconds)
 
 
 def analyze_match(resume, description, lang="en"):
@@ -83,8 +124,11 @@ def analyze_match(resume, description, lang="en"):
     - "missing_keywords" are requirements in the posting with no support in the
       resume. Skills the resume demonstrates through experience count as
       present even if the exact word is absent.
-    - "tags" are 2-5 lowercase labels for the KIND of role this is
-      (e.g. "python", "backend", "devops", "senior"), used to group postings.
+    - "tags" are AT MOST 3 lowercase labels for the KIND of role this is, used to
+      group postings. Prefer what distinguishes this role from others — the
+      technology or domain ("python", "c++", "devops", "embedded") — over
+      seniority or work arrangement ("senior", "remote"), which nearly every
+      posting shares and therefore separates nothing.
     - Write "verdict" and "suggestions" in REPLY_LANGUAGE, given below — the
       person reading them is the one chatting, not the resume.
     - Leave keywords as they appear in the posting or resume; do not translate
@@ -132,7 +176,7 @@ def analyze_match(resume, description, lang="en"):
         "score": max(0, min(100, score)),
         "matched_keywords": [str(k) for k in parsed.get("matched_keywords", [])][:20],
         "missing_keywords": [str(k) for k in parsed.get("missing_keywords", [])][:20],
-        "tags": JobPosting.normalize_tags(parsed.get("tags", []))[:5],
+        "tags": _distinctive_tags(parsed.get("tags", [])),
         "title": str(parsed.get("title") or "Untitled role")[:255],
         "company": str(parsed.get("company") or "")[:255],
         "verdict": str(parsed.get("verdict") or ""),

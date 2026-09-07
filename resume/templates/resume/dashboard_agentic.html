@@ -913,7 +913,7 @@ function renderResumeGroups(groups) {
                onclick="selectResumeFromCard(this)">
             <span class="material-symbols-outlined !text-[15px] text-slate-400">description</span>
             <span class="text-sm text-slate-700 truncate flex-1">${escHtml(r.resume_name)}</span>
-            <span class="text-[11px] text-slate-400">${r.uses}×</span>
+            <span class="text-[11px] text-slate-400 whitespace-nowrap">${r.uses === 1 ? escHtml(JOB_LABELS.one_use) : r.uses + ' ' + escHtml(JOB_LABELS.many_uses)}</span>
           </div>`).join('')}
       </div>`).join('');
 }

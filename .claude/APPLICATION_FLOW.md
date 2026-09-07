@@ -46,6 +46,14 @@ güncellenir, yenisi açılmaz.
 Parmak izi metinden üretilir çünkü kullanıcı ilanı kopyalarken başlık/şirket
 alanları değişebilir ama gövde aynıdır.
 
+**Yakın kopya: sessizce karar verme, sor.** Metin farklı ama aynı şirkette aynı
+unvanlı bir başvuru varsa iki ihtimal vardır — kullanıcı aynı ilanı biraz farklı
+yapıştırmıştır, ya da gerçekten ikinci bir açılış vardır. Her iki tahmin de bir
+şey kaybettirir, o yüzden `match_job` kaydetmeden sorar ve `apply_to` ile geri
+çağrılır (`"new"` veya güncellenecek başvurunun id'si). Analiz kısa süre
+cache'lenir, böylece kullanıcının cevabı ikinci bir LLM çağrısına mal olmaz —
+ama cache **yalnızca** cevabı uygularken okunur, yeniden ölçümde asla.
+
 ### 2. Aynı ilan için hep aynı CV
 
 `tailor_resume_for_job` bir başvuru için ikinci kez çalıştığında **yeni CV
@@ -62,6 +70,18 @@ sebebi buydu. Varyant başlığı sabit: `<kök başlık> → <ilan başlığı>
 ölçümle karşılaştırmalı gösterilir: **72 → 85**.
 
 Bu, "yaptığım değişiklik işe yaradı mı" sorusunun tek doğrudan cevabı.
+
+## Etiketler ve gruplar
+
+Etiketler rolleri birbirinden ayırmak içindir. `senior`, `remote`, `developer`
+gibi neredeyse her ilanda geçen etiketler hiçbir şey ayırmaz; bunlar daha
+belirgin bir etiket varken elenir ve ilan başına en fazla 3 etiket tutulur.
+Önceden 5 etiket üretiliyordu ve tek bir ilan beş ayrı grupta aynı CV'yi
+gösteriyordu — içgörü değil gürültü.
+
+"Hangi rol için hangi CV" paneli **yalnızca en az iki farklı CV kullanılmışsa**
+görünür. Tek CV varken her grup aynı belgeyi adlandırır ve hiçbir soruya cevap
+vermez.
 
 ## Kota
 

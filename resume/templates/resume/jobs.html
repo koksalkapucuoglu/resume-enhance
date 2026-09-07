@@ -84,7 +84,8 @@
     {% else %}
       {% if groups %}
         <section class="mt-8">
-          <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">{{ UI.groups_title }}</h2>
+          <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wide mb-1">{{ UI.groups_title }}</h2>
+          <p class="text-xs text-slate-400 mb-3">{{ UI.groups_hint }}</p>
           <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {% for group in groups %}
               <div class="bg-white border border-slate-200 rounded-xl p-4">
@@ -93,7 +94,9 @@
                   <div class="flex items-center gap-2 py-0.5">
                     <span class="material-symbols-outlined !text-[15px] text-slate-400">description</span>
                     <span class="text-sm text-slate-700 truncate flex-1">{{ entry.resume_name }}</span>
-                    <span class="text-[11px] text-slate-400">{{ entry.uses }}×</span>
+                    <span class="text-[11px] text-slate-400 whitespace-nowrap">
+                      {% if entry.uses == 1 %}{{ UI.groups_one_use }}{% else %}{{ entry.uses }} {{ UI.groups_many_uses }}{% endif %}
+                    </span>
                   </div>
                 {% endfor %}
               </div>

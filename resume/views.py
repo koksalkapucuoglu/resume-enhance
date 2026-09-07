@@ -1537,9 +1537,13 @@ class JobListView(LoginRequiredMixin, ListView):
         context["resumes"] = Resume.objects.filter(user=self.request.user).order_by(
             "-updated_at"
         )
-        context["groups"] = (
+        groups = (
             job_service.resume_groups(self.request.user) if context["is_pro"] else []
         )
+        # Worth showing only when it answers something: with a single resume in
+        # play, every group names the same document.
+        distinct = {e["resume_id"] for g in groups for e in g["resumes"]}
+        context["groups"] = groups if len(distinct) >= 2 else []
         return context
 
 

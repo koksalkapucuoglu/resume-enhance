@@ -434,12 +434,19 @@ def _premium_required(user, feature):
     description=(
         "Score how well a resume fits a job posting the user pasted, and list "
         "the requirements it does not evidence. Saves the posting so it can be "
-        "tracked. Pass the posting text verbatim."
+        "tracked. Pass the posting text verbatim. If the result says a similar "
+        "application already exists, ask the user which they meant and call "
+        "this again with apply_to set — never guess."
     ),
-    parameters={"description": {"type": "string"}, "resume_id": INT_OR_NULL},
+    parameters={
+        "description": {"type": "string"},
+        "resume_id": INT_OR_NULL,
+        # "new" to track it separately, or the id of the application to update.
+        "apply_to": STR_OR_NULL,
+    },
     pro_only=True,
 )
-def match_job(user, ctx, description, resume_id=None):
+def match_job(user, ctx, description, resume_id=None, apply_to=None):
     blocked = _premium_required(user, "Job matching")
     if blocked:
         return blocked
@@ -449,14 +456,72 @@ def match_job(user, ctx, description, resume_id=None):
 
     from resume.services import job_service
 
-    result = job_service.analyze_match(resume, description, ctx.get("lang", "en"))
-    if "error" in result:
-        return ToolResult(data=result)
-
-    # One record per posting: pasting the same advert again re-measures the
-    # application rather than opening a second one.
     digest = JobPosting.fingerprint(description)
-    posting = JobPosting.objects.filter(user=user, content_hash=digest).first() if digest else None
+
+    # Same text as something already tracked: re-measure it, no question needed.
+    posting = (
+        JobPosting.objects.filter(user=user, content_hash=digest).first()
+        if digest
+        else None
+    )
+
+    # The cache only exists so that answering our own question does not pay for
+    # a second look at the same text. It must not serve a re-measurement: the
+    # point of pasting a posting again is to see the score move.
+    result = (
+        job_service.cached_analysis(user.id, digest)
+        if digest and apply_to
+        else None
+    )
+    if result is None:
+        result = job_service.analyze_match(resume, description, ctx.get("lang", "en"))
+        if "error" in result:
+            return ToolResult(data=result)
+
+    if posting is None and apply_to not in (None, "", "new"):
+        try:
+            target_id = int(apply_to)
+        except (TypeError, ValueError):
+            return ToolResult(data={"error": f"apply_to must be 'new' or an id."})
+        posting = JobPosting.objects.filter(pk=target_id, user=user).first()
+        if not posting:
+            return ToolResult(data={"error": f"No saved job with id {target_id}."})
+        # Replacing the text the application tracks
+        posting.description = description[: job_service.MAX_DESCRIPTION_CHARS]
+        posting.content_hash = digest
+
+    if posting is None and apply_to is None:
+        # A posting for the same role at the same company, but not the same
+        # text. It could be a re-paste or a genuinely different opening, and
+        # guessing either way loses something — so ask.
+        similar = JobPosting.objects.filter(
+            user=user,
+            title__iexact=result["title"],
+            company__iexact=result["company"],
+        ).first()
+        if similar:
+            # Hold the analysis so their answer costs nothing extra.
+            if digest:
+                job_service.remember_analysis(user.id, digest, result)
+            return ToolResult(
+                data={
+                    "needs_choice": True,
+                    "reason": "An application for this role at this company already exists.",
+                    "existing": {
+                        "job_id": similar.id,
+                        "title": similar.title,
+                        "company": similar.company,
+                        "score": similar.match_score,
+                        "status": similar.status,
+                    },
+                    "instruction": (
+                        "Ask whether to update that application or track this as "
+                        "a separate opening, then call match_job again with "
+                        "apply_to set to the id or to 'new'. Do not decide for them."
+                    ),
+                }
+            )
+
     is_new = posting is None
     if is_new:
         posting = JobPosting(
@@ -776,6 +841,22 @@ def resume_groups(user, ctx):
     from resume.services import job_service
 
     groups = job_service.resume_groups(user)
+    distinct = {
+        entry["resume_id"] for group in groups for entry in group["resumes"]
+    }
+    if len(distinct) < 2:
+        # With one resume in play every group names the same document, which
+        # answers nothing. Say so rather than drawing a wall of identical cards.
+        return ToolResult(
+            data={
+                "groups": [],
+                "note": (
+                    "Only one resume has been used across these applications, so "
+                    "there is no pattern to report yet. Tell the user this "
+                    "becomes useful once they apply with more than one resume."
+                ),
+            }
+        )
     return ToolResult(
         data={"groups": groups},
         ui=[{"type": "resume_groups", "groups": groups, "message": ""}],
