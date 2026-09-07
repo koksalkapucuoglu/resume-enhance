@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.test import TestCase
+from django.urls import reverse
 
 from resume.models import JobPosting, Resume
 from resume.services import agent_tools, job_service
@@ -476,10 +477,60 @@ class OneRecordPerPostingTest(TestCase):
         self._match(description="  " + POSTING.upper() + "\n\n")
         self.assertEqual(JobPosting.objects.count(), 1)
 
-    def test_a_different_posting_is_a_different_application(self):
+    def test_a_posting_for_the_same_role_asks_instead_of_duplicating(self):
+        """Same title and company, different text: could be a re-paste or a
+        second opening, and guessing either way loses something."""
         self._match()
-        self._match(description="Frontend Engineer at Beta. React, TypeScript, CSS.")
+        second = self._match(description="Frontend Engineer at Beta. React, TypeScript and modern CSS tooling.")
+        self.assertTrue(second.data["needs_choice"])
+        self.assertEqual(JobPosting.objects.count(), 1)
+
+    def test_answering_new_tracks_it_separately(self):
+        self._match()
+        payload = json.loads(MATCH_JSON)
+        with patch("resume.services.job_service.send_openai_message",
+                   return_value=json.dumps(payload)):
+            agent_tools.get_tool("match_job").handler(
+                self.user, self.ctx,
+                description="A different advert entirely, for a data engineering role at Gamma.",
+                apply_to="new",
+            )
         self.assertEqual(JobPosting.objects.count(), 2)
+
+    def test_answering_with_an_id_updates_that_application(self):
+        first = self._match()
+        job_id = first.data["job_id"]
+        payload = json.loads(MATCH_JSON) | {"score": 91}
+        with patch("resume.services.job_service.send_openai_message",
+                   return_value=json.dumps(payload)):
+            result = agent_tools.get_tool("match_job").handler(
+                self.user, self.ctx,
+                description="A longer version of the same advert, with the benefits section included.",
+                apply_to=str(job_id),
+            )
+        self.assertEqual(JobPosting.objects.count(), 1)
+        self.assertEqual(result.data["job_id"], job_id)
+        posting = JobPosting.objects.get()
+        self.assertEqual(posting.match_score, 91)
+        self.assertIn("longer version", posting.description)
+
+    def test_a_genuinely_unrelated_posting_needs_no_question(self):
+        self._match()
+        payload = json.loads(MATCH_JSON) | {"title": "Frontend Engineer",
+                                            "company": "Beta"}
+        with patch("resume.services.job_service.send_openai_message",
+                   return_value=json.dumps(payload)):
+            result = agent_tools.get_tool("match_job").handler(
+                self.user, self.ctx, description="Frontend Engineer at Beta. React, TypeScript and CSS, building the design system.",
+            )
+        self.assertNotIn("needs_choice", result.data)
+        self.assertEqual(JobPosting.objects.count(), 2)
+
+    def test_answering_with_an_unknown_id_is_refused(self):
+        result = agent_tools.get_tool("match_job").handler(
+            self.user, self.ctx, description=POSTING, apply_to="99999"
+        )
+        self.assertIn("error", result.data)
 
     def test_the_first_match_is_flagged_as_new(self):
         self.assertTrue(self._match().data["is_new_application"])
@@ -703,3 +754,83 @@ class FingerprintTest(TestCase):
     def test_empty(self):
         self.assertEqual(JobPosting.fingerprint(""), "")
         self.assertEqual(JobPosting.fingerprint(None), "")
+
+
+class DistinctiveTagsTest(TestCase):
+    """Tags exist to separate one kind of role from another."""
+
+    def test_generic_labels_are_dropped(self):
+        self.assertEqual(
+            job_service._distinctive_tags(["senior", "python", "remote", "devops"]),
+            ["python", "devops"],
+        )
+
+    def test_at_most_three(self):
+        self.assertEqual(
+            len(job_service._distinctive_tags(
+                ["python", "django", "backend", "postgres", "aws"]
+            )),
+            3,
+        )
+
+    def test_generic_labels_are_kept_when_there_is_nothing_else(self):
+        """A tag that separates nothing beats no tag at all."""
+        self.assertEqual(
+            job_service._distinctive_tags(["senior", "remote"]), ["senior", "remote"]
+        )
+
+    def test_normalisation_still_applies(self):
+        self.assertEqual(
+            job_service._distinctive_tags([" Python ", "PYTHON", "C++"]),
+            ["python", "c++"],
+        )
+
+
+class ResumeGroupsAreOnlyShownWhenTheyInformTest(TestCase):
+    """With one resume in play, every group names the same document."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("ada", password="x")
+        self.user.profile.tier = "pro"
+        self.user.profile.save()
+        self.first = Resume.objects.create(user=self.user, title="Main", content=content())
+        self.ctx = {"lang": "en", "active_resume": self.first, "resumes": [], "quota": {}}
+
+    def _apply(self, resume, tags, digest):
+        JobPosting.objects.create(
+            user=self.user, title="Role", description="advert", content_hash=digest,
+            tags=tags, resume=resume,
+        )
+
+    def test_a_single_resume_produces_no_groups(self):
+        self._apply(self.first, ["python"], "a")
+        self._apply(self.first, ["devops"], "b")
+        result = agent_tools.get_tool("resume_groups").handler(self.user, self.ctx)
+        self.assertEqual(result.data["groups"], [])
+        self.assertIn("only one resume", result.data["note"].lower())
+        self.assertEqual(result.ui, [])
+
+    def test_two_resumes_produce_groups(self):
+        second = Resume.objects.create(user=self.user, title="C++ CV", content=content())
+        self._apply(self.first, ["python"], "a")
+        self._apply(second, ["c++"], "b")
+        result = agent_tools.get_tool("resume_groups").handler(self.user, self.ctx)
+        tags = {g["tag"] for g in result.data["groups"]}
+        self.assertEqual(tags, {"python", "c++"})
+        self.assertTrue(result.ui)
+
+    def test_the_standard_page_hides_them_too(self):
+        self._apply(self.first, ["python"], "a")
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("resume:jobs"))
+        self.assertEqual(response.context["groups"], [])
+
+    def test_the_standard_page_shows_them_when_there_is_a_choice(self):
+        second = Resume.objects.create(user=self.user, title="C++ CV", content=content())
+        self._apply(self.first, ["python"], "a")
+        self._apply(second, ["c++"], "b")
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("resume:jobs"))
+        self.assertEqual(len(response.context["groups"]), 2)
+        self.assertNotIn("1×", response.content.decode())
+        self.assertIn("1 application", response.content.decode())
