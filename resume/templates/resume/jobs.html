@@ -61,19 +61,20 @@
       </div>
     {% endif %}
 
-    {% if not is_pro %}
-      <div class="mt-8 bg-white border border-slate-200 rounded-2xl p-8 text-center">
-        <div class="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
-          <span class="material-symbols-outlined text-primary text-3xl">work</span>
+    {% if at_cap %}
+      <div class="mt-6 bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 flex items-start gap-3">
+        <span class="material-symbols-outlined text-amber-600 !text-[20px]">info</span>
+        <div class="flex-1">
+          <p class="text-sm font-semibold text-slate-900">{{ UI.jobs_cap_title }}</p>
+          <p class="text-sm text-slate-600 mt-0.5">{{ UI.jobs_cap_body }}</p>
         </div>
-        <h2 class="text-lg font-bold text-slate-900">{{ UI.jobs_pro_title }}</h2>
-        <p class="text-slate-500 text-sm mt-2 max-w-md mx-auto">{{ UI.jobs_pro_body }}</p>
-        <a href="{% url 'resume:pricing' %}" class="inline-block mt-5 px-6 py-2.5 rounded-lg bg-primary text-white text-sm font-bold hover:bg-primary-hover transition-colors">
+        <a href="{% url 'resume:pricing' %}" class="px-4 py-2 rounded-lg bg-primary text-white text-xs font-bold hover:bg-primary-hover transition-colors whitespace-nowrap">
           {{ UI.jobs_pro_cta }}
         </a>
       </div>
+    {% endif %}
 
-    {% elif not jobs %}
+    {% if not jobs %}
       <div class="mt-8 bg-white border border-slate-200 rounded-2xl p-10 text-center">
         <div class="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
           <span class="material-symbols-outlined text-slate-400 text-3xl">work_off</span>

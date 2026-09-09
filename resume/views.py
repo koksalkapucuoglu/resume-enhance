@@ -1532,11 +1532,12 @@ class JobListView(LoginRequiredMixin, ListView):
 
         context = super().get_context_data(**kwargs)
         context["settings"] = settings
-        context["is_pro"] = self.request.user.profile.is_pro()
+        profile = self.request.user.profile
+        context["is_pro"] = profile.is_pro()
+        context["at_cap"] = not profile.can_track_application()
+        context["application_limit"] = settings.FREE_TIER_LIMITS["application_count"]
         context["status_choices"] = JobPosting.STATUS_CHOICES
-        groups = (
-            job_service.resume_groups(self.request.user) if context["is_pro"] else []
-        )
+        groups = job_service.resume_groups(self.request.user)
         # Worth showing only when it answers something: with a single resume in
         # play, every group names the same document.
         context["groups"] = groups if len(groups) >= 2 else []

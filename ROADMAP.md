@@ -246,8 +246,8 @@ taslağı; oradaki tool listesi güncellenmeli, çünkü tool seti Faz 3-4'te de
 | İki mod (standart + agentic) | ✅ | ✅ |
 | Revizyon: diff + geri alma | ✅ son 5 | ✅ sınırsız |
 | Feedback | ✅ | ✅ |
-| **JD matching + tailoring** | ❌ | ✅ |
-| **İlan takibi + CV grupları** | ❌ | ✅ |
+| **JD matching + ilan takibi** | ✅ 3 başvuruya kadar | ✅ Sınırsız |
+| **İlana özel uyarlama** | ✅ (başvuru başına) | ✅ Sınırsız |
 
 ---
 

@@ -137,36 +137,6 @@ class JobSecurityTest(TestCase):
         self.assertIsNone(posting.source_resume_id)
 
 
-class ProGateTest(TestCase):
-    def setUp(self):
-        self.user = User.objects.create_user("ada", password="x")
-        self.resume = Resume.objects.create(user=self.user, title="CV", content=content())
-        self.ctx = {"lang": "en", "active_resume": self.resume, "resumes": [], "quota": {}}
-
-    def test_free_users_are_not_offered_the_pro_tools(self):
-        names = {s["function"]["name"] for s in agent_tools.tool_schemas(self.user)}
-        self.assertFalse(names & set(agent_tools.pro_tool_names()))
-
-    def test_pro_users_are(self):
-        self.user.profile.tier = "pro"
-        self.user.profile.save()
-        names = {s["function"]["name"] for s in agent_tools.tool_schemas(self.user)}
-        self.assertTrue(set(agent_tools.pro_tool_names()) <= names)
-
-    def test_handlers_refuse_free_users_even_if_called(self):
-        """Defence in depth: withholding the schema is not the only guard."""
-        with patch("resume.services.job_service.send_openai_message") as llm:
-            result = agent_tools.get_tool("match_job").handler(
-                self.user, self.ctx, description=POSTING
-            )
-        self.assertTrue(result.data["upgrade_required"])
-        llm.assert_not_called()
-
-    def test_no_posting_is_saved_when_refused(self):
-        agent_tools.get_tool("match_job").handler(self.user, self.ctx, description=POSTING)
-        self.assertEqual(JobPosting.objects.count(), 0)
-
-
 class JobCopyTest(TestCase):
     """Panel wording travels with the data, in the conversation's language."""
 
@@ -370,9 +340,6 @@ class RescoreTest(TestCase):
             self.user, self.ctx, job_id=99999
         )
         self.assertIn("error", result.data)
-
-    def test_it_is_pro_only(self):
-        self.assertTrue(agent_tools.TOOL_REGISTRY["rescore_job"].pro_only)
 
     def test_it_does_not_need_approval(self):
         """Measuring changes nothing, so stopping to ask would be noise."""
@@ -781,11 +748,30 @@ class JobTrackerPageTest(TestCase):
         )
         self.assertNotIn('<select name="resume"', html)
 
-    def test_free_users_get_the_upsell(self):
+    def test_free_users_see_their_applications(self):
+        """The paywall is the allowance, not the feature."""
         self.user.profile.tier = "free"
         self.user.profile.save()
-        html = self.client.get(reverse("resume:jobs")).content.decode()
-        self.assertNotIn("Backend Engineer", html)
+        response = self.client.get(reverse("resume:jobs"))
+        self.assertIn("Backend Engineer", response.content.decode())
+        self.assertFalse(response.context["at_cap"])
+
+    def test_the_cap_is_announced_when_reached(self):
+        from django.conf import settings
+
+        self.user.profile.tier = "free"
+        self.user.profile.save()
+        for i in range(settings.FREE_TIER_LIMITS["application_count"]):
+            JobPosting.objects.create(
+                user=self.user, title=f"Filler {i}", description="advert",
+                content_hash=f"filler-{i}",
+            )
+        response = self.client.get(reverse("resume:jobs"))
+        self.assertTrue(response.context["at_cap"])
+        html = response.content.decode()
+        self.assertIn("free applications", html)
+        # The applications themselves stay visible
+        self.assertIn("Backend Engineer", html)
 
     def test_another_users_applications_are_not_listed(self):
         eve = User.objects.create_user("eve", password="x")

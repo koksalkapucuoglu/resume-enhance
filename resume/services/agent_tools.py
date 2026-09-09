@@ -48,7 +48,6 @@ class Tool:
     parameters: dict
     handler: Callable
     destructive: bool = False
-    pro_only: bool = False
 
     def schema(self):
         """OpenAI function-calling definition, with strict argument checking."""
@@ -73,7 +72,7 @@ class Tool:
 TOOL_REGISTRY: dict[str, Tool] = {}
 
 
-def tool(name, description, parameters=None, destructive=False, pro_only=False):
+def tool(name, description, parameters=None, destructive=False):
     """Register a function as a tool the model may call."""
 
     def decorator(fn):
@@ -83,28 +82,15 @@ def tool(name, description, parameters=None, destructive=False, pro_only=False):
             parameters=parameters or {},
             handler=fn,
             destructive=destructive,
-            pro_only=pro_only,
         )
         return fn
 
     return decorator
 
 
-def tool_schemas(user=None):
-    """
-    Schemas the model may choose from.
-
-    Pro-only tools are withheld from free accounts rather than offered and then
-    refused: it keeps the catalogue short — selection accuracy drops as the list
-    grows — and stops the assistant repeatedly proposing something the user
-    cannot run. The handlers still check the tier themselves.
-    """
-    is_pro = bool(user and user.profile.is_pro())
-    return [t.schema() for t in TOOL_REGISTRY.values() if is_pro or not t.pro_only]
-
-
-def pro_tool_names():
-    return [name for name, t in TOOL_REGISTRY.items() if t.pro_only]
+def tool_schemas():
+    """Schemas the model may choose from."""
+    return [t.schema() for t in TOOL_REGISTRY.values()]
 
 
 def get_tool(name):
@@ -417,13 +403,23 @@ def duplicate_resume(user, ctx, resume_id=None):
 # ---------------------------------------------------------------------------
 
 
-def _premium_required(user, feature):
-    """Job tracking is the paid tier. Returns an error result, or None."""
-    if user.profile.is_pro():
+def _application_cap_reached(user):
+    """
+    Job matching is free up to a few applications, then Pro.
+
+    Withholding it entirely meant nobody saw what they would be paying for;
+    letting it run out after a few is the same paywall, placed where the user
+    has already felt the value.
+    """
+    if user.profile.can_track_application():
         return None
     return ToolResult(
         data={
-            "error": f"{feature} is a Pro feature.",
+            "error": (
+                f"You are tracking the "
+                f"{settings.FREE_TIER_LIMITS['application_count']} applications "
+                f"the free plan allows. Pro removes the limit."
+            ),
             "upgrade_required": True,
         }
     )
@@ -444,12 +440,8 @@ def _premium_required(user, feature):
         # "new" to track it separately, or the id of the application to update.
         "apply_to": STR_OR_NULL,
     },
-    pro_only=True,
 )
 def match_job(user, ctx, description, resume_id=None, apply_to=None):
-    blocked = _premium_required(user, "Job matching")
-    if blocked:
-        return blocked
     resume, error = _resume_or_error(user, resume_id, ctx)
     if error:
         return error
@@ -524,17 +516,9 @@ def match_job(user, ctx, description, resume_id=None, apply_to=None):
 
     is_new = posting is None
     if is_new:
-        if not user.profile.can_track_application():
-            return ToolResult(
-                data={
-                    "error": (
-                        f"Application limit reached. The free plan tracks "
-                        f"{settings.FREE_TIER_LIMITS['application_count']} "
-                        f"applications, each keeping a copy of the resume sent."
-                    ),
-                    "upgrade_required": True,
-                }
-            )
+        capped = _application_cap_reached(user)
+        if capped:
+            return capped
         posting = JobPosting(
             user=user,
             description=description[: job_service.MAX_DESCRIPTION_CHARS],
@@ -590,12 +574,8 @@ def match_job(user, ctx, description, resume_id=None, apply_to=None):
     ),
     parameters={"job_id": {"type": "integer"}, "resume_id": INT_OR_NULL},
     destructive=True,
-    pro_only=True,
 )
 def tailor_resume_for_job(user, ctx, job_id, resume_id=None):
-    blocked = _premium_required(user, "Tailoring a resume to a job")
-    if blocked:
-        return blocked
 
     posting = JobPosting.objects.filter(pk=job_id, user=user).first()
     if not posting:
@@ -662,12 +642,8 @@ def tailor_resume_for_job(user, ctx, job_id, resume_id=None):
     ),
     parameters={"job_id": {"type": "integer"}},
     destructive=True,
-    pro_only=True,
 )
 def clone_application_resume(user, ctx, job_id):
-    blocked = _premium_required(user, "Job tracking")
-    if blocked:
-        return blocked
 
     posting = JobPosting.objects.filter(pk=job_id, user=user).first()
     if not posting:
@@ -723,12 +699,8 @@ def clone_application_resume(user, ctx, job_id):
         "user can see whether the score moved."
     ),
     parameters={"job_id": {"type": "integer"}},
-    pro_only=True,
 )
 def rescore_job(user, ctx, job_id):
-    blocked = _premium_required(user, "Job matching")
-    if blocked:
-        return blocked
 
     posting = JobPosting.objects.filter(pk=job_id, user=user).first()
     if not posting:
@@ -788,12 +760,8 @@ def rescore_job(user, ctx, job_id):
     name="list_jobs",
     description="List the job postings the user is tracking, with status, score and the resume each one was sent with.",
     parameters={"status": STR_OR_NULL},
-    pro_only=True,
 )
 def list_jobs(user, ctx, status=None):
-    blocked = _premium_required(user, "Job tracking")
-    if blocked:
-        return blocked
 
     postings = JobPosting.objects.filter(user=user).select_related("source_resume")
     if status:
@@ -833,12 +801,8 @@ def list_jobs(user, ctx, status=None):
         "status": STR_OR_NULL,
         "resume_id": INT_OR_NULL,
     },
-    pro_only=True,
 )
 def update_job(user, ctx, job_id, status=None, resume_id=None):
-    blocked = _premium_required(user, "Job tracking")
-    if blocked:
-        return blocked
 
     posting = JobPosting.objects.filter(pk=job_id, user=user).first()
     if not posting:
@@ -883,12 +847,8 @@ def update_job(user, ctx, job_id, status=None, resume_id=None):
         "the tags of the jobs they applied to. Answers 'which CV do I use for "
         "C++ jobs?'."
     ),
-    pro_only=True,
 )
 def resume_groups(user, ctx):
-    blocked = _premium_required(user, "Resume grouping")
-    if blocked:
-        return blocked
 
     from resume.services import job_service
 
