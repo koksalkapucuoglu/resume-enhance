@@ -980,7 +980,7 @@ class StandingContextTest(TestCase):
         self.posting = JobPosting.objects.create(
             user=self.user, title="Senior Python Developer", company="Shakers",
             description="advert", content_hash="hash", match_score=60,
-            resume=self.resume,
+            source_resume=self.resume, snapshot_content=content(),
         )
         self.client.force_login(self.user)
 

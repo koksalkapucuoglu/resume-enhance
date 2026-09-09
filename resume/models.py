@@ -34,11 +34,12 @@ class Resume(models.Model):
     # or tailored to one job. It hangs off a base resume and does not consume a
     # resume slot: charging twice would penalise exactly the bilingual, many-
     # applications user this is built for.
+    # A per-job version is no longer a resume of its own: it lives inside the
+    # application as a frozen snapshot, so the resume list does not grow with
+    # every posting applied to.
     DERIVED_TRANSLATION = "translation"
-    DERIVED_TAILORED = "tailored"
     DERIVED_KIND_CHOICES = [
         (DERIVED_TRANSLATION, "Language version"),
-        (DERIVED_TAILORED, "Tailored for a job"),
     ]
 
     derived_from = models.ForeignKey(
@@ -157,14 +158,21 @@ class JobPosting(models.Model):
     company = models.CharField(max_length=255, blank=True, default="")
     url = models.URLField(blank=True, default="")
     description = models.TextField(blank=True, default="")
-    tags = models.JSONField(default=list, blank=True)
     # Fingerprint of the posting body, so pasting the same advert twice updates
     # the application instead of opening a second one. Derived from the text
     # rather than the title, which the model may summarise differently.
     content_hash = models.CharField(max_length=64, blank=True, default="", db_index=True)
-    # The resume used for this application. Kept if the resume is deleted so the
-    # application history does not disappear with it.
-    resume = models.ForeignKey(
+    # What was actually sent, frozen. A live reference cannot answer "what did
+    # they receive": tailoring the same resume for a later posting would rewrite
+    # this application's record of itself.
+    snapshot_content = models.JSONField(default=dict, blank=True)
+    snapshot_template = models.CharField(max_length=50, blank=True, default="")
+    snapshot_taken_at = models.DateTimeField(null=True, blank=True)
+
+    # The base resume the snapshot came from. Only used to group applications
+    # ("which resume do I send for which kind of role"), so losing the resume
+    # does not invalidate the application.
+    source_resume = models.ForeignKey(
         Resume,
         on_delete=models.SET_NULL,
         null=True,
@@ -187,19 +195,6 @@ class JobPosting(models.Model):
         indexes = [models.Index(fields=["user", "-updated_at"])]
 
     @staticmethod
-    def normalize_tags(tags):
-        """Lowercase, trimmed, de-duplicated, order preserved."""
-        seen, cleaned = set(), []
-        for tag in tags or []:
-            if tag is None:
-                continue
-            value = str(tag).strip().lower()
-            if value and value not in seen:
-                seen.add(value)
-                cleaned.append(value)
-        return cleaned
-
-    @staticmethod
     def fingerprint(description):
         """Stable id for a posting body, insensitive to whitespace and case."""
         import hashlib
@@ -207,6 +202,30 @@ class JobPosting(models.Model):
 
         normalized = re.sub(r"\s+", " ", (description or "")).strip().lower()
         return hashlib.sha256(normalized.encode()).hexdigest() if normalized else ""
+
+    def take_snapshot(self, content, template_selector, source_resume=None):
+        """Freeze what would be sent for this application."""
+        import copy as copy_module
+
+        from django.utils import timezone
+
+        self.snapshot_content = copy_module.deepcopy(content or {})
+        self.snapshot_template = template_selector or "faangpath-simple"
+        self.snapshot_taken_at = timezone.now()
+        if source_resume is not None:
+            self.source_resume = source_resume
+
+    @property
+    def has_snapshot(self):
+        return bool(self.snapshot_content)
+
+    @property
+    def snapshot_name(self):
+        """A name for the frozen document, for previews and clone titles."""
+        full_name = (self.snapshot_content.get("user_info") or {}).get(
+            "full_name", ""
+        ).strip()
+        return f"{full_name} → {self.title}" if full_name else self.title
 
     def record_score(self, score, resume_id=None, missing_keywords=None):
         """Add a measurement and return the one before it, if any."""
@@ -408,6 +427,21 @@ class UserProfile(models.Model):
 
         return (
             self.agent_message_count < settings.FREE_TIER_LIMITS["agent_message_count"]
+        )
+
+    def can_track_application(self):
+        """
+        Whether another application can be tracked.
+
+        Each one stores a resume snapshot, so the free allowance is bounded.
+        """
+        if self.is_pro():
+            return True
+        from django.conf import settings
+
+        return (
+            self.user.job_postings.count()
+            < settings.FREE_TIER_LIMITS["application_count"]
         )
 
     def can_create_resume(self):

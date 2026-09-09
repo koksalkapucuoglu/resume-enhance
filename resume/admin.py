@@ -41,11 +41,16 @@ class ResumeRevisionAdmin(admin.ModelAdmin):
 @admin.register(JobPosting)
 class JobPostingAdmin(admin.ModelAdmin):
     list_display = (
-        "title", "company", "user", "status", "match_score", "resume", "updated_at"
+        "title", "company", "user", "status", "match_score",
+        "source_resume", "snapshot_taken_at", "updated_at",
     )
     list_filter = ("status", "created_at")
     search_fields = ("title", "company", "user__username")
-    raw_id_fields = ("user", "resume")
+    raw_id_fields = ("user", "source_resume")
+    # The snapshot is a record of what was sent; editing it would make the
+    # application describe something that never happened.
+    readonly_fields = ("snapshot_content", "snapshot_template", "snapshot_taken_at",
+                       "content_hash", "score_history")
     date_hierarchy = "created_at"
 
 

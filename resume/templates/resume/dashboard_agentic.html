@@ -1190,8 +1190,14 @@ function handleResponse(data) {
 
         case 'preview':
             appendMessage('bot', msg);
-            setActiveResume(data.resume_id, data.resume_name);
-            loadPreviewPanel(data.resume_id, data.resume_name);
+            if (data.preview_url) {
+                // An application's stored copy — shown, but not made active,
+                // because it cannot be edited in place.
+                loadSnapshotPanel(data.preview_url, data.resume_name);
+            } else {
+                setActiveResume(data.resume_id, data.resume_name);
+                loadPreviewPanel(data.resume_id, data.resume_name);
+            }
             showContextBadge();
             break;
 
@@ -1415,6 +1421,18 @@ function selectResumeFromList(id, name) {
     loadPreviewPanel(id, name);
     const displayName = name.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'");
     appendMessage('bot', `**${displayName}** selected. You can now ask me to make changes to it.`);
+}
+
+function loadSnapshotPanel(previewUrl, label) {
+    // An application's stored copy: a record of what was sent, not a document
+    // to work on. It is shown, never made active for editing.
+    hideAllContextPanels();
+    const panel = document.getElementById('context-preview');
+    panel.classList.remove('hidden');
+    panel.classList.add('flex');
+    document.getElementById('preview-title').textContent = label || '';
+    document.getElementById('preview-iframe').src = previewUrl;
+    if (mobileActiveTab === 'chat') showContextBadge();
 }
 
 function loadPreviewPanel(resumeId, title) {

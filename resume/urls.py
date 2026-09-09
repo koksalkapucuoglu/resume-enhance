@@ -18,6 +18,16 @@ urlpatterns = [
     path("jobs/", views.JobListView.as_view(), name="jobs"),
     path("jobs/<int:pk>/update/", views.update_job_posting, name="update_job_posting"),
     path("jobs/<int:pk>/delete/", views.delete_job_posting, name="delete_job_posting"),
+    path(
+        "jobs/<int:pk>/snapshot/",
+        views.application_snapshot,
+        name="application_snapshot",
+    ),
+    path(
+        "jobs/<int:pk>/clone/",
+        views.clone_application_snapshot,
+        name="clone_application_snapshot",
+    ),
     path("form/", views.ResumeFormView.as_view(), name="resume_form"),
     path("form/<int:pk>/", views.ResumeFormView.as_view(), name="resume_form_edit"),
     path("duplicate/<int:pk>/", views.duplicate_resume, name="duplicate_resume"),
