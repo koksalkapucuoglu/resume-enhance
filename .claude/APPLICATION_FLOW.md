@@ -20,20 +20,38 @@ oluştu; başlık `Main — Senior Python Developer — Senior Python Developer`
 Kota da tutarsızdı: çeviri kopyası hak yemiyordu ama ilana özel varyant
 normal CV sayılıyordu.
 
-## Model
+## Model (2026-09-09 revizyonu — snapshot)
 
 ```
 Temel CV                    ← kullanıcının 3 hakkı bunlar
- ├── dil sürümü   (tr/en)   ─┐
- └── ilana özel sürüm        ├─ türev: hak yemez
-                            ─┘
-Başvuru (ilan) ── tam olarak bir CV kullanır
-                └─ puan geçmişi: [(tarih, puan, cv_id)]
+ └── dil sürümü  (tr/en)    ← türev, hak yemez
+
+Başvuru (ilan)
+ ├── ilan metni + parmak izi
+ ├── CV SNAPSHOT            ← gönderilen belgenin dondurulmuş hali
+ │                             salt okunur, CV listesinde görünmez, hak yemez
+ ├── puan + puan geçmişi
+ └── kaynak temel CV (bağ)  ← gruplama bunun üzerinden yapılır
 ```
 
-`Resume.translation_of` → `Resume.derived_from` + `Resume.derived_kind`
-(`translation` | `tailored`) olarak genelleşir. Her iki türev de aynı
-kurallara tabi: kök CV'ye bağlı, kotaya sayılmaz, kök silinince silinir.
+**Neden snapshot.** Bir başvurunun cevaplaması gereken soru *"onlara ne
+gönderdim"*. Canlı bir CV referansı bunu cevaplayamaz: ikinci ilana göre CV'yi
+düzeltince birinci başvurunun kaydı artık göndermediğin bir belgeyi işaret eder.
+Fatura satırlarının o günkü fiyatı dondurması gibi.
+
+**`derived_kind="tailored"` kaldırıldı.** İlana özel sürüm artık bir `Resume`
+satırı değil, başvurunun içindeki snapshot. CV listende yalnızca temel CV'ler ve
+dil sürümleri var — liste ilan sayısıyla şişmiyor.
+
+**Snapshot düzenlenemez.** "Bu CV'yi düzenle" denince salt okunur olduğu söylenir
+ve klonlama için onay istenir. Klon **yeni bir temel CV**'dir ve kotaya sayılır:
+serbestçe düzenlenebilen her belge kotaya girmeli, yoksa klonlama limiti delme
+yolu olur. Onay hem standart hem agentic modda sorulur.
+
+**Etiketler kaldırıldı.** "Hangi rol için hangi CV" sorusu kaynak temel CV
+üzerinden cevaplanıyor — bu bir tahmin değil, olgu. LLM'in ürettiği etiketler
+çoğu ilanda jenerikti (`senior`, `remote`) ve tek bir ilan aynı CV'yi beş ayrı
+grupta gösteriyordu.
 
 ## Üç kural
 
@@ -54,14 +72,11 @@ yapıştırmıştır, ya da gerçekten ikinci bir açılış vardır. Her iki ta
 cache'lenir, böylece kullanıcının cevabı ikinci bir LLM çağrısına mal olmaz —
 ama cache **yalnızca** cevabı uygularken okunur, yeniden ölçümde asla.
 
-### 2. Aynı ilan için hep aynı CV
+### 2. Aynı ilan için hep aynı snapshot
 
 `tailor_resume_for_job` bir başvuru için ikinci kez çalıştığında **yeni CV
-açmaz**: o başvuruya bağlı mevcut varyantın içeriğini günceller ve bir
-`ResumeRevision` yazar — yani geri alınabilir.
-
-Kaynak her zaman **kök CV**'dir, varyantın kendisi değil. Başlığın birikmesinin
-sebebi buydu. Varyant başlığı sabit: `<kök başlık> → <ilan başlığı>`.
+açmaz**: o başvurunun snapshot'ını yeniden yazar. Kaynak her zaman **temel
+CV**'dir, önceki snapshot değil — başlığın birikmesinin sebebi buydu.
 
 ### 3. Puan bir ölçüm, bir özellik değil
 
@@ -71,28 +86,27 @@ sebebi buydu. Varyant başlığı sabit: `<kök başlık> → <ilan başlığı>
 
 Bu, "yaptığım değişiklik işe yaradı mı" sorusunun tek doğrudan cevabı.
 
-## Etiketler ve gruplar
-
-Etiketler rolleri birbirinden ayırmak içindir. `senior`, `remote`, `developer`
-gibi neredeyse her ilanda geçen etiketler hiçbir şey ayırmaz; bunlar daha
-belirgin bir etiket varken elenir ve ilan başına en fazla 3 etiket tutulur.
-Önceden 5 etiket üretiliyordu ve tek bir ilan beş ayrı grupta aynı CV'yi
-gösteriyordu — içgörü değil gürültü.
-
-"Hangi rol için hangi CV" paneli **yalnızca en az iki farklı CV kullanılmışsa**
-görünür. Tek CV varken her grup aynı belgeyi adlandırır ve hiçbir soruya cevap
-vermez.
-
 ## Kota
 
 | | Kotaya sayılır |
 |---|---|
-| Temel CV | ✅ (`FREE_TIER_LIMITS["resume_count"]`) |
+| Temel CV | ✅ `resume_count` = 3 |
 | Dil sürümü | ❌ |
-| İlana özel sürüm | ❌ |
+| CV snapshot (başvuru içi) | ❌ |
+| Snapshot klonu | ✅ — yeni temel CV |
+| Başvuru sayısı | ✅ `application_count` = 3 (ücretsiz), Pro sınırsız |
 
-Gerekçe: türevler aynı belgenin başka bir biçimi. İki kez saymak tam da hedef
-kitleyi — iki dilde iş arayan ve ilana göre uyarlayan kullanıcıyı — cezalandırır.
+## Gruplar
+
+Başvurular kaynak temel CV'ye göre gruplanır:
+
+```
+Main CV   → 5 başvuru: Shakers, Beta, Gamma…
+C++ CV    → 3 başvuru: Delta, Epsilon…
+```
+
+Panel **yalnızca en az iki farklı temel CV kullanılmışsa** görünür. Tek CV varken
+her grup aynı belgeyi adlandırır ve hiçbir soruya cevap vermez.
 
 ## Dil
 
@@ -102,13 +116,15 @@ Türkçe. İngilizce bir sürüm oluşturayım mı?"* Onay verilirse dil sürüm
 
 ## Mevcut verinin taşınması
 
-Bir migration:
-- Aynı kullanıcı + aynı `content_hash` başvuruları tek kayda birleştirir; en
-  yüksek puanı ve en yeni durumu korur, diğerlerini siler.
-- `translation_of` değerlerini `derived_from` + `derived_kind="translation"`
-  alanlarına taşır.
-- Başlığı `<X> — <Y> — <Y>` biçiminde birikmiş varyantları tespit edip
-  `derived_kind="tailored"` olarak işaretler ve başlığı sadeleştirir.
+`0018` aynı ilanın kopyalarını zaten birleştirdi. Snapshot geçişi:
+
+- Her başvuru için, bağlı CV'nin o anki içeriği snapshot olarak dondurulur.
+- `derived_kind="tailored"` CV'lerden **bir başvuruya bağlı olanlar** snapshot'a
+  dönüşüp silinir — artık CV listesinde yer almamaları gerekiyor.
+- Bağlı başvurusu olmayan `tailored` CV'ler **temel CV'ye** yükseltilir; sessizce
+  silmek kullanıcının üzerinde çalıştığı bir belgeyi yok etmek olurdu. Bu,
+  kotayı geçici olarak aşabilir; mevcut kayıtlar korunur, yeni oluşturma engellenir.
+- `tags` alanı kaldırılır.
 
 ## Kapsam dışı
 

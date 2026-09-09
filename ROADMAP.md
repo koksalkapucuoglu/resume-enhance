@@ -236,7 +236,9 @@ taslağı; oradaki tool listesi güncellenmeli, çünkü tool seti Faz 3-4'te de
 
 | Yetenek | Free | Premium |
 |---|---|---|
-| Resume tutma | 3 adet | Sınırsız |
+| Temel CV tutma | 3 adet | Sınırsız |
+| Dil sürümü / başvuru snapshot'ı | Kotaya sayılmaz | Kotaya sayılmaz |
+| Takip edilen başvuru | 3 adet | Sınırsız |
 | PDF / LinkedIn import | 2/ay | Sınırsız |
 | AI enhance | 10/ay | Sınırsız |
 | PDF indirme | 5/ay | Sınırsız |

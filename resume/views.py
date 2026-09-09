@@ -1523,7 +1523,7 @@ class JobListView(LoginRequiredMixin, ListView):
         # SECURITY: scoped to the caller
         return (
             JobPosting.objects.filter(user=self.request.user)
-            .select_related("resume")
+            .select_related("source_resume")
             .order_by("-updated_at")
         )
 
@@ -1534,16 +1534,12 @@ class JobListView(LoginRequiredMixin, ListView):
         context["settings"] = settings
         context["is_pro"] = self.request.user.profile.is_pro()
         context["status_choices"] = JobPosting.STATUS_CHOICES
-        context["resumes"] = Resume.objects.filter(user=self.request.user).order_by(
-            "-updated_at"
-        )
         groups = (
             job_service.resume_groups(self.request.user) if context["is_pro"] else []
         )
         # Worth showing only when it answers something: with a single resume in
         # play, every group names the same document.
-        distinct = {e["resume_id"] for g in groups for e in g["resumes"]}
-        context["groups"] = groups if len(distinct) >= 2 else []
+        context["groups"] = groups if len(groups) >= 2 else []
         return context
 
 
@@ -1556,26 +1552,72 @@ def update_job_posting(request, pk):
         messages.error(request, "Application not found.")
         return redirect("resume:jobs")
 
-    fields = []
     status = request.POST.get("status")
     if status and status in dict(JobPosting.STATUS_CHOICES):
         posting.status = status
-        fields.append("status")
-
-    resume_id = request.POST.get("resume")
-    if resume_id is not None:
-        if resume_id == "":
-            posting.resume = None
-            fields.append("resume")
-        else:
-            resume = Resume.objects.filter(pk=resume_id, user=request.user).first()
-            if resume:
-                posting.resume = resume
-                fields.append("resume")
-
-    if fields:
-        posting.save(update_fields=fields + ["updated_at"])
+        posting.save(update_fields=["status", "updated_at"])
     return redirect("resume:jobs")
+
+
+@login_required
+@xframe_options_sameorigin
+@require_http_methods(["GET"])
+def application_snapshot(request, pk):
+    """
+    Render what an application actually sent.
+
+    Read-only by nature: it is a record of a document that was already sent, not
+    a document to work on.
+    """
+    posting = JobPosting.objects.filter(pk=pk, user=request.user).first()
+    if not posting or not posting.has_snapshot:
+        return HttpResponse("<p>No stored resume for this application.</p>", status=404)
+
+    context = resume_content.build_context(posting.snapshot_content)
+    template_name = settings.TEMPLATE_SELECTOR_HTML_MAP.get(
+        posting.snapshot_template, "faangpath_simple_template_pdf.html"
+    )
+    return render(request, template_name, context)
+
+
+@login_required
+@require_http_methods(["POST"])
+def clone_application_snapshot(request, pk):
+    """
+    Copy an application's stored resume into an editable one.
+
+    The clone is a resume of its own and counts against the limit — the caller
+    is expected to have said so before getting here.
+    """
+    import copy as copy_module
+
+    posting = JobPosting.objects.filter(pk=pk, user=request.user).first()
+    if not posting or not posting.has_snapshot:
+        messages.error(request, "No stored resume for this application.")
+        return redirect("resume:jobs")
+
+    if not request.user.profile.can_create_resume():
+        messages.error(
+            request,
+            f"Resume limit reached. The free plan allows "
+            f"{settings.FREE_TIER_LIMITS['resume_count']} resumes, and the copy "
+            f"would be one of them.",
+        )
+        return redirect("resume:jobs")
+
+    clone = Resume.objects.create(
+        user=request.user,
+        title=f"{posting.title} — {posting.company}".strip(" —")[:255] or "Copy",
+        content=copy_module.deepcopy(posting.snapshot_content),
+        template_selector=posting.snapshot_template or "faangpath-simple",
+        language=(
+            posting.source_resume.language if posting.source_resume else "en"
+        ),
+    )
+    messages.success(
+        request, "Editable copy created. The application still shows what you sent."
+    )
+    return redirect("resume:resume_form_edit", pk=clone.pk)
 
 
 @login_required
@@ -1941,7 +1983,8 @@ def _agent_context(request, active_resume, message="", history=None):
                 "company": p.company,
                 "status": p.status,
                 "score": p.match_score,
-                "resume_id": p.resume_id,
+                "source_resume_id": p.source_resume_id,
+                "has_stored_copy": p.has_snapshot,
             }
             for p in JobPosting.objects.filter(user=request.user).order_by(
                 "-updated_at"

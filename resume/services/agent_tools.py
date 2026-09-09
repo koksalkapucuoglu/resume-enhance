@@ -524,6 +524,17 @@ def match_job(user, ctx, description, resume_id=None, apply_to=None):
 
     is_new = posting is None
     if is_new:
+        if not user.profile.can_track_application():
+            return ToolResult(
+                data={
+                    "error": (
+                        f"Application limit reached. The free plan tracks "
+                        f"{settings.FREE_TIER_LIMITS['application_count']} "
+                        f"applications, each keeping a copy of the resume sent."
+                    ),
+                    "upgrade_required": True,
+                }
+            )
         posting = JobPosting(
             user=user,
             description=description[: job_service.MAX_DESCRIPTION_CHARS],
@@ -531,8 +542,9 @@ def match_job(user, ctx, description, resume_id=None, apply_to=None):
         )
     posting.title = result["title"]
     posting.company = result["company"]
-    posting.tags = result["tags"]
-    posting.resume = resume
+    # Freeze what would go out, so the application still knows what was sent
+    # after the base resume moves on.
+    posting.take_snapshot(resume.content, resume.template_selector, resume)
     previous = posting.record_score(
         result["score"], resume.id, result["missing_keywords"]
     )
@@ -571,9 +583,10 @@ def match_job(user, ctx, description, resume_id=None, apply_to=None):
 @tool(
     name="tailor_resume_for_job",
     description=(
-        "Rewrite a resume for one saved job posting, as a variant that leaves "
-        "the original untouched. Running it again for the same job updates that "
-        "same variant rather than making another. Run match_job first."
+        "Rewrite the resume for one saved job posting. The result is stored as "
+        "that application's copy — the user's own resume is untouched and no "
+        "new resume appears in their list. Running it again rewrites the same "
+        "copy. Run match_job first."
     ),
     parameters={"job_id": {"type": "integer"}, "resume_id": INT_OR_NULL},
     destructive=True,
@@ -588,24 +601,17 @@ def tailor_resume_for_job(user, ctx, job_id, resume_id=None):
     if not posting:
         return ToolResult(data={"error": f"No saved job with id {job_id}."})
 
-    from resume.services import job_service, resume_content, revision_service
+    from resume.services import job_service, resume_content
 
-    # Always tailor from the base resume. Tailoring a previous variant is what
+    # Always tailor from the base resume. Tailoring the previous result is what
     # made titles compound into "Main — Role — Role".
     requested = (
         Resume.objects.filter(pk=resume_id, user=user).first() if resume_id else None
     )
-    source = (requested or posting.resume or ctx.get("active_resume"))
+    source = requested or posting.source_resume or ctx.get("active_resume")
     if not source:
         return ToolResult(data={"error": "No resume to tailor. Ask which one."})
     source = source.root
-
-    existing = Resume.objects.filter(
-        user=user,
-        derived_from=source,
-        derived_kind=Resume.DERIVED_TAILORED,
-        job_postings=posting,
-    ).first()
 
     result = job_service.tailor_content(
         source, posting.description, posting.missing_keywords
@@ -613,55 +619,96 @@ def tailor_resume_for_job(user, ctx, job_id, resume_id=None):
     if "error" in result:
         return ToolResult(data=result)
 
-    content = resume_content.normalize(result["content"])
-    title = f"{source.title} → {posting.title}"[:255]
-
-    if existing:
-        # Update in place, with a restore point, instead of adding another CV.
-        revision_service.snapshot(
-            existing,
-            source=ResumeRevision.SOURCE_AGENT,
-            tool_name="tailor_resume_for_job",
-            summary=result["changes_summary"],
-        )
-        existing.content = content
-        existing.title = title
-        existing.save(update_fields=["content", "title", "updated_at"])
-        variant, created = existing, False
-    else:
-        variant = Resume.objects.create(
-            user=user,
-            title=title,
-            content=content,
-            template_selector=source.template_selector,
-            language=source.language,
-            derived_from=source,
-            derived_kind=Resume.DERIVED_TAILORED,
-        )
-        created = True
-
-    posting.resume = variant
-    posting.save(update_fields=["resume", "updated_at"])
+    posting.take_snapshot(
+        resume_content.normalize(result["content"]),
+        source.template_selector,
+        source,
+    )
+    posting.save()
 
     return ToolResult(
         data={
             "ok": True,
-            "resume_id": variant.id,
-            "created_new_variant": created,
             "job_id": posting.id,
             "source_resume_id": source.id,
-            "counts_against_limit": False,
+            "stored_as": "application_snapshot",
+            "counts_against_resume_limit": False,
             "changes_summary": result["changes_summary"],
             "next": (
-                "Offer to re-run match_job on the same posting so the user can "
-                "see whether the score moved."
+                "Offer rescore_job on the same posting so the user can see "
+                "whether the score moved."
             ),
         },
         ui=[
             {
                 "type": "preview",
-                "resume_id": variant.id,
-                "resume_name": variant.display_name,
+                "resume_id": None,
+                "job_id": posting.id,
+                "resume_name": posting.snapshot_name,
+                "preview_url": f"/jobs/{posting.id}/snapshot/",
+                "message": "",
+            }
+        ],
+    )
+
+
+@tool(
+    name="clone_application_resume",
+    description=(
+        "Turn an application's stored copy into a new, editable resume. The "
+        "stored copy is read-only, so this is how the user edits it. The clone "
+        "is a resume of their own and counts against the resume limit — say so "
+        "before doing it."
+    ),
+    parameters={"job_id": {"type": "integer"}},
+    destructive=True,
+    pro_only=True,
+)
+def clone_application_resume(user, ctx, job_id):
+    blocked = _premium_required(user, "Job tracking")
+    if blocked:
+        return blocked
+
+    posting = JobPosting.objects.filter(pk=job_id, user=user).first()
+    if not posting:
+        return ToolResult(data={"error": f"No saved job with id {job_id}."})
+    if not posting.has_snapshot:
+        return ToolResult(
+            data={"error": "This application has no stored resume to clone yet."}
+        )
+    if not user.profile.can_create_resume():
+        return ToolResult(
+            data={
+                "error": (
+                    f"Resume limit reached "
+                    f"({settings.FREE_TIER_LIMITS['resume_count']} on the free plan). "
+                    f"The clone would be a resume of its own."
+                ),
+                "upgrade_required": True,
+            }
+        )
+
+    import copy as copy_module
+
+    clone = Resume.objects.create(
+        user=user,
+        title=f"{posting.title} — {posting.company}".strip(" —")[:255] or "Copy",
+        content=copy_module.deepcopy(posting.snapshot_content),
+        template_selector=posting.snapshot_template or "faangpath-simple",
+        language=(posting.source_resume.language if posting.source_resume else "en"),
+    )
+    return ToolResult(
+        data={
+            "ok": True,
+            "resume_id": clone.id,
+            "resume_name": clone.display_name,
+            "counted_against_resume_limit": True,
+        },
+        ui=[
+            {
+                "type": "preview",
+                "resume_id": clone.id,
+                "resume_name": clone.display_name,
                 "message": "",
             }
         ],
@@ -687,22 +734,21 @@ def rescore_job(user, ctx, job_id):
     if not posting:
         return ToolResult(data={"error": f"No saved job with id {job_id}."})
 
-    resume = posting.resume or ctx.get("active_resume")
-    if not resume:
+    if not posting.has_snapshot:
         return ToolResult(
-            data={"error": "No resume is attached to this application."}
+            data={"error": "This application has no stored resume to measure yet."}
         )
 
     from resume.services import job_service
 
-    result = job_service.analyze_match(
-        resume, posting.description, ctx.get("lang", "en")
+    result = job_service.analyze_snapshot(
+        posting.snapshot_content, posting.description, ctx.get("lang", "en")
     )
     if "error" in result:
         return ToolResult(data=result)
 
     previous = posting.record_score(
-        result["score"], resume.id, result["missing_keywords"]
+        result["score"], posting.source_resume_id, result["missing_keywords"]
     )
     posting.save(update_fields=["match_score", "score_history", "missing_keywords",
                                 "updated_at"])
@@ -711,7 +757,7 @@ def rescore_job(user, ctx, job_id):
     return ToolResult(
         data={
             "job_id": posting.id,
-            "resume_id": resume.id,
+            "source_resume_id": posting.source_resume_id,
             "score": result["score"],
             "previous_score": previous,
             "change": delta,
@@ -723,8 +769,10 @@ def rescore_job(user, ctx, job_id):
                 "type": "job_match",
                 "job_id": posting.id,
                 "job_label": posting.label,
-                "resume_id": resume.id,
-                "resume_name": resume.display_name,
+                "resume_id": None,
+                "job_snapshot_id": posting.id,
+                "resume_name": posting.snapshot_name,
+                "preview_url": f"/jobs/{posting.id}/snapshot/",
                 "score": result["score"],
                 "previous_score": previous,
                 "matched_keywords": result["matched_keywords"],
@@ -738,7 +786,7 @@ def rescore_job(user, ctx, job_id):
 
 @tool(
     name="list_jobs",
-    description="List the job postings the user is tracking, with status, score and which resume was used.",
+    description="List the job postings the user is tracking, with status, score and the resume each one was sent with.",
     parameters={"status": STR_OR_NULL},
     pro_only=True,
 )
@@ -747,7 +795,7 @@ def list_jobs(user, ctx, status=None):
     if blocked:
         return blocked
 
-    postings = JobPosting.objects.filter(user=user).select_related("resume")
+    postings = JobPosting.objects.filter(user=user).select_related("source_resume")
     if status:
         postings = postings.filter(status=status)
     jobs = [
@@ -759,9 +807,11 @@ def list_jobs(user, ctx, status=None):
             "score": p.match_score,
             "first_score": (p.score_history or [{}])[0].get("score"),
             "measurements": len(p.score_history or []),
-            "tags": p.tags,
-            "resume_id": p.resume_id,
-            "resume_name": p.resume.display_name if p.resume else None,
+            "has_snapshot": p.has_snapshot,
+            "source_resume_id": p.source_resume_id,
+            "source_resume_name": (
+                p.source_resume.display_name if p.source_resume else None
+            ),
             "updated_at": p.updated_at.strftime("%Y-%m-%d"),
         }
         for p in postings[:50]
@@ -807,8 +857,10 @@ def update_job(user, ctx, job_id, status=None, resume_id=None):
         resume = Resume.objects.filter(pk=resume_id, user=user).first()
         if not resume:
             return ToolResult(data={"error": f"No resume with id {resume_id}."})
-        posting.resume = resume
-        fields.append("resume")
+        # Attaching a resume means "this is what I sent", so freeze it.
+        posting.take_snapshot(resume.content, resume.template_selector, resume)
+        fields += ["snapshot_content", "snapshot_template", "snapshot_taken_at",
+                   "source_resume"]
 
     if not fields:
         return ToolResult(data={"error": "Nothing to update — give a status or a resume."})
@@ -819,7 +871,7 @@ def update_job(user, ctx, job_id, status=None, resume_id=None):
             "ok": True,
             "job_id": posting.id,
             "status": posting.status,
-            "resume_id": posting.resume_id,
+            "source_resume_id": posting.source_resume_id,
         }
     )
 
@@ -841,10 +893,7 @@ def resume_groups(user, ctx):
     from resume.services import job_service
 
     groups = job_service.resume_groups(user)
-    distinct = {
-        entry["resume_id"] for group in groups for entry in group["resumes"]
-    }
-    if len(distinct) < 2:
+    if len(groups) < 2:
         # With one resume in play every group names the same document, which
         # answers nothing. Say so rather than drawing a wall of identical cards.
         return ToolResult(

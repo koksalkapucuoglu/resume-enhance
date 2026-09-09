@@ -282,6 +282,7 @@ FREE_TIER_LIMITS = {
     "download_count": 5,  # Monthly PDF downloads
     "resume_count": 3,  # Total resume count (not monthly)
     "revision_history": 5,  # Restore points kept per resume (not monthly)
+    "application_count": 3,  # Tracked applications; each holds a resume snapshot
     "agent_message_count": 10,  # Monthly agent chat messages
 }
 

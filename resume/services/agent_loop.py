@@ -52,7 +52,8 @@ DESTRUCTIVE_COPY = {
         "delete_resume": "Delete the resume permanently",
         "revert_last_change": "Undo the most recent change",
         "create_translated_copy": "Create a translated copy",
-        "tailor_resume_for_job": "Create a copy tailored to this job",
+        "tailor_resume_for_job": "Rewrite this application's copy for the job",
+        "clone_application_resume": "Make an editable resume from this copy",
     },
     "tr": {
         "modify_resume": "CV içeriğini düzenle",
@@ -61,7 +62,8 @@ DESTRUCTIVE_COPY = {
         "delete_resume": "CV'yi kalıcı olarak sil",
         "revert_last_change": "Son değişikliği geri al",
         "create_translated_copy": "Çevrilmiş bir kopya oluştur",
-        "tailor_resume_for_job": "Bu ilana özel bir kopya oluştur",
+        "tailor_resume_for_job": "Bu başvurunun kopyasını ilana göre yaz",
+        "clone_application_resume": "Bu kopyadan düzenlenebilir bir CV oluştur",
     },
 }
 
@@ -93,6 +95,7 @@ STEP_COPY = {
         "revert_last_change": "Undoing the last change...",
         "match_job": "Comparing against the posting...",
         "rescore_job": "Re-measuring against the posting...",
+        "clone_application_resume": "Making an editable copy...",
         "tailor_resume_for_job": "Tailoring the resume...",
         "list_jobs": "Looking up your applications...",
         "update_job": "Updating the application...",
@@ -122,6 +125,7 @@ STEP_COPY = {
         "revert_last_change": "Son değişiklik geri alınıyor...",
         "match_job": "İlanla karşılaştırılıyor...",
         "rescore_job": "İlana göre yeniden ölçülüyor...",
+        "clone_application_resume": "Düzenlenebilir kopya oluşturuluyor...",
         "tailor_resume_for_job": "CV ilana göre uyarlanıyor...",
         "list_jobs": "Başvurularınıza bakıyorum...",
         "update_job": "Başvuru güncelleniyor...",
@@ -156,8 +160,18 @@ You help the user manage and improve their resumes by calling tools. Rules:
 - When the user pastes a job posting, call match_job. Pasting the same posting
   again updates that application; it does not create a second one.
 - Tailoring needs a saved posting: match_job first, tailor_resume_for_job
-  second. Tailoring produces one variant per application and updates it on
-  later runs — it never piles up new resumes.
+  second. Tailoring rewrites that application's stored copy; it never adds a
+  resume to the user's list.
+- An application's stored copy is a record of what was sent and cannot be
+  edited. If the user wants to change it, use clone_application_resume — and
+  tell them first that the clone is a resume of their own and counts against
+  their resume limit.
+- "Fix my CV for this posting" is ambiguous while a posting is in play: it can
+  mean rewrite the application's copy (tailor_resume_for_job) or change the
+  user's own resume (modify_resume). Prefer tailoring, which leaves their
+  resume alone, and say that is what you did. Only call modify_resume as well
+  if they clearly asked to change their own resume — never both for one
+  request without saying so.
 - After tailoring or editing a resume attached to an application, offer
   rescore_job. A score the user cannot see move is not useful to them.
 - If the posting and the resume are in different languages, say so and offer

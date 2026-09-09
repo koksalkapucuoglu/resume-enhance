@@ -63,24 +63,6 @@ def copy(lang):
     return JOB_COPY.get(lang, JOB_COPY["en"])
 
 
-# Labels almost every posting carries, so grouping by them tells the user
-# nothing. Kept only when there is nothing more specific.
-GENERIC_TAGS = {
-    "senior", "junior", "mid", "mid-level", "lead", "remote", "hybrid",
-    "onsite", "full-time", "fulltime", "part-time", "contract", "engineer",
-    "developer", "software",
-}
-
-MAX_TAGS = 3
-
-
-def _distinctive_tags(tags):
-    """Keep what separates one role from another; fall back if that is all there is."""
-    cleaned = JobPosting.normalize_tags(tags)
-    specific = [t for t in cleaned if t not in GENERIC_TAGS]
-    return (specific or cleaned)[:MAX_TAGS]
-
-
 def _resume_text(resume):
     return json.dumps(resume.content or {}, ensure_ascii=False)
 
@@ -104,7 +86,16 @@ def remember_analysis(user_id, fingerprint, result, seconds=900):
     cache.set(f"job_match_{user_id}_{fingerprint}", result, seconds)
 
 
+def analyze_snapshot(content, description, lang="en"):
+    """Measure a frozen resume payload, rather than a Resume row."""
+    return _analyze(content, description, lang)
+
+
 def analyze_match(resume, description, lang="en"):
+    return _analyze(resume.content, description, lang)
+
+
+def _analyze(content, description, lang="en"):
     """
     Score how well a resume answers a posting.
 
@@ -124,11 +115,6 @@ def analyze_match(resume, description, lang="en"):
     - "missing_keywords" are requirements in the posting with no support in the
       resume. Skills the resume demonstrates through experience count as
       present even if the exact word is absent.
-    - "tags" are AT MOST 3 lowercase labels for the KIND of role this is, used to
-      group postings. Prefer what distinguishes this role from others — the
-      technology or domain ("python", "c++", "devops", "embedded") — over
-      seniority or work arrangement ("senior", "remote"), which nearly every
-      posting shares and therefore separates nothing.
     - Write "verdict" and "suggestions" in REPLY_LANGUAGE, given below — the
       person reading them is the one chatting, not the resume.
     - Leave keywords as they appear in the posting or resume; do not translate
@@ -139,7 +125,6 @@ def analyze_match(resume, description, lang="en"):
       "score": 0-100,
       "matched_keywords": ["..."],
       "missing_keywords": ["..."],
-      "tags": ["..."],
       "title": "job title from the posting",
       "company": "company name, or empty string",
       "verdict": "two sentences on the fit",
@@ -150,7 +135,7 @@ def analyze_match(resume, description, lang="en"):
     language_name = {"tr": "Turkish", "en": "English"}.get(lang, "English")
     user_message = (
         f"REPLY_LANGUAGE: {language_name}\n\n"
-        f"RESUME (JSON):\n{_resume_text(resume)}\n\n"
+        f"RESUME (JSON):\n{json.dumps(content or {}, ensure_ascii=False)}\n\n"
         f"JOB POSTING:\n{description}"
     )
     raw = send_openai_message(
@@ -176,7 +161,6 @@ def analyze_match(resume, description, lang="en"):
         "score": max(0, min(100, score)),
         "matched_keywords": [str(k) for k in parsed.get("matched_keywords", [])][:20],
         "missing_keywords": [str(k) for k in parsed.get("missing_keywords", [])][:20],
-        "tags": _distinctive_tags(parsed.get("tags", [])),
         "title": str(parsed.get("title") or "Untitled role")[:255],
         "company": str(parsed.get("company") or "")[:255],
         "verdict": str(parsed.get("verdict") or ""),
@@ -251,36 +235,40 @@ def tailor_content(resume, description, missing_keywords=None):
 
 def resume_groups(user):
     """
-    Which resume the user actually sends for which kind of role.
+    Which resume the user sends for which kind of role.
 
-    Built from applications rather than a label the user has to maintain, so it
-    reflects what they do, not what they once wrote down.
+    Grouped by the base resume each application's snapshot came from. That is a
+    fact about what was sent, where the tags this used to key on were guesses —
+    and mostly generic ones, so a single posting drew the same resume into
+    several identical groups.
     """
+    from resume.models import JobPosting
+
     groups = {}
     postings = (
-        JobPosting.objects.filter(user=user, resume__isnull=False)
-        .select_related("resume")
+        JobPosting.objects.filter(user=user, source_resume__isnull=False)
+        .select_related("source_resume")
         .order_by("-updated_at")
     )
     for posting in postings:
-        for tag in posting.tags or []:
-            bucket = groups.setdefault(tag, {})
-            entry = bucket.setdefault(
-                posting.resume_id,
-                {
-                    "resume_id": posting.resume_id,
-                    "resume_name": posting.resume.display_name,
-                    "uses": 0,
-                },
-            )
-            entry["uses"] += 1
+        bucket = groups.setdefault(
+            posting.source_resume_id,
+            {
+                "resume_id": posting.source_resume_id,
+                "resume_name": posting.source_resume.display_name,
+                "applications": [],
+            },
+        )
+        bucket["applications"].append(
+            {
+                "job_id": posting.id,
+                "title": posting.title,
+                "company": posting.company,
+                "status": posting.status,
+                "score": posting.match_score,
+            }
+        )
 
-    return [
-        {
-            "tag": tag,
-            "resumes": sorted(
-                bucket.values(), key=lambda e: e["uses"], reverse=True
-            ),
-        }
-        for tag, bucket in sorted(groups.items())
-    ]
+    return sorted(
+        groups.values(), key=lambda g: len(g["applications"]), reverse=True
+    )

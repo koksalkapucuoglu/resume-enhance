@@ -89,15 +89,15 @@
           <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {% for group in groups %}
               <div class="bg-white border border-slate-200 rounded-xl p-4">
-                <p class="text-xs font-bold text-primary uppercase tracking-wide mb-2">{{ group.tag }}</p>
-                {% for entry in group.resumes %}
-                  <div class="flex items-center gap-2 py-0.5">
-                    <span class="material-symbols-outlined !text-[15px] text-slate-400">description</span>
-                    <span class="text-sm text-slate-700 truncate flex-1">{{ entry.resume_name }}</span>
-                    <span class="text-[11px] text-slate-400 whitespace-nowrap">
-                      {% if entry.uses == 1 %}{{ UI.groups_one_use }}{% else %}{{ entry.uses }} {{ UI.groups_many_uses }}{% endif %}
-                    </span>
-                  </div>
+                <div class="flex items-center gap-2 mb-2">
+                  <span class="material-symbols-outlined !text-[16px] text-primary">description</span>
+                  <p class="text-sm font-bold text-slate-800 truncate flex-1">{{ group.resume_name }}</p>
+                  <span class="text-[11px] text-slate-400 whitespace-nowrap">
+                    {% if group.applications|length == 1 %}{{ UI.groups_one_use }}{% else %}{{ group.applications|length }} {{ UI.groups_many_uses }}{% endif %}
+                  </span>
+                </div>
+                {% for entry in group.applications %}
+                  <p class="text-xs text-slate-500 truncate py-0.5">{{ entry.title }}{% if entry.company %} · {{ entry.company }}{% endif %}</p>
                 {% endfor %}
               </div>
             {% endfor %}
@@ -113,7 +113,7 @@
                 <th class="text-left font-semibold px-5 py-3">{{ UI.jobs_col_role }}</th>
                 <th class="text-left font-semibold px-5 py-3 w-24">{{ UI.jobs_col_score }}</th>
                 <th class="text-left font-semibold px-5 py-3 w-40">{{ UI.jobs_col_status }}</th>
-                <th class="text-left font-semibold px-5 py-3 w-56">{{ UI.jobs_col_resume }}</th>
+                <th class="text-left font-semibold px-5 py-3 w-64">{{ UI.jobs_col_resume }}</th>
                 <th class="px-5 py-3 w-28"></th>
               </tr>
             </thead>
@@ -124,13 +124,6 @@
                 <td class="px-5 py-4 align-top">
                   <p class="font-semibold text-slate-800">{{ job.title }}</p>
                   {% if job.company %}<p class="text-xs text-slate-500">{{ job.company }}</p>{% endif %}
-                  {% if job.tags %}
-                    <div class="flex flex-wrap gap-1 mt-1.5">
-                      {% for tag in job.tags %}
-                        <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">{{ tag }}</span>
-                      {% endfor %}
-                    </div>
-                  {% endif %}
                   {% if job.missing_keywords %}
                     <p class="text-[11px] text-slate-400 mt-1.5">
                       {{ UI.jobs_missing }} {{ job.missing_keywords|join:", " }}
@@ -155,13 +148,24 @@
                   </select>
                 </td>
                 <td class="px-5 py-4 align-top">
-                  <select name="resume" form="job-form-{{ job.pk }}"
-                          class="w-full text-xs rounded-lg border-slate-200 focus:border-primary focus:ring-primary">
-                    <option value="">{{ UI.jobs_no_resume }}</option>
-                    {% for resume in resumes %}
-                      <option value="{{ resume.pk }}" {% if job.resume_id == resume.pk %}selected{% endif %}>{{ resume.display_name }}</option>
-                    {% endfor %}
-                  </select>
+                  {% if job.has_snapshot %}
+                    <div class="flex items-center gap-1.5 text-xs text-slate-600">
+                      <span class="material-symbols-outlined !text-[15px] text-slate-400" title="{{ UI.jobs_snapshot_readonly }}">lock</span>
+                      <span class="truncate">{{ UI.jobs_snapshot_sent }}{% if job.snapshot_taken_at %} · {{ job.snapshot_taken_at|date:"d M Y" }}{% endif %}</span>
+                    </div>
+                    <div class="flex items-center gap-2 mt-1.5">
+                      <a href="{% url 'resume:application_snapshot' job.pk %}" target="_blank"
+                         class="text-[11px] font-semibold text-primary hover:underline">{{ UI.jobs_snapshot_view }}</a>
+                      <button type="button"
+                              onclick="confirmClone('{{ job.pk }}', '{{ job.title|escapejs }}')"
+                              class="text-[11px] font-semibold text-slate-500 hover:text-slate-700 hover:underline">
+                        {{ UI.jobs_snapshot_edit }}
+                      </button>
+                    </div>
+                    <form id="clone-form-{{ job.pk }}" method="post" action="{% url 'resume:clone_application_snapshot' job.pk %}" class="hidden">{% csrf_token %}</form>
+                  {% else %}
+                    <span class="text-xs text-slate-400">{{ UI.jobs_no_resume }}</span>
+                  {% endif %}
                 </td>
                 <td class="px-5 py-4 align-top">
                   <div class="flex items-center gap-1 justify-end">
@@ -186,6 +190,42 @@
     {% endif %}
   </div>
 </main>
+
+<!-- Clone confirmation: the stored copy is read-only, and the clone costs a slot -->
+<div id="clone-modal" class="hidden fixed inset-0 z-50 items-center justify-center p-4">
+  <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onclick="hideClone()"></div>
+  <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+    <h3 class="text-lg font-bold text-slate-900">{{ UI.jobs_clone_title }}</h3>
+    <p class="text-sm text-slate-500 mt-2" id="clone-body">{{ UI.jobs_clone_body }}</p>
+    <div class="flex justify-end gap-2 mt-5">
+      <button onclick="hideClone()" class="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors">
+        {{ UI.modal_cancel }}
+      </button>
+      <button id="clone-confirm" class="px-4 py-2 rounded-lg text-sm font-bold text-white bg-primary hover:bg-primary-hover transition-colors">
+        {{ UI.jobs_clone_confirm }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function confirmClone(jobId, title) {
+    const modal = document.getElementById('clone-modal');
+    document.getElementById('clone-body').textContent =
+      `{{ UI.jobs_clone_body|escapejs }}`.replace('%(job)s', title);
+    document.getElementById('clone-confirm').onclick = () => {
+      document.getElementById('clone-form-' + jobId).submit();
+    };
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+  }
+  function hideClone() {
+    const modal = document.getElementById('clone-modal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideClone(); });
+</script>
 
 <footer class="mt-auto border-t border-slate-200 bg-white py-6 px-4 md:px-10 lg:px-20">
   <p class="text-slate-400 text-xs text-center">© 2026 ResuStack. All rights reserved.</p>
