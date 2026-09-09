@@ -287,23 +287,32 @@ class PurchasedAccessUnlocksFeaturesTest(TestCase):
         self.assertTrue(profile.can_send_agent_message())
         self.assertTrue(profile.can_create_resume())
 
-    def test_pro_tools_become_available(self):
-        from resume.services import agent_tools
+    def test_application_tracking_stops_being_capped(self):
+        """Job matching is open to everyone; Pro is what removes the ceiling."""
+        from resume.models import JobPosting
 
-        before = {s["function"]["name"] for s in agent_tools.tool_schemas(self.user)}
-        self.assertNotIn("match_job", before)
-
-        self.user.profile.grant_premium(90)
-        after = {s["function"]["name"] for s in agent_tools.tool_schemas(self.user)}
-        self.assertIn("match_job", after)
-
-    def test_job_tracker_opens(self):
-        html = self.client.get(reverse("resume:jobs")).content.decode()
-        self.assertIn("Pro", html)
+        for i in range(settings.FREE_TIER_LIMITS["application_count"]):
+            JobPosting.objects.create(
+                user=self.user, title=f"Job {i}", description="advert",
+                content_hash=f"h{i}",
+            )
+        self.assertFalse(self.user.profile.can_track_application())
 
         self.user.profile.grant_premium(90)
-        html = self.client.get(reverse("resume:jobs")).content.decode()
-        self.assertNotIn("jobs_pro_title", html)
+        self.assertTrue(self.user.profile.can_track_application())
+
+    def test_the_cap_notice_disappears(self):
+        from resume.models import JobPosting
+
+        for i in range(settings.FREE_TIER_LIMITS["application_count"]):
+            JobPosting.objects.create(
+                user=self.user, title=f"Job {i}", description="advert",
+                content_hash=f"h{i}",
+            )
+        self.assertTrue(self.client.get(reverse("resume:jobs")).context["at_cap"])
+
+        self.user.profile.grant_premium(90)
+        self.assertFalse(self.client.get(reverse("resume:jobs")).context["at_cap"])
 
 
 @override_settings(

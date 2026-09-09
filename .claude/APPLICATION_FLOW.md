@@ -96,6 +96,11 @@ Bu, "yaptığım değişiklik işe yaradı mı" sorusunun tek doğrudan cevabı.
 | Snapshot klonu | ✅ — yeni temel CV |
 | Başvuru sayısı | ✅ `application_count` = 3 (ücretsiz), Pro sınırsız |
 
+**Paywall özellikte değil, hakta.** İlan eşleştirme ve başvuru takibi herkese
+açık; ücretsiz planda 3 başvurudan sonra duruyor. Özelliği tamamen saklamak
+kimsenin ne için ödeyeceğini görmemesi demekti — birkaç kullanımdan sonra
+bitmesi aynı paywall, ama kullanıcının değeri hissettiği yere konmuş hali.
+
 ## Gruplar
 
 Başvurular kaynak temel CV'ye göre gruplanır:

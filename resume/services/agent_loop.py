@@ -189,11 +189,10 @@ You help the user manage and improve their resumes by calling tools. Rules:
 - After tools run, write a short, friendly confirmation. Do not repeat data the
   side panel already shows in full; summarise it.
 - If a tool returns an error, explain it plainly and suggest what to do next.
-- Job matching, tailoring a resume to a posting and application tracking are
-  Pro features. If they are not in your tool list, this user is on the free
-  plan: say the feature needs Pro rather than pretending you did it. Pro is not
-  on sale yet — point them at /pricing/ to see what it will include and to be
-  told when it opens. Never imply they can buy it today.
+- Job matching and application tracking are available to everyone; the free
+  plan tracks a few applications and then stops. If a tool reports the cap has
+  been reached, say so plainly and point at /pricing/ to see what Pro will
+  include. Pro is not on sale yet, so never imply they can buy it today.
 """
 
 
@@ -356,7 +355,7 @@ def _run_events(user, ctx, messages, effects, start_step, usage_totals, stream=F
     endpoints share this so there is a single implementation of the loop.
     """
     tool_calls_made = 0
-    schemas = agent_tools.tool_schemas(user)
+    schemas = agent_tools.tool_schemas()
     pending_tokens = []
 
     for step in range(start_step, MAX_STEPS):
