@@ -37,10 +37,13 @@ from .protocol import ProtocolError
 
 logger = logging.getLogger(__name__)
 
-# How long a client may cache what we tell it. The tool list is fixed at
-# deploy time, so an hour is honest; discovery is cheap either way.
-TOOLS_TTL_MS = 3_600_000
-DISCOVER_TTL_MS = 3_600_000
+# How long a client may cache what we tell it. Every push deploys, and a deploy
+# can change a tool's schema, so this bounds how long a client keeps offering a
+# model the previous one. An hour did that for an hour after focus_areas
+# shipped, reconnecting did not help, because "public" caches are keyed by
+# server, not by connection. Discovery is cheap; keep this short.
+TOOLS_TTL_MS = 300_000
+DISCOVER_TTL_MS = 300_000
 
 RATE_LIMIT_CALLS = 120
 RATE_LIMIT_WINDOW = 60

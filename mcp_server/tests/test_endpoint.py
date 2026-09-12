@@ -195,6 +195,12 @@ class ModernEraTests(McpTestCase):
         self.assertGreater(result["ttlMs"], 0)
         self.assertEqual(result["cacheScope"], "public")
 
+    def test_cached_tool_list_cannot_outlive_a_deploy_for_long(self):
+        """A long TTL kept clients on a stale schema for an hour after a deploy."""
+        five_minutes = 5 * 60 * 1000
+        self.assertLessEqual(self.modern("tools/list").json()["result"]["ttlMs"], five_minutes)
+        self.assertLessEqual(self.modern("server/discover").json()["result"]["ttlMs"], five_minutes)
+
     def test_missing_protocol_version_header_is_a_header_mismatch(self):
         body = {
             "jsonrpc": "2.0",
