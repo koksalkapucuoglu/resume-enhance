@@ -290,6 +290,10 @@ PDF_SETTINGS = {
     "FONT_CONFIG": True,
 }
 
+# How long a signed PDF download link stays usable. It is single-use as well,
+# so this only bounds how long a leaked link is worth anything.
+DOWNLOAD_LINK_MAX_AGE = int(os.environ.get("DOWNLOAD_LINK_MAX_AGE", "600"))
+
 # Subscription Tier Limits
 FREE_TIER_LIMITS = {
     "import_count": 2,  # Monthly PDF imports

@@ -80,6 +80,45 @@ class ResumeViewSet(viewsets.ModelViewSet):
         """Set the user to current user when creating."""
         serializer.save(user=self.request.user)
 
+    @action(detail=True, methods=["post"], url_path="download-link")
+    def download_link(self, request, pk=None):
+        """
+        Mint a link to this resume's PDF.
+
+        POST /api/v1/resumes/{id}/download-link/
+
+        A client that cannot hand over a file can hand over a link. The quota is
+        checked here so the caller hears about it straight away, and charged on
+        delivery so an unused link costs nothing.
+        """
+        from django.conf import settings
+        from django.urls import reverse
+
+        from resume.services import download_links
+
+        resume = self.get_object()
+        if not request.user.profile.can_download():
+            return Response(
+                {
+                    "error": (
+                        f"Monthly PDF download limit reached. The free plan "
+                        f"allows {settings.FREE_TIER_LIMITS['download_count']} "
+                        f"per month."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        token = download_links.sign(resume)
+        path = reverse("resume:signed_download", args=[token])
+        return Response(
+            {
+                "download_url": request.build_absolute_uri(path),
+                "expires_in_seconds": download_links.max_age(),
+                "single_use": True,
+            }
+        )
+
     @action(detail=True, methods=["post"])
     def duplicate(self, request, pk=None):
         """

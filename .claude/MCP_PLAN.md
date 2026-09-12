@@ -124,7 +124,12 @@ model bozuk yapı üretemesin; sunucu ayrıca `resume_content.normalize()` uygul
    Yol boyunca çıkan iki hata: serializer ve viewset ikisi birden `user` set
    ediyordu (create patlıyordu); kimliksiz API isteği 403 dönüyordu, token
    authenticator'ı öne alınca 401 oldu.
-2. **İmzalı indirme** — `render_pdf` için süreli URL üretimi ve doğrulaması
+2. ✅ **İmzalı indirme** — `POST /api/v1/resumes/<id>/download-link/` süreli,
+   **tek kullanımlık** bir URL üretiyor; `GET /d/<token>/` onu PDF olarak
+   sunuyor. Link kendi yetkisini taşıyor (takip eden tarayıcının oturumu yok),
+   bu yüzden 10 dakika yaşıyor ve ilk kullanımda harcanıyor — yoksa kotalı bir
+   şeye süresiz erişim olurdu. Kota **teslimde** sayılıyor: takip edilmeyen link
+   bedava, başarısız render kota yakmıyor.
 3. **MCP endpoint** — `/mcp`, JSON-RPC: `initialize`, `tools/list`, `tools/call`
 4. **8 tool** — `mcp_server/tools.py`, DRF ve `services/` üstünde ince katman
 5. **Testler** — kimlik, kota, şema doğrulama, imzalı URL süresi, yıkıcı tool yokluğu

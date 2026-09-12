@@ -1187,6 +1187,66 @@ def upload_linkedin_cv(request):
     return redirect("resume:index")
 
 
+@require_http_methods(["GET"])
+def signed_download(request, token):
+    """
+    Serve a PDF to whoever holds a valid link.
+
+    Deliberately unauthenticated: the caller is a browser following a link an
+    MCP client produced, with no session and no token of its own. The signature
+    is the authorisation, which is why the link is short-lived and spent on
+    first use.
+    """
+    from resume.services import download_links
+
+    try:
+        resume_id, user_id = download_links.consume(token)
+    except download_links.DownloadLinkError as exc:
+        return HttpResponse(str(exc), status=410, content_type="text/plain")
+
+    resume = Resume.objects.filter(pk=resume_id, user_id=user_id).first()
+    if not resume:
+        return HttpResponse("Resume not found.", status=404, content_type="text/plain")
+
+    profile = resume.user.profile
+    if not profile.can_download():
+        return HttpResponse(
+            "Monthly PDF download limit reached.", status=403, content_type="text/plain"
+        )
+
+    try:
+        pdf_bytes = resume_pdf_service.generate_resume_pdf(
+            resume_data=resume_content.build_context(resume.content),
+            template_selector=resume.template_selector,
+            request=request,
+        )
+    except PdfGenerationError as exc:
+        logger.error("Signed download failed for resume %s: %s", resume.pk, exc)
+        return HttpResponse(
+            "Could not render this resume.", status=500, content_type="text/plain"
+        )
+
+    # Counted on delivery, not on issuing the link: a link that is never
+    # followed should not cost the user anything.
+    profile.download_count += 1
+    profile.save(update_fields=["download_count"])
+
+    response = HttpResponse(pdf_bytes, content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{_pdf_filename(resume)}"'
+    return response
+
+
+def _pdf_filename(resume):
+    """An ASCII filename; Content-Disposition cannot carry Turkish characters."""
+    raw_name = resume.owner_name or "resume"
+    tr_map = str.maketrans("şıöüğçŞİÖÜĞÇ", "siougcSIOUGC")
+    safe = raw_name.translate(tr_map)
+    safe = "".join(
+        c if c.isascii() and (c.isalnum() or c in "-_. ") else "_" for c in safe
+    )
+    return safe.replace(" ", "_") + f"_{resume.pk}.pdf"
+
+
 @login_required
 @require_http_methods(["GET"])
 def download_resume_pdf(request, pk):
@@ -1256,14 +1316,7 @@ def download_resume_pdf(request, pk):
             template_selector=resume.template_selector,
             request=request,
         )
-        raw_name = resume.owner_name or "resume"
-        tr_map = str.maketrans("şıöüğçŞİÖÜĞÇ", "siougcSIOUGC")
-        safe_name = raw_name.translate(tr_map)
-        safe_name = "".join(
-            c if c.isascii() and (c.isalnum() or c in "-_. ") else "_"
-            for c in safe_name
-        )
-        filename = safe_name.replace(" ", "_") + f"_{resume.pk}.pdf"
+        filename = _pdf_filename(resume)
         response = HttpResponse(pdf_bytes, content_type="application/pdf")
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
 

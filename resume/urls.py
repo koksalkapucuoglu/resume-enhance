@@ -7,6 +7,8 @@ urlpatterns = [
     path("", views.landing_page, name="index"),
     path("start/", views.selection_page, name="selection_page"),
     path("dashboard/", views.DashboardView.as_view(), name="dashboard"),
+    # Short, unguessable path: this is followed by a browser with no session.
+    path("d/<str:token>/", views.signed_download, name="signed_download"),
     path("pricing/", views.pricing_page, name="pricing"),
     path("checkout/<str:plan_code>/", views.start_checkout, name="start_checkout"),
     path(
