@@ -21,6 +21,16 @@ quotes turn into &quot; and the family silently stops resolving.{% endcomment %}
         margin: {{ tokens.page_margin }};
         @top-center { content: ""; }
         @bottom-center { content: ""; }
+        {% comment %} Two-column designs paint their band on the page itself.
+        An aside's background only reaches as far as its own content, which
+        left the band stopping halfway down the paper and missing entirely
+        from page two. `var()` is not honoured inside @page, so the token
+        values are written in directly. {% endcomment %}
+        {% if tpl.layout == "sidebar" %}
+        background: linear-gradient(to right, {{ tokens.sidebar_bg }} {{ tokens.sidebar_width }}, #ffffff {{ tokens.sidebar_width }});
+        {% elif tpl.layout == "rail" %}
+        background: linear-gradient(to left, {{ tokens.sidebar_bg }} {{ tokens.sidebar_width }}, #ffffff {{ tokens.sidebar_width }});
+        {% endif %}
     }
 
     :root {
@@ -40,6 +50,7 @@ quotes turn into &quot; and the family silently stops resolving.{% endcomment %}
         --pad: {{ tokens.inner_padding }};
         --header-bg: {{ tokens.header_bg }};
         --header-ink: {{ tokens.header_ink }};
+        --gutter: {{ tokens.gutter_width }};
     }
 
     * { box-sizing: border-box; }
@@ -117,6 +128,23 @@ quotes turn into &quot; and the family silently stops resolving.{% endcomment %}
         color: var(--accent);
         margin-bottom: 0.35rem;
     }
+
+    {% comment %} Centred heading between two thin rules. {% endcomment %}
+    .sec-center-rules .section-line { display: none; }
+    .sec-center-rules .section-header {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        text-align: center;
+        margin-bottom: 0.4rem;
+    }
+    .sec-center-rules .section-header::before,
+    .sec-center-rules .section-header::after {
+        content: "";
+        flex: 1;
+        border-top: var(--rule-width) solid var(--rule);
+    }
+    .layout-single.sec-center-rules .resume-header { margin-bottom: 0.9rem; }
 
     /* ── Rows shared by education and experience ──────────────────── */
     .entry-line {
@@ -239,9 +267,125 @@ quotes turn into &quot; and the family silently stops resolving.{% endcomment %}
     .sidebar-list { margin: 0; padding-left: 0.9rem; }
     .sidebar-list li { margin-bottom: 0.12rem; }
     .sidebar .education-item { margin-bottom: 0.45rem; }
-    .sidebar .contact-row { display: block; margin-bottom: 0.15rem; word-break: break-word; }
+    .sidebar .contact-row { display: block; margin-bottom: 0.15rem; overflow-wrap: anywhere; }
     .main { flex: 1; min-width: 0; padding: 0.35in 0.3in 0 0.3in; }
     .sidebar-bg { width: var(--sidebar-width); flex-shrink: 0; background: var(--sidebar-bg); }
+
+    /* ── Label gutter: headings in a left column, content beside ──── */
+    {% comment %} Each section is a two-column grid. Pagination lifts items
+    out of their section onto the page, where the grid no longer applies, so
+    a lifted item carries the gutter as a margin of its own. {% endcomment %}
+    .gutter-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        gap: 1rem;
+        border-bottom: 2px solid var(--accent);
+        padding-bottom: 0.3rem;
+        margin-bottom: 0.7rem;
+    }
+    .gutter-header .full-name { margin: 0; }
+    .gutter-header .contact-details { text-align: right; }
+    .layout-gutter .resume-section {
+        display: grid;
+        grid-template-columns: var(--gutter) 1fr;
+        column-gap: 0.3in;
+        border-top: var(--rule-width) solid var(--rule);
+        padding-top: 0.35rem;
+    }
+    .layout-gutter .resume-section:first-of-type { border-top: 0; padding-top: 0; }
+    .layout-gutter .section-header {
+        grid-column: 1;
+        grid-row: 1 / span 50;
+        align-self: start;
+        color: var(--accent);
+        margin: 0.1rem 0 0 0;
+    }
+    .layout-gutter .section-line { display: none; }
+    .layout-gutter .resume-section > [data-item] { grid-column: 2; }
+    .layout-gutter .flow-page > [data-item] { margin-left: calc(var(--gutter) + 0.3in); }
+
+    /* ── Header grid: compact header, skills as a grid ───────────────── */
+    .grid-header {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        column-gap: 1rem;
+        align-items: end;
+        border-bottom: 3px solid var(--accent);
+        padding-bottom: 0.35rem;
+        margin-bottom: 0.6rem;
+    }
+    .grid-header .full-name { margin: 0; }
+    .grid-role { color: var(--accent); font-weight: 700; margin-top: 0.1rem; }
+    {% comment %} One column of unbroken lines. Two auto columns looked fine on
+    screen but WeasyPrint shrank them until phone numbers and URLs broke
+    mid-word. {% endcomment %}
+    .grid-contacts {
+        display: grid;
+        grid-template-columns: max-content;
+        justify-items: end;
+        row-gap: 0.05rem;
+        font-size: 9pt;
+        color: var(--muted);
+        white-space: nowrap;
+    }
+    .grid-contacts .link { color: var(--link); }
+    .skills-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        column-gap: 0.6rem;
+        row-gap: 0.15rem;
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+    .skills-grid li {
+        border-left: 2px solid var(--rule);
+        padding-left: 0.35rem;
+    }
+
+    /* ── Right rail: the sidebar on the other side ────────────────── */
+    {% comment %} The rail precedes the main column in the markup (see
+    layout_rail.html); row-reverse puts it back on the right on screen, and
+    the preview runtime keeps that markup order when it builds each sheet. {% endcomment %}
+    .layout-rail .resume-body { flex-direction: row-reverse; }
+    .layout-rail .main { padding: 0.35in 0.3in 0 0.45in; }
+    .layout-rail .sidebar { padding: 0.35in 0.3in 0.35in 0.25in; }
+    .layout-rail .sidebar-header { padding-left: 0.45in; border-bottom: 1px solid var(--rule); }
+
+    /* ── Two-column designs on paper ──────────────────────────────── */
+    {% comment %} On screen the body is a flex row, and the preview runtime
+    cuts it into sheets. On paper that fails: WeasyPrint cannot split a flex
+    container across pages, so a body taller than the space left under the
+    header was pushed whole onto page two, leaving page one blank.
+
+    So in print the main column is an ordinary block that flows from page to
+    page, the side column is placed beside it on page one, and the coloured
+    band comes from @page, which paints every page top to bottom. The
+    container must be transparent or its white background hides that band.
+    DOM order is untouched, so a parser still reads the same text order. {% endcomment %}
+    @media print {
+        .pdf-container { background: transparent; }
+
+        .layout-sidebar .resume-body,
+        .layout-rail .resume-body {
+            display: block;
+            position: relative;
+        }
+
+        .layout-sidebar .sidebar,
+        .layout-rail .sidebar {
+            position: absolute;
+            top: 0;
+            width: var(--sidebar-width);
+            background: transparent;
+        }
+        .layout-sidebar .sidebar { left: 0; }
+        .layout-rail .sidebar { right: 0; }
+
+        .layout-sidebar .main { margin-left: var(--sidebar-width); }
+        .layout-rail .main { margin-right: var(--sidebar-width); }
+    }
 
     /* ── Screen-only chrome: the desk and the page sheets ─────────── */
     @media screen {

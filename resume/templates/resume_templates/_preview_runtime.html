@@ -163,6 +163,10 @@ this runs unchanged for a design it has never seen:
         function paginateSidebar(container, header, column, sidebar) {
             const blocks = flatten(column);
             if (blocks.length === 0) return;
+            const sidebarFirst = Boolean(
+                sidebar &&
+                (sidebar.compareDocumentPosition(column) & Node.DOCUMENT_POSITION_FOLLOWING)
+            );
 
             const holder = document.createElement('div');
             holder.className = column.className;
@@ -186,19 +190,23 @@ this runs unchanged for a design it has never seen:
 
                 const body = document.createElement('div');
                 body.className = 'resume-body';
+                let rail = null;
                 if (sidebar) {
                     if (index === 0) {
-                        body.appendChild(sidebar.cloneNode(true));
+                        rail = sidebar.cloneNode(true);
                     } else {
-                        const band = document.createElement('div');
-                        band.className = 'sidebar-bg';
-                        body.appendChild(band);
+                        rail = document.createElement('div');
+                        rail.className = 'sidebar-bg';
                     }
                 }
                 const main = document.createElement('div');
                 main.className = column.className;
                 pageBlocks.forEach(block => main.appendChild(block));
+                // Keep the markup's order: a left sidebar precedes the main
+                // column, a right rail follows it.
+                if (rail && sidebarFirst) body.appendChild(rail);
                 body.appendChild(main);
+                if (rail && !sidebarFirst) body.appendChild(rail);
                 sheet.appendChild(body);
                 container.appendChild(sheet);
             });

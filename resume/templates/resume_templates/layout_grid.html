@@ -1,0 +1,43 @@
+{% comment %}
+A compact grid header (name and current role on the left, contacts in a small
+grid on the right) and skills as a scannable grid ahead of the experience.
+Skills are plain text in list items, never bars or ratings a parser cannot read.
+{% endcomment %}
+<!DOCTYPE html>
+<html lang="{{ language|default:"en" }}">
+<head>{% include "resume_templates/_head.html" %}</head>
+<body class="layout-grid sec-{{ tokens.section_style }}">
+    <div class="pdf-container" data-paginate="flow">
+        <div class="pdf-content flow-page" data-column>
+            <header class="grid-header" data-header>
+                <div>
+                    <h1 class="full-name">{{ user_data.full_name }}</h1>
+                    {% for exp in experience_data|slice:":1" %}
+                    <div class="grid-role">{{ exp.title }}</div>
+                    {% endfor %}
+                </div>
+                <div class="grid-contacts">
+                    {% if user_data.email %}<span>{{ user_data.email }}</span>{% endif %}
+                    {% if user_data.phone %}<span>{{ user_data.phone }}</span>{% endif %}
+                    {% if user_data.linkedin %}<span class="link">{{ user_data.linkedin }}</span>{% endif %}
+                    {% if user_data.github %}<span class="link">{{ user_data.github }}</span>{% endif %}
+                </div>
+            </header>
+
+            {% if focus_areas %}{% include "resume_templates/_focus_areas.html" %}{% endif %}
+            {% if user_data.skills %}
+            <section class="resume-section" data-section>
+                {% include "resume_templates/_section_head.html" with title=labels.skills %}
+                <ul class="skills-grid" data-item>
+                    {% for skill in user_data.skills %}{% if skill %}<li>{{ skill }}</li>{% endif %}{% endfor %}
+                </ul>
+            </section>
+            {% endif %}
+            {% if experience_data %}{% include "resume_templates/_experience.html" %}{% endif %}
+            {% if education_data %}{% include "resume_templates/_education.html" %}{% endif %}
+            {% if project_data %}{% include "resume_templates/_projects.html" %}{% endif %}
+        </div>
+    </div>
+    {% include "resume_templates/_preview_runtime.html" %}
+</body>
+</html>

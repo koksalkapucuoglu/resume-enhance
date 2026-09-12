@@ -1,0 +1,62 @@
+{% comment %}
+The sidebar layout mirrored: career history in the wide column, contact, skills
+and education in a narrow rail on the right.
+
+The rail comes FIRST in the markup even though it sits on the right. WeasyPrint
+places an absolutely positioned box on the page where it would otherwise have
+fallen, so a rail after a long career history landed on page two. Screen puts it
+back on the right with row-reverse; print pins it with right: 0. The cost is
+that a parser reads the rail before the experience — this design is not marked
+ATS-safe for that reason.
+{% endcomment %}
+<!DOCTYPE html>
+<html lang="{{ language|default:"en" }}">
+<head>{% include "resume_templates/_head.html" %}</head>
+<body class="layout-rail sec-{{ tokens.section_style }}">
+    <div class="pdf-container" data-paginate="sidebar">
+        <header class="resume-header sidebar-header" data-header>
+            <h1 class="full-name">{{ user_data.full_name }}</h1>
+        </header>
+
+        <div class="resume-body">
+
+            <aside class="sidebar" data-sidebar>
+                <section class="resume-section">
+                    {% include "resume_templates/_section_head.html" with title=labels.contact %}
+                    {% include "resume_templates/_contacts.html" with stacked=True %}
+                </section>
+
+                {% if user_data.skills %}
+                <section class="resume-section">
+                    {% include "resume_templates/_section_head.html" with title=labels.skills %}
+                    <ul class="sidebar-list">
+                        {% for skill in user_data.skills %}{% if skill %}<li>{{ skill }}</li>{% endif %}{% endfor %}
+                    </ul>
+                </section>
+                {% endif %}
+
+                {% if education_data %}
+                <section class="resume-section">
+                    {% include "resume_templates/_section_head.html" with title=labels.education %}
+                    {% for edu in education_data %}
+                    <div class="education-item">
+                        <div class="degree-field">{{ edu.degree }}</div>
+                        {% if edu.field_of_study %}<div>{{ edu.field_of_study }}</div>{% endif %}
+                        <div class="institution">{{ edu.school }}</div>
+                        <div class="entry-date">{{ edu.start_year }} – {{ edu.end_year }}</div>
+                    </div>
+                    {% endfor %}
+                </section>
+                {% endif %}
+            </aside>
+
+            <main class="main" data-column>
+                {% if focus_areas %}{% include "resume_templates/_focus_areas.html" %}{% endif %}
+                {% if experience_data %}{% include "resume_templates/_experience.html" %}{% endif %}
+                {% if project_data %}{% include "resume_templates/_projects.html" %}{% endif %}
+            </main>
+        </div>
+    </div>
+    {% include "resume_templates/_preview_runtime.html" %}
+</body>
+</html>

@@ -1,0 +1,26 @@
+{% comment %}
+Headings in a left gutter, content beside them. Visually two columns, but each
+section reads heading-then-content, so the text order a parser sees is the same
+as a single-column resume.
+{% endcomment %}
+<!DOCTYPE html>
+<html lang="{{ language|default:"en" }}">
+<head>{% include "resume_templates/_head.html" %}</head>
+<body class="layout-gutter sec-{{ tokens.section_style }}">
+    <div class="pdf-container" data-paginate="flow">
+        <div class="pdf-content flow-page" data-column>
+            <header class="gutter-header" data-header>
+                <h1 class="full-name">{{ user_data.full_name }}</h1>
+                {% include "resume_templates/_contacts.html" with stacked=True %}
+            </header>
+
+            {% if focus_areas %}{% include "resume_templates/_focus_areas.html" %}{% endif %}
+            {% if education_data %}{% include "resume_templates/_education.html" %}{% endif %}
+            {% if user_data.skills %}{% include "resume_templates/_skills.html" %}{% endif %}
+            {% if experience_data %}{% include "resume_templates/_experience.html" %}{% endif %}
+            {% if project_data %}{% include "resume_templates/_projects.html" %}{% endif %}
+        </div>
+    </div>
+    {% include "resume_templates/_preview_runtime.html" %}
+</body>
+</html>

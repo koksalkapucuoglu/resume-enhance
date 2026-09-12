@@ -549,6 +549,16 @@ User request: {user_message}"""
         "developer": "dev-mono",
         "banner": "accent-banner",
         "split": "split-column",
+        "gutter": "label-gutter",
+        "label": "label-gutter",
+        "grid": "header-grid",
+        "izgara": "header-grid",
+        "editorial": "centered-editorial",
+        "centered": "centered-editorial",
+        "ortali": "centered-editorial",
+        "rail": "right-rail",
+        "sag": "right-rail",
+        "right": "right-rail",
     }
 
     def _template_key(self, requested: str):

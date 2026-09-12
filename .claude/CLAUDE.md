@@ -199,9 +199,11 @@ if not template_html_name:
     raise PdfGenerationError(f"Invalid template selector: {template_selector}")
 ```
 
-**Available templates:** ten, defined in `resume/resume_templates.py` — the single catalogue the PDF service, the editor's picker and the MCP `list_templates` tool all read. A design is a *layout* (`layout_single`, `layout_banner`, `layout_sidebar` under `resume/templates/resume_templates/`) plus a *token* dict (type, colour, density, section-header treatment, date placement). Adding one is normally a new entry in `TEMPLATES`, not a new HTML file.
+**Available templates:** fourteen, defined in `resume/resume_templates.py` — the single catalogue the PDF service, the editor's picker and the MCP `list_templates` tool all read. A design is a *layout* plus a *token* dict (type, colour, density, section-header treatment, date placement). Adding one is normally a new entry in `TEMPLATES`, not a new HTML file.
 
-Keys: `faangpath-simple` (default), `compact-ats`, `engineering-classic`, `ivy-serif`, `executive-serif`, `timeline-rail`, `dev-mono`, `accent-banner`, `modern-sidebar`, `split-column`.
+Layouts (`resume/templates/resume_templates/layout_*.html`): `single`, `banner`, `gutter` (headings in a left gutter, one reading order), `grid` (compact grid header, skills grid) — all flow layouts — and `sidebar`, `rail` (two-column; `ResumeTemplate.side_column` is true).
+
+Keys: `faangpath-simple` (default), `compact-ats`, `engineering-classic`, `ivy-serif`, `executive-serif`, `timeline-rail`, `dev-mono`, `centered-editorial`, `label-gutter`, `header-grid`, `accent-banner`, `modern-sidebar`, `split-column`, `right-rail`.
 
 **Optional "what I'm working on" section** (`focus_areas`): stored as `{"include": bool, "items": [str]}` in `Resume.content`, normalized by `resume_content.normalize_focus_areas`. The lines are kept even when `include` is false, so turning the section off never loses them. `build_context` passes an empty `focus_areas` list when it is off, so no template knows about the flag. Position is fixed: above Education (above Experience on sidebar layouts, where Education sits in the aside). Toggled by a checkbox in the editor's Details pane and in the agentic Template pane.
 
@@ -209,6 +211,8 @@ Rules when touching templates:
 - `settings.TEMPLATE_SELECTOR_HTML_MAP` is **derived** from the catalogue; never edit it by hand.
 - `AgentService._template_key()` resolves what a user typed in chat (key, alias or display name) — add shorthands there, not another map.
 - Panes hidden with the `hidden` attribute need `[hidden] { display: none !important; }` on the page: Tailwind's `flex` on the same element otherwise wins.
+- **Two-column designs print differently from how they preview.** On screen the body is a flex row that the preview runtime cuts into sheets. WeasyPrint cannot split a flex container across pages (a tall body was pushed whole to page two, leaving page one blank), so under `@media print` the main column is a plain block that flows, the side column is `position: absolute` on page one, and the coloured band is a `linear-gradient` on `@page` (with `.pdf-container` transparent so it shows). A right rail must come *before* the main column in the markup — WeasyPrint places an absolute box on the page where it would otherwise have fallen — and `row-reverse` puts it back on the right on screen. Verify print changes with a real multi-page render, not only the browser preview.
+- Two layouts marked `side_column` are exempt from main-flow ordering rules (e.g. focus areas above Education), because their Education sits in the side column.
 - Every render path goes through `resume_templates.design_context(key, context)` so the tokens reach the template. A template rendered without it has no styling.
 - Only fonts installed in the image may be named (see the font packages in `Dockerfile`). A missing family falls back silently and the design stops matching its preview.
 - `_preview_runtime.html` paginates the screen preview using `data-` attributes (`data-paginate`, `data-column`, `data-header`, `data-section`, `data-item`), not class names. New layouts must mark themselves up the same way.

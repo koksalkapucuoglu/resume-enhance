@@ -197,8 +197,8 @@ class FocusAreasTests(TestCase):
                     resume_templates.design_context(design.key, context),
                 )
                 self.assertIn("Django ve DRF ile backend mimarisi", html)
-                if design.layout != "sidebar":
-                    # Education lives in the sidebar on two-column designs.
+                if not design.side_column:
+                    # Education lives in the side column on two-column designs.
                     self.assertLess(
                         html.index(escape("WHAT I'M WORKING ON")), html.index("EDUCATION")
                     )
@@ -321,3 +321,46 @@ class EditorFocusAreasTests(TestCase):
             url, self._payload(focus_areas="Django", focus_areas_include="on")
         ).content.decode()
         self.assertIn(escape("WHAT I'M WORKING ON"), on)
+
+
+class TwoColumnPrintTests(TestCase):
+    """
+    Two-column designs must stay printable across pages.
+
+    WeasyPrint cannot split a flex container between pages, so a flex body
+    taller than the space under the header was pushed whole onto page two and
+    page one printed blank; and an aside's background stopped where its content
+    did. These lock in the print strategy that fixed both.
+    """
+
+    def render(self, design):
+        return render_to_string(
+            design.template_file,
+            resume_templates.design_context(design.key, SAMPLE_CONTEXT),
+        )
+
+    def test_the_band_is_painted_on_every_page(self):
+        for design in resume_templates.catalog():
+            if not design.side_column:
+                continue
+            with self.subTest(template=design.key):
+                html = self.render(design)
+                page_rule = html[html.index("@page"):html.index(":root")]
+                self.assertIn("linear-gradient", page_rule)
+                self.assertIn(design.resolved["sidebar_bg"], page_rule)
+
+    def test_print_does_not_use_a_flex_body(self):
+        for design in resume_templates.catalog():
+            if not design.side_column:
+                continue
+            with self.subTest(template=design.key):
+                html = self.render(design)
+                print_css = html[html.index("Two-column designs on paper"):]
+                self.assertIn("display: block;", print_css)
+                self.assertIn("position: absolute;", print_css)
+                self.assertIn(".pdf-container { background: transparent; }", print_css)
+
+    def test_the_rail_precedes_the_main_column_in_markup(self):
+        """An absolutely placed rail after a long history landed on page two."""
+        html = self.render(resume_templates.get("right-rail"))
+        self.assertLess(html.index("data-sidebar"), html.index("data-column"))

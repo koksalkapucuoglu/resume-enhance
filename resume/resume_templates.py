@@ -53,6 +53,15 @@ class ResumeTemplate:
         return f"resume_templates/layout_{self.layout}.html"
 
     @property
+    def side_column(self) -> bool:
+        """Contact, skills and education sit in a side column, not the main flow.
+
+        Section-order rules ("focus areas above Education") are about the main
+        reading flow, so they do not apply to what these designs put aside.
+        """
+        return self.layout in ("sidebar", "rail")
+
+    @property
     def resolved(self) -> Dict[str, str]:
         """Tokens with the base defaults filled in.
 
@@ -94,6 +103,8 @@ BASE_TOKENS: Dict[str, str] = {
     "inner_padding": "0.45in",
     "header_bg": "transparent",
     "header_ink": "inherit",
+    # Label-gutter layout: the width of the column the headings sit in.
+    "gutter_width": "1.15in",
     # Sidebar layouts only.
     "sidebar_width": "32%",
     "sidebar_bg": "#f1f5f9",
@@ -273,6 +284,117 @@ TEMPLATES: Tuple[ResumeTemplate, ...] = (
         },
     ),
     ResumeTemplate(
+        key="label-gutter",
+        name="Label Gutter",
+        description=(
+            "Section headings in a left gutter with the content beside them. "
+            "An editorial look that keeps a single reading order, so it still "
+            "parses cleanly."
+        ),
+        layout="gutter",
+        family="editorial",
+        tokens={
+            "font_body": SANS_HUMANIST,
+            "font_heading": SANS_HUMANIST,
+            "font_size": "10pt",
+            "line_height": "1.35",
+            "page_margin": "0.55in",
+            "header_align": "left",
+            "section_size": "8.5pt",
+            "section_spacing": "1.5px",
+            "accent": "#0f766e",
+            "rule": "#d4d4d8",
+            "name_size": "24pt",
+            "name_case": "none",
+            "name_spacing": "0px",
+            # Wide enough that "ŞU AN ÜZERİNDE ÇALIŞTIKLARIM" breaks into two
+            # lines rather than three.
+            "gutter_width": "1.3in",
+        },
+    ),
+    ResumeTemplate(
+        key="header-grid",
+        name="Header Grid",
+        description=(
+            "Name and contacts in a compact grid header, and skills laid out "
+            "as a scannable grid before the experience."
+        ),
+        layout="grid",
+        family="modern",
+        tokens={
+            "font_body": SANS_CLASSIC,
+            "font_heading": SANS_CLASSIC,
+            "font_size": "9.5pt",
+            "line_height": "1.3",
+            "page_margin": "0.45in",
+            "header_align": "left",
+            "section_style": "left-bar",
+            "section_size": "9.5pt",
+            "accent": "#4338ca",
+            "rule": "#e0e7ff",
+            "name_size": "22pt",
+            "name_case": "none",
+            "name_spacing": "0px",
+        },
+    ),
+    ResumeTemplate(
+        key="centered-editorial",
+        name="Centered Editorial",
+        description=(
+            "Large serif name, centred headings between thin rules and "
+            "generous white space. Understated and premium."
+        ),
+        layout="single",
+        family="editorial",
+        tokens={
+            "font_size": "10.5pt",
+            "line_height": "1.45",
+            "page_margin": "0.75in",
+            "section_gap": "0.8rem",
+            "name_size": "28pt",
+            "name_case": "none",
+            "name_weight": "400",
+            "name_spacing": "1px",
+            "section_style": "center-rules",
+            "section_size": "9.5pt",
+            "section_spacing": "3px",
+            "rule": "#a8a29e",
+            "muted": "#57534e",
+        },
+    ),
+    ResumeTemplate(
+        key="right-rail",
+        name="Right Rail",
+        description=(
+            "Career history in the wide column, with contact, skills and "
+            "education in a narrow rail on the right."
+        ),
+        layout="rail",
+        family="two-column",
+        ats_safe=False,
+        tokens={
+            "font_body": SERIF_BOOK,
+            "font_heading": SANS_CLASSIC,
+            "font_size": "10pt",
+            "page_margin": "0in",
+            "header_align": "left",
+            "section_style": "caps-rule",
+            "section_size": "9pt",
+            "section_spacing": "1.5px",
+            "accent": "#7c2d12",
+            "rule": "#e7e5e4",
+            "sidebar_width": "30%",
+            "sidebar_bg": "#fafaf9",
+            "sidebar_ink": "#1c1917",
+            # Opaque, so the page-level rail band does not show behind the name.
+            "header_bg": "#ffffff",
+            "header_ink": "#1c1917",
+            "name_size": "22pt",
+            "name_case": "none",
+            "name_spacing": "0.5px",
+        },
+    ),
+    ResumeTemplate(
         key="modern-sidebar",
         name="Modern Sidebar",
         description="Two columns: contact and skills in a left sidebar.",
@@ -339,6 +461,7 @@ DEFAULT_TEMPLATE_KEY = "faangpath-simple"
 FAMILIES: Tuple[Tuple[str, str], ...] = (
     ("classic", "Classic"),
     ("modern", "Modern"),
+    ("editorial", "Editorial"),
     ("bold", "Bold"),
     ("two-column", "Two column"),
 )
