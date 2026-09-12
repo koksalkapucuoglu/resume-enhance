@@ -10,6 +10,7 @@ from django.contrib.auth.models import User
 from django.template.loader import render_to_string
 from django.test import Client, TestCase
 from django.urls import reverse
+from django.utils.html import escape
 
 from resume import resume_templates
 from resume.models import Resume
@@ -199,7 +200,7 @@ class FocusAreasTests(TestCase):
                 if design.layout != "sidebar":
                     # Education lives in the sidebar on two-column designs.
                     self.assertLess(
-                        html.index("WHAT I'M WORKING ON"), html.index("EDUCATION")
+                        html.index(escape("WHAT I'M WORKING ON")), html.index("EDUCATION")
                     )
 
     def test_section_is_absent_when_empty(self):
@@ -207,7 +208,7 @@ class FocusAreasTests(TestCase):
             "resume_templates/layout_single.html",
             resume_templates.design_context("faangpath-simple", SAMPLE_CONTEXT),
         )
-        self.assertNotIn("WHAT I'M WORKING ON", html)
+        self.assertNotIn(escape("WHAT I'M WORKING ON"), html)
 
 
 class AppearanceEndpointTests(TestCase):
@@ -314,9 +315,9 @@ class EditorFocusAreasTests(TestCase):
     def test_the_preview_endpoint_honours_the_checkbox(self):
         url = reverse("resume:preview_resume_form")
         off = self.client.post(url, self._payload(focus_areas="Django")).content.decode()
-        self.assertNotIn("WHAT I'M WORKING ON", off)
+        self.assertNotIn(escape("WHAT I'M WORKING ON"), off)
 
         on = self.client.post(
             url, self._payload(focus_areas="Django", focus_areas_include="on")
         ).content.decode()
-        self.assertIn("WHAT I'M WORKING ON", on)
+        self.assertIn(escape("WHAT I'M WORKING ON"), on)

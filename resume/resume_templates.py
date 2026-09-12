@@ -364,17 +364,75 @@ def catalog() -> List[ResumeTemplate]:
     return list(TEMPLATES)
 
 
-def design_context(key: str, context: Dict) -> Dict:
+# The words a template prints itself, in the language the resume is WRITTEN in
+# (Resume.language) — not the interface language. A Turkish resume downloaded
+# by someone browsing in English still needs Turkish headings.
+DEFAULT_LANGUAGE = "en"
+
+SECTION_LABELS: Dict[str, Dict[str, str]] = {
+    "en": {
+        "contact": "CONTACT",
+        "focus_areas": "WHAT I'M WORKING ON",
+        "education": "EDUCATION",
+        "skills": "SKILLS",
+        "experience": "EXPERIENCE",
+        "projects": "PROJECTS & PUBLICATIONS",
+        "present": "Present",
+        # Joins degree and field: "Master of Electrical Engineering".
+        "degree_joiner": " of ",
+    },
+    "tr": {
+        "contact": "İLETİŞİM",
+        "focus_areas": "ŞU AN ÜZERİNDE ÇALIŞTIKLARIM",
+        "education": "EĞİTİM",
+        "skills": "YETENEKLER",
+        "experience": "DENEYİM",
+        "projects": "PROJELER VE YAYINLAR",
+        "present": "Halen",
+        # "Yüksek Lisans of Elektrik Mühendisliği" was the English joiner
+        # printed into Turkish resumes.
+        "degree_joiner": " – ",
+    },
+}
+
+
+def language_code(value) -> str:
+    """A language this catalogue has labels for, or the default."""
+    return value if value in SECTION_LABELS else DEFAULT_LANGUAGE
+
+
+def labels(language) -> Dict[str, str]:
+    return SECTION_LABELS[language_code(language)]
+
+
+def rendering_language(language):
+    """
+    Context manager: render with Django's translations for `language`.
+
+    Month names come from Django's `date` filter, which follows the active
+    translation — so "Aug 2022" only becomes "Ağu 2022" if the render happens
+    inside this block. Imported lazily because settings imports this module
+    before Django is configured.
+    """
+    from django.utils import translation
+
+    return translation.override(language_code(language))
+
+
+def design_context(key: str, context: Dict, language: str = DEFAULT_LANGUAGE) -> Dict:
     """Add the design a key selects to a resume's render context.
 
     Every render path — PDF, editor preview, saved-resume preview, application
     snapshot — goes through here, so a template never has to guess which design
-    it is being rendered as.
+    it is being rendered as, or in which language to print its headings.
     """
     template = get(key)
+    code = language_code(language)
     return {
         **context,
         "tpl": template,
         "tokens": resolved_tokens(template.key),
         "template_key": template.key,
+        "labels": SECTION_LABELS[code],
+        "language": code,
     }

@@ -1,5 +1,5 @@
 <section class="resume-section" data-section>
-    {% include "resume_templates/_section_head.html" with title="EXPERIENCE" %}
+    {% include "resume_templates/_section_head.html" with title=labels.experience %}
     {% for exp in experience_data %}
     <div class="experience-item" data-item>
         <div class="entry-line">
@@ -9,7 +9,7 @@
             </div>
             <span class="entry-date">
                 {{ exp.start_date|date:"M Y" }} -
-                {% if exp.current_role %}Present{% else %}{{ exp.end_date|date:"M Y" }}{% endif %}
+                {% if exp.current_role %}{{ labels.present }}{% else %}{{ exp.end_date|date:"M Y" }}{% endif %}
             </span>
         </div>
         {% if exp.description %}

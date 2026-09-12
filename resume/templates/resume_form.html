@@ -309,6 +309,9 @@
             <form method="post" id="resume-form" {% if resume_id %}action="{% url 'resume:resume_form_edit' pk=resume_id %}"{% endif %}>
                 {% csrf_token %}
                 <input type="hidden" name="template" id="selected-template" value="{{ saved_template|default:default_template }}">
+                <!-- The language the resume is written in: decides the headings
+                     and month names in the preview and the exported PDF. -->
+                <input type="hidden" name="resume_language" value="{{ saved_language|default:'en' }}">
 
                 <!-- Resume Title -->
                 <div class="flex items-center gap-2 mb-4 group">

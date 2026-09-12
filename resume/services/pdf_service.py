@@ -133,6 +133,7 @@ class ResumePdfService:
         resume_data: Dict[str, Any],
         template_selector: Optional[str] = None,
         request: Optional[HttpRequest] = None,
+        language: str = resume_templates.DEFAULT_LANGUAGE,
     ) -> bytes:
         """
         Generate PDF for resume data.
@@ -167,13 +168,17 @@ class ResumePdfService:
             # live preview renders that same template with nothing added. Feeding
             # WeasyPrint a second sheet here made the download diverge from the
             # preview (different font, body size and @page margin).
-            pdf_bytes = self.pdf_converter.convert_template_to_pdf(
-                template_name=template_html_name,
-                context=resume_templates.design_context(
-                    template_selector, resume_data
-                ),
-                request=request,
-            )
+            # The language the resume is written in decides the headings and
+            # the month names, and month names need the render itself to run
+            # under that translation.
+            with resume_templates.rendering_language(language):
+                pdf_bytes = self.pdf_converter.convert_template_to_pdf(
+                    template_name=template_html_name,
+                    context=resume_templates.design_context(
+                        template_selector, resume_data, language
+                    ),
+                    request=request,
+                )
 
             # A truncated or empty body still arrives with a PDF content type,
             # so the browser's viewer reports "Invalid PDF structure" and the

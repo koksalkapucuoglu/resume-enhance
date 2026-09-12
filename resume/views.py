@@ -496,6 +496,18 @@ def focus_areas_from_post(request):
     )
 
 
+def posted_language(request):
+    """
+    The language the resume in the editor is written in.
+
+    The editor posts it as a hidden field because its preview and export work
+    on unsaved form data, with no resume row to read it from. Anything we have
+    no labels for renders in the default language.
+    """
+    value = request.POST.get("resume_language")
+    return value if value in dict(Resume.LANGUAGE_CHOICES) else "en"
+
+
 def template_picker_context(selected=None):
     """What the template picker needs, from the one catalogue.
 
@@ -544,6 +556,7 @@ class ResumeFormView(TemplateView):
             context = populate_formsets_from_extracted_json(resume.content)
             context["resume_id"] = resume.pk
             context["saved_template"] = resume.template_selector
+            context["saved_language"] = resume.language
             context["saved_title"] = resume.title
         else:
             # Fallback for "Create New" flow without upload
@@ -665,6 +678,7 @@ class ResumeFormView(TemplateView):
                 resume_data=context,
                 template_selector=template_selector,
                 request=self.request,
+                language=posted_language(self.request),
             )
 
             response = HttpResponse(pdf_bytes, content_type="application/pdf")
@@ -827,11 +841,13 @@ class ResumeFormView(TemplateView):
         # Check if this is a preview request for our new template
         if self.request.POST.get("action") == "preview_faangpath":
             design = resume_templates.get(template_selector)
-            return render(
-                self.request,
-                design.template_file,
-                resume_templates.design_context(design.key, context),
-            )
+            language = posted_language(self.request)
+            with resume_templates.rendering_language(language):
+                return render(
+                    self.request,
+                    design.template_file,
+                    resume_templates.design_context(design.key, context, language),
+                )
 
         try:
             # Increment download counter for PDF exports (after quota check passed)
@@ -1044,11 +1060,15 @@ def preview_resume_form(request):
             template_selector = request.POST.get("template", "faangpath-simple")
             design = resume_templates.get(template_selector)
 
-            rendered_html = render(
-                request,
-                template_name=design.template_file,
-                context=resume_templates.design_context(design.key, context),
-            ).content.decode("utf-8")
+            language = posted_language(request)
+            with resume_templates.rendering_language(language):
+                rendered_html = render(
+                    request,
+                    template_name=design.template_file,
+                    context=resume_templates.design_context(
+                        design.key, context, language
+                    ),
+                ).content.decode("utf-8")
             return HttpResponse(rendered_html)
 
         errors = {}
@@ -1304,6 +1324,7 @@ def signed_download(request, token):
             resume_data=resume_content.build_context(resume.content),
             template_selector=resume.template_selector,
             request=request,
+            language=resume.language,
         )
     except PdfGenerationError as exc:
         logger.error("Signed download failed for resume %s: %s", resume.pk, exc)
@@ -1398,6 +1419,7 @@ def download_resume_pdf(request, pk):
 
         pdf_bytes = resume_pdf_service.generate_resume_pdf(
             resume_data=resume_data,
+            language=resume.language,
             template_selector=resume.template_selector,
             request=request,
         )
@@ -1558,11 +1580,12 @@ def preview_saved_resume(request, pk):
 
     context = resume_content.build_context(resume.content)
     design = resume_templates.get(resume.template_selector)
-    return render(
-        request,
-        design.template_file,
-        resume_templates.design_context(design.key, context),
-    )
+    with resume_templates.rendering_language(resume.language):
+        return render(
+            request,
+            design.template_file,
+            resume_templates.design_context(design.key, context, resume.language),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1776,11 +1799,17 @@ def application_snapshot(request, pk):
 
     context = resume_content.build_context(posting.snapshot_content)
     design = resume_templates.get(posting.snapshot_template)
-    return render(
-        request,
-        design.template_file,
-        resume_templates.design_context(design.key, context),
+    language = (
+        posting.source_resume.language
+        if posting.source_resume
+        else Resume.normalize_language(posting.snapshot_content.get("language"))
     )
+    with resume_templates.rendering_language(language):
+        return render(
+            request,
+            design.template_file,
+            resume_templates.design_context(design.key, context, language),
+        )
 
 
 @login_required

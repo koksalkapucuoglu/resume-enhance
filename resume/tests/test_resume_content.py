@@ -172,8 +172,9 @@ class RenderedOutputTest(TestCase):
     def test_download_builds_the_same_context_as_the_preview(self):
         captured = {}
 
-        def capture(resume_data, template_selector, request):
+        def capture(resume_data, template_selector, request, language):
             captured.update(resume_data)
+            captured["language"] = language
             return b"%PDF-1.7 ok"
 
         with patch(
@@ -188,6 +189,8 @@ class RenderedOutputTest(TestCase):
         )
         self.assertEqual(captured["experience_data"][0]["start_date"], date(2022, 1, 1))
         self.assertEqual(captured["education_data"][0]["start_year"], 2016)
+        # Headings and month names follow the language the resume is written in.
+        self.assertEqual(captured["language"], self.resume.language)
 
     def test_agent_written_content_stays_openable_by_the_form_editor(self):
         """A resume the agent wrote must not break the standard editor."""

@@ -15,13 +15,13 @@ sidebar as a plain colour band rather than repeating its content.
         <div class="resume-body">
             <aside class="sidebar" data-sidebar>
                 <section class="resume-section">
-                    {% include "resume_templates/_section_head.html" with title="CONTACT" %}
+                    {% include "resume_templates/_section_head.html" with title=labels.contact %}
                     {% include "resume_templates/_contacts.html" with stacked=True %}
                 </section>
 
                 {% if user_data.skills %}
                 <section class="resume-section">
-                    {% include "resume_templates/_section_head.html" with title="SKILLS" %}
+                    {% include "resume_templates/_section_head.html" with title=labels.skills %}
                     <ul class="sidebar-list">
                         {% for skill in user_data.skills %}{% if skill %}<li>{{ skill }}</li>{% endif %}{% endfor %}
                     </ul>
@@ -30,7 +30,7 @@ sidebar as a plain colour band rather than repeating its content.
 
                 {% if education_data %}
                 <section class="resume-section">
-                    {% include "resume_templates/_section_head.html" with title="EDUCATION" %}
+                    {% include "resume_templates/_section_head.html" with title=labels.education %}
                     {% for edu in education_data %}
                     <div class="education-item">
                         <div class="degree-field">{{ edu.degree }}</div>

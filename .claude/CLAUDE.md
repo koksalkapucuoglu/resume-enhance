@@ -213,6 +213,7 @@ Rules when touching templates:
 - Only fonts installed in the image may be named (see the font packages in `Dockerfile`). A missing family falls back silently and the design stops matching its preview.
 - `_preview_runtime.html` paginates the screen preview using `data-` attributes (`data-paginate`, `data-column`, `data-header`, `data-section`, `data-item`), not class names. New layouts must mark themselves up the same way.
 - Token values are interpolated into CSS inside `{% autoescape off %}`; they come from the catalogue, never from user content.
+- **Words a template prints itself** (section headings, "Present", the degree joiner) come from `resume_templates.SECTION_LABELS[language]` via `{{ labels.* }}` — never hardcode English in a partial. `language` is the language the resume is *written* in (`Resume.language`), not the interface language; the editor posts it as the hidden `resume_language` field because its preview works on unsaved data. Render inside `resume_templates.rendering_language(language)` so Django's `date` filter prints month names in that language ("Ağu 2022"). Labels are autoescaped like any variable, so tests must compare against `escape(...)` for text with apostrophes or ampersands.
 
 **Template persistence:** Each `Resume` has a `template_selector` CharField (default `'faangpath-simple'`). The chosen template is:
 - Sent via hidden input `<input name="template" id="selected-template">` in the form — the pickers write to it, it posts
