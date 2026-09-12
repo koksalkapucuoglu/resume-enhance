@@ -1,0 +1,259 @@
+{% comment %}
+Every design's CSS, driven by the token dict from resume/resume_templates.py.
+
+Two rules hold this file together:
+
+1. Sizes and spacing are declared once, unqualified, so print (WeasyPrint) and
+   screen (the preview iframe) get identical metrics and the preview's page
+   breaks land where the PDF's do. `@media screen` is only for things that do
+   not exist on paper: the grey desk, the page sheets, their shadow.
+2. Fonts are always named explicitly. Left to the renderer's default, WeasyPrint
+   and the browser pick different families and the download stops matching the
+   preview.
+{% endcomment %}
+{% comment %}Autoescape off: every value below comes from the design catalogue
+in resume/resume_templates.py, never from a resume. Escaped, a font stack's
+quotes turn into &quot; and the family silently stops resolving.{% endcomment %}
+{% autoescape off %}
+<style>
+    @page {
+        size: A4;
+        margin: {{ tokens.page_margin }};
+        @top-center { content: ""; }
+        @bottom-center { content: ""; }
+    }
+
+    :root {
+        --font-body: {{ tokens.font_body }};
+        --font-heading: {{ tokens.font_heading }};
+        --accent: {{ tokens.accent }};
+        --ink: {{ tokens.ink }};
+        --muted: {{ tokens.muted }};
+        --rule: {{ tokens.rule }};
+        --rule-width: {{ tokens.rule_width }};
+        --section-gap: {{ tokens.section_gap }};
+        --item-gap: {{ tokens.item_gap }};
+        --link: {{ tokens.link_color }};
+        --sidebar-width: {{ tokens.sidebar_width }};
+        --sidebar-bg: {{ tokens.sidebar_bg }};
+        --sidebar-ink: {{ tokens.sidebar_ink }};
+        --pad: {{ tokens.inner_padding }};
+        --header-bg: {{ tokens.header_bg }};
+        --header-ink: {{ tokens.header_ink }};
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+        margin: 0;
+        font-family: var(--font-body);
+        font-size: {{ tokens.font_size }};
+        line-height: {{ tokens.line_height }};
+        color: var(--ink);
+    }
+
+    .pdf-container { width: 100%; background: white; }
+    .pdf-content { width: 100%; }
+    {% comment %} Print takes its margin from @page, so the screen-only padding
+    below must not be doubled here. {% endcomment %}
+    .flow-page { padding: 0; }
+
+    /* ── Header ───────────────────────────────────────────────────── */
+    .resume-header {
+        text-align: {{ tokens.header_align }};
+        margin-bottom: var(--section-gap);
+    }
+
+    .full-name {
+        font-family: var(--font-heading);
+        font-size: {{ tokens.name_size }};
+        font-weight: {{ tokens.name_weight }};
+        text-transform: {{ tokens.name_case }};
+        letter-spacing: {{ tokens.name_spacing }};
+        margin: 0 0 0.2rem 0;
+        color: var(--ink);
+    }
+
+    .contact-details { font-size: 9.5pt; color: var(--muted); }
+    .contact-row { margin: 0.1rem 0; }
+    .contact-separator { margin: 0 0.35rem; color: var(--muted); }
+    .contact-item.link { color: var(--link); }
+
+    /* ── Sections ─────────────────────────────────────────────────── */
+    .resume-section { margin-bottom: var(--section-gap); }
+
+    .section-header {
+        font-family: var(--font-heading);
+        font-size: {{ tokens.section_size }};
+        letter-spacing: {{ tokens.section_spacing }};
+        text-transform: uppercase;
+        font-weight: 700;
+        margin: 0 0 0.2rem 0;
+        color: var(--ink);
+    }
+
+    .section-line {
+        border: 0;
+        border-top: var(--rule-width) solid var(--rule);
+        margin: 0 0 0.3rem 0;
+    }
+
+    /* Section header treatments. One body class picks one. */
+    .sec-plain .section-line { display: none; }
+    .sec-plain .section-header { color: var(--accent); margin-bottom: 0.35rem; }
+
+    .sec-bar .section-line { display: none; }
+    .sec-bar .section-header {
+        background: var(--accent);
+        color: #fff;
+        padding: 0.12rem 0.4rem;
+        margin-bottom: 0.35rem;
+    }
+
+    .sec-left-bar .section-line { display: none; }
+    .sec-left-bar .section-header {
+        border-left: 3px solid var(--accent);
+        padding-left: 0.35rem;
+        color: var(--accent);
+        margin-bottom: 0.35rem;
+    }
+
+    /* ── Rows shared by education and experience ──────────────────── */
+    .entry-line {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 0.5rem;
+    }
+
+    .entry-left { flex: 1; min-width: 0; }
+    .entry-date {
+        color: var(--muted);
+        white-space: nowrap;
+        flex-shrink: 0;
+        text-align: right;
+    }
+
+    .education-item { margin-bottom: 0.15rem; }
+    .degree-field { font-weight: 700; }
+    .institution { color: var(--muted); }
+
+    .experience-item { margin-bottom: var(--item-gap); }
+    .position-title { font-weight: 700; display: block; }
+    .company-name { display: block; color: var(--muted); }
+
+    .experience-description { margin: 0.15rem 0 0 0; padding-left: 1.1rem; }
+    .experience-description li {
+        list-style-type: {{ tokens.bullet }};
+        margin-bottom: 0.12rem;
+    }
+
+    .skills-content { text-align: justify; }
+
+    @media print {
+        .experience-item,
+        .education-item,
+        .project-item { page-break-inside: avoid; }
+        .section-header { page-break-after: avoid; }
+    }
+
+    .project-item { margin-bottom: 0.35rem; }
+    .project-name { font-weight: 700; }
+    .project-link { color: var(--link); text-decoration: none; margin-left: 0.3rem; }
+
+    /* ── Date rail: dates in a left gutter instead of flush right ──── */
+    .date-rail .entry-line {
+        display: grid;
+        grid-template-columns: 1.15in 1fr;
+        gap: 0.4rem;
+    }
+    .date-rail .entry-date { text-align: left; order: -1; }
+    .date-rail .experience-description { padding-left: calc(1.15in + 1.5rem); }
+    .date-rail .experience-description { margin-left: 0; }
+
+    /* ── Banner layout ────────────────────────────────────────────── */
+    {% comment %} The banner bleeds past the page margin on three sides. It has
+    to be done with negative margins on the header rather than padding on the
+    blocks below: pagination lifts items out of their section, and a padding set
+    on the section would not travel with them. {% endcomment %}
+    .banner-header {
+        background: var(--accent);
+        color: #fff;
+        padding: 0.34in var(--pad) 0.28in;
+        text-align: {{ tokens.header_align }};
+        margin: calc(-1 * var(--pad)) calc(-1 * var(--pad)) 0.3in;
+    }
+    .banner-header .full-name,
+    .banner-header .contact-details,
+    .banner-header .contact-separator,
+    .banner-header .contact-item.link { color: #fff; }
+
+
+    /* ── Sidebar layout ───────────────────────────────────────────── */
+    .sidebar-header {
+        background: var(--header-bg);
+        color: var(--header-ink);
+        padding: 0.35in var(--pad) 0.28in;
+    }
+    .sidebar-header .full-name,
+    .sidebar-header .contact-details,
+    .sidebar-header .contact-item.link { color: var(--header-ink); }
+
+    .resume-body { display: flex; align-items: stretch; }
+    .sidebar {
+        width: var(--sidebar-width);
+        flex-shrink: 0;
+        background: var(--sidebar-bg);
+        color: var(--sidebar-ink);
+        padding: 0.35in 0.25in;
+    }
+    .sidebar .section-header,
+    .sidebar .contact-details,
+    .sidebar .contact-item.link { color: var(--sidebar-ink); }
+    .sidebar .section-line { border-top-color: currentColor; opacity: 0.35; }
+    {% comment %} A dark sidebar would otherwise print the muted greys of the
+    main column on top of itself. {% endcomment %}
+    .sidebar .institution,
+    .sidebar .entry-date,
+    .sidebar .contact-details { color: currentColor; opacity: 0.8; }
+    .sidebar-list { margin: 0; padding-left: 0.9rem; }
+    .sidebar-list li { margin-bottom: 0.12rem; }
+    .sidebar .education-item { margin-bottom: 0.45rem; }
+    .sidebar .contact-row { display: block; margin-bottom: 0.15rem; word-break: break-word; }
+    .main { flex: 1; min-width: 0; padding: 0.35in 0.3in 0 0.3in; }
+    .sidebar-bg { width: var(--sidebar-width); flex-shrink: 0; background: var(--sidebar-bg); }
+
+    /* ── Screen-only chrome: the desk and the page sheets ─────────── */
+    @media screen {
+        html, body {
+            background-color: #e2e8f0;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .pdf-container {
+            width: 8.27in;
+            margin: 0 auto;
+            background-color: transparent;
+        }
+
+        .page-sheet {
+            width: 100%;
+            height: 11.69in;
+            background-color: white;
+            box-shadow: 0 2px 8px rgb(0 0 0 / 0.15);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .page-sheet + .page-sheet { margin-top: 20px; }
+        .page-sheet .resume-body { flex: 1; }
+
+        {% comment %} On paper the page margin comes from @page; on screen it
+        has to be real padding inside the sheet. {% endcomment %}
+        .flow-page { padding: {{ tokens.page_margin }}; }
+    }
+</style>
+{% endautoescape %}

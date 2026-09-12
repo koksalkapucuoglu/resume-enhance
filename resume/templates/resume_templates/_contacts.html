@@ -1,0 +1,22 @@
+{% comment %}Contact line. `stacked` puts one item per row (sidebar).{% endcomment %}
+<div class="contact-details">
+    {% if stacked %}
+        {% if user_data.email %}<div class="contact-row">{{ user_data.email }}</div>{% endif %}
+        {% if user_data.phone %}<div class="contact-row">{{ user_data.phone }}</div>{% endif %}
+        {% if user_data.linkedin %}<div class="contact-row contact-item link">{{ user_data.linkedin }}</div>{% endif %}
+        {% if user_data.github %}<div class="contact-row contact-item link">{{ user_data.github }}</div>{% endif %}
+    {% else %}
+        <div class="contact-row">
+            {% if user_data.email %}<span class="contact-item">{{ user_data.email }}</span>{% endif %}
+            {% if user_data.email and user_data.phone %}<span class="contact-separator">•</span>{% endif %}
+            {% if user_data.phone %}<span class="contact-item">{{ user_data.phone }}</span>{% endif %}
+        </div>
+        {% if user_data.linkedin or user_data.github %}
+        <div class="contact-row">
+            {% if user_data.linkedin %}<span class="contact-item link">{{ user_data.linkedin }}</span>{% endif %}
+            {% if user_data.linkedin and user_data.github %}<span class="contact-separator">•</span>{% endif %}
+            {% if user_data.github %}<span class="contact-item link">{{ user_data.github }}</span>{% endif %}
+        </div>
+        {% endif %}
+    {% endif %}
+</div>

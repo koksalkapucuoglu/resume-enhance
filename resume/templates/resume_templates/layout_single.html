@@ -1,0 +1,26 @@
+{% comment %}
+Single column, header at the top. The layout most templates use and the one an
+ATS parses without guessing. Everything that varies between designs on this
+layout — type, colour, density, section-header treatment, whether dates sit in
+a left rail — comes from the tokens, not from this file.
+{% endcomment %}
+<!DOCTYPE html>
+<html lang="{{ language|default:"en" }}">
+<head>{% include "resume_templates/_head.html" %}</head>
+<body class="layout-single sec-{{ tokens.section_style }}{% if tokens.date_style == 'rail' %} date-rail{% endif %}">
+    <div class="pdf-container" data-paginate="flow">
+        <div class="pdf-content flow-page" data-column>
+            <header class="resume-header" data-header>
+                <h1 class="full-name">{{ user_data.full_name }}</h1>
+                {% include "resume_templates/_contacts.html" %}
+            </header>
+
+            {% if education_data %}{% include "resume_templates/_education.html" %}{% endif %}
+            {% if user_data.skills %}{% include "resume_templates/_skills.html" %}{% endif %}
+            {% if experience_data %}{% include "resume_templates/_experience.html" %}{% endif %}
+            {% if project_data %}{% include "resume_templates/_projects.html" %}{% endif %}
+        </div>
+    </div>
+    {% include "resume_templates/_preview_runtime.html" %}
+</body>
+</html>

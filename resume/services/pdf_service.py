@@ -4,6 +4,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.template.loader import render_to_string
+from resume import resume_templates
 from django.http import HttpRequest
 from weasyprint import HTML, CSS
 
@@ -168,7 +169,9 @@ class ResumePdfService:
             # preview (different font, body size and @page margin).
             pdf_bytes = self.pdf_converter.convert_template_to_pdf(
                 template_name=template_html_name,
-                context=resume_data,
+                context=resume_templates.design_context(
+                    template_selector, resume_data
+                ),
                 request=request,
             )
 

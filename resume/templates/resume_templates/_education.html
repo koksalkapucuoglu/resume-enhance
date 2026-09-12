@@ -1,0 +1,14 @@
+<section class="resume-section" data-section>
+    {% include "resume_templates/_section_head.html" with title=UI_EDUCATION|default:"EDUCATION" %}
+    {% for edu in education_data %}
+    <div class="education-item" data-item>
+        <div class="entry-line">
+            <div class="entry-left">
+                <span class="degree-field">{{ edu.degree }}{% if edu.field_of_study %} of {{ edu.field_of_study }}{% endif %},</span>
+                <span class="institution">{{ edu.school }}</span>
+            </div>
+            <span class="entry-date">{{ edu.start_year }} - {{ edu.end_year }}</span>
+        </div>
+    </div>
+    {% endfor %}
+</section>

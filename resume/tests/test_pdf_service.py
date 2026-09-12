@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
 
+from resume import resume_templates
 from resume.services.pdf_service import (
     HtmlToPdfConverter,
     PdfGenerationError,
@@ -145,10 +146,13 @@ class ResumePdfServiceTestCase(TestCase):
 
             self.assertEqual(result, expected_pdf)
             # No stylesheet argument: the template is the only source of style,
-            # so the PDF matches the live preview of the same template.
+            # so the PDF matches the live preview of the same template. The
+            # design the key selects travels with the context.
             mock_convert.assert_called_once_with(
                 template_name="test_template.html",
-                context=self.sample_resume_data,
+                context=resume_templates.design_context(
+                    "faangpath-simple", self.sample_resume_data
+                ),
                 request=request,
             )
 

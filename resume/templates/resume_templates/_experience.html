@@ -1,0 +1,22 @@
+<section class="resume-section" data-section>
+    {% include "resume_templates/_section_head.html" with title="EXPERIENCE" %}
+    {% for exp in experience_data %}
+    <div class="experience-item" data-item>
+        <div class="entry-line">
+            <div class="entry-left">
+                <span class="position-title">{{ exp.title }}</span>
+                <span class="company-name">{{ exp.company }}</span>
+            </div>
+            <span class="entry-date">
+                {{ exp.start_date|date:"M Y" }} -
+                {% if exp.current_role %}Present{% else %}{{ exp.end_date|date:"M Y" }}{% endif %}
+            </span>
+        </div>
+        {% if exp.description %}
+        <ul class="experience-description">
+            {% for desc in exp.description %}<li>{{ desc }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+    {% endfor %}
+</section>

@@ -1,0 +1,62 @@
+{% comment %}
+A card's thumbnail: a wireframe drawn from the design's own layout and accent
+colour, so it cannot drift from what the template actually renders the way a
+hand-drawn mock-up does.
+{% endcomment %}
+<div class="absolute inset-0 flex flex-col gap-[3px] p-[6px] bg-white">
+    {% if design.layout == "banner" %}
+        <div class="h-[14px] -mx-[6px] -mt-[6px] mb-[2px] flex items-center px-[6px]"
+             style="background: {{ design.resolved.accent }}">
+            <div class="h-[4px] w-1/2 rounded-sm bg-white/80"></div>
+        </div>
+        <div class="h-[4px] w-1/3 rounded-sm" style="background: {{ design.resolved.accent }}"></div>
+        <div class="h-[3px] w-full rounded-sm bg-slate-200"></div>
+        <div class="h-[3px] w-full rounded-sm bg-slate-200"></div>
+        <div class="h-[3px] w-2/3 rounded-sm bg-slate-200"></div>
+        <div class="h-[4px] w-1/3 rounded-sm mt-[2px]" style="background: {{ design.resolved.accent }}"></div>
+        <div class="h-[3px] w-full rounded-sm bg-slate-200"></div>
+        <div class="h-[3px] w-5/6 rounded-sm bg-slate-200"></div>
+    {% elif design.layout == "sidebar" %}
+        <div class="h-[10px] -mx-[6px] -mt-[6px] mb-[2px] flex items-center px-[6px]"
+             style="background: {{ design.resolved.header_bg }}">
+            <div class="h-[3px] w-2/5 rounded-sm bg-white/70"></div>
+        </div>
+        <div class="flex gap-[4px] flex-1">
+            <div class="w-[34%] -ml-[6px] -mb-[6px] p-[4px] flex flex-col gap-[3px]"
+                 style="background: {{ design.resolved.sidebar_bg }}">
+                <div class="h-[3px] w-full rounded-sm bg-slate-400/60"></div>
+                <div class="h-[2px] w-5/6 rounded-sm bg-slate-400/40"></div>
+                <div class="h-[2px] w-4/6 rounded-sm bg-slate-400/40"></div>
+                <div class="h-[3px] w-full rounded-sm bg-slate-400/60 mt-[3px]"></div>
+                <div class="h-[2px] w-5/6 rounded-sm bg-slate-400/40"></div>
+            </div>
+            <div class="flex-1 flex flex-col gap-[3px]">
+                <div class="h-[3px] w-2/3 rounded-sm" style="background: {{ design.resolved.accent }}"></div>
+                <div class="h-[2px] w-full rounded-sm bg-slate-200"></div>
+                <div class="h-[2px] w-full rounded-sm bg-slate-200"></div>
+                <div class="h-[2px] w-4/5 rounded-sm bg-slate-200"></div>
+                <div class="h-[3px] w-1/2 rounded-sm mt-[2px]" style="background: {{ design.resolved.accent }}"></div>
+                <div class="h-[2px] w-full rounded-sm bg-slate-200"></div>
+            </div>
+        </div>
+    {% else %}
+        <div class="h-[5px] rounded-sm {% if design.resolved.header_align == 'left' %}w-1/2{% else %}w-1/2 mx-auto{% endif %}"
+             style="background: {{ design.resolved.accent }}"></div>
+        <div class="h-[2px] rounded-sm bg-slate-300 {% if design.resolved.header_align == 'left' %}w-2/3{% else %}w-2/3 mx-auto{% endif %}"></div>
+        <div class="h-[1px] w-full bg-slate-300 my-[2px]"></div>
+        {% if design.resolved.date_style == "rail" %}
+            <div class="flex gap-[4px]"><div class="h-[3px] w-1/4 rounded-sm bg-slate-300"></div><div class="h-[3px] flex-1 rounded-sm bg-slate-200"></div></div>
+            <div class="flex gap-[4px]"><div class="h-[3px] w-1/4 rounded-sm bg-slate-300"></div><div class="h-[3px] flex-1 rounded-sm bg-slate-200"></div></div>
+            <div class="flex gap-[4px]"><div class="h-[3px] w-1/4 rounded-sm bg-slate-300"></div><div class="h-[3px] w-2/3 rounded-sm bg-slate-200"></div></div>
+        {% else %}
+            <div class="h-[3px] w-1/3 rounded-sm" style="background: {{ design.resolved.accent }}"></div>
+            <div class="h-[2px] w-full rounded-sm bg-slate-200"></div>
+            <div class="h-[2px] w-full rounded-sm bg-slate-200"></div>
+            <div class="h-[2px] w-3/4 rounded-sm bg-slate-200"></div>
+        {% endif %}
+        <div class="h-[1px] w-full bg-slate-300 my-[2px]"></div>
+        <div class="h-[3px] w-1/3 rounded-sm" style="background: {{ design.resolved.accent }}"></div>
+        <div class="h-[2px] w-full rounded-sm bg-slate-200"></div>
+        <div class="h-[2px] w-5/6 rounded-sm bg-slate-200"></div>
+    {% endif %}
+</div>

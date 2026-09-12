@@ -278,10 +278,11 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 # }
 
 
-TEMPLATE_SELECTOR_HTML_MAP = {
-    "faangpath-simple": "faangpath_simple_template_pdf.html",
-    "modern-sidebar": "modern_sidebar_template_pdf.html",
-}
+# Derived from the design catalogue so a template added there is immediately
+# renderable, selectable in the editor and listed over MCP.
+from resume.resume_templates import selector_html_map  # noqa: E402
+
+TEMPLATE_SELECTOR_HTML_MAP = selector_html_map()
 
 # PDF Generation Settings
 PDF_SETTINGS = {

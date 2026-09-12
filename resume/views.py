@@ -18,6 +18,7 @@ from django.views.decorators.http import require_http_methods
 from django.views.generic import ListView, TemplateView
 from PyPDF2 import PdfReader
 
+from resume import resume_templates
 from resume.forms import UserInfoForm, EducationForm, ExperienceForm, ProjectForm
 from resume.openai_engine import (
     enhance_resume_experience,
@@ -444,6 +445,20 @@ def clean_data_for_json(data):
     return data
 
 
+def template_picker_context(selected=None):
+    """What the template picker needs, from the one catalogue.
+
+    Passed to every render of the editor so a design added to the registry
+    appears in the picker without touching a template.
+    """
+    return {
+        "catalog": resume_templates.catalog(),
+        "families": resume_templates.FAMILIES,
+        "selected": selected or resume_templates.DEFAULT_TEMPLATE_KEY,
+        "default_template": resume_templates.DEFAULT_TEMPLATE_KEY,
+    }
+
+
 class ResumeFormView(TemplateView):
     """
     Handle the display and processing of a resume form.
@@ -451,6 +466,14 @@ class ResumeFormView(TemplateView):
     """
 
     template_name = "resume_form.html"
+
+    def render_to_response(self, context, **kwargs):
+        """Every render of the editor carries the template catalogue."""
+        context = {
+            **template_picker_context(context.get("saved_template")),
+            **context,
+        }
+        return super().render_to_response(context, **kwargs)
 
     def get_object(self):
         # SECURITY: Filter by user to prevent IDOR — users must only access their own resumes
@@ -748,7 +771,12 @@ class ResumeFormView(TemplateView):
 
         # Check if this is a preview request for our new template
         if self.request.POST.get("action") == "preview_faangpath":
-            return render(self.request, "faangpath_simple_template_pdf.html", context)
+            design = resume_templates.get(template_selector)
+            return render(
+                self.request,
+                design.template_file,
+                resume_templates.design_context(design.key, context),
+            )
 
         try:
             # Increment download counter for PDF exports (after quota check passed)
@@ -957,12 +985,12 @@ def preview_resume_form(request):
 
             # Use the same template as PDF generation for consistency
             template_selector = request.POST.get("template", "faangpath-simple")
-            template_name = settings.TEMPLATE_SELECTOR_HTML_MAP.get(
-                template_selector, "faangpath_simple_template_pdf.html"
-            )
+            design = resume_templates.get(template_selector)
 
             rendered_html = render(
-                request, template_name=template_name, context=context
+                request,
+                template_name=design.template_file,
+                context=resume_templates.design_context(design.key, context),
             ).content.decode("utf-8")
             return HttpResponse(rendered_html)
 
@@ -1332,7 +1360,7 @@ def download_resume_pdf(request, pk):
 
 def test_faangpath_template(request):
     """
-    Test view to render the faangpath_simple_template_pdf.html template
+    Test view to render the default resume design
     with sample data for development and testing purposes.
     """
     if request.method == "POST":
@@ -1384,12 +1412,18 @@ def test_faangpath_template(request):
                 "generation_date": datetime.now().strftime("%Y-%m-%d"),
             }
 
-            return render(request, "faangpath_simple_template_pdf.html", context)
+            design = resume_templates.get(resume_templates.DEFAULT_TEMPLATE_KEY)
+            return render(
+                request,
+                design.template_file,
+                resume_templates.design_context(design.key, context),
+            )
         else:
             messages.error(request, "Please correct the errors in the form.")
 
     # If GET request or form validation failed, show the form
     context = get_init_values_for_resume_form()
+    context.update(template_picker_context())
     return render(request, "resume_form.html", context)
 
 
@@ -1412,10 +1446,12 @@ def preview_saved_resume(request, pk):
         return HttpResponse("<p>Resume not found.</p>", status=404)
 
     context = resume_content.build_context(resume.content)
-    template_name = settings.TEMPLATE_SELECTOR_HTML_MAP.get(
-        resume.template_selector, "faangpath_simple_template_pdf.html"
+    design = resume_templates.get(resume.template_selector)
+    return render(
+        request,
+        design.template_file,
+        resume_templates.design_context(design.key, context),
     )
-    return render(request, template_name, context)
 
 
 # ---------------------------------------------------------------------------
@@ -1628,10 +1664,12 @@ def application_snapshot(request, pk):
         return HttpResponse("<p>No stored resume for this application.</p>", status=404)
 
     context = resume_content.build_context(posting.snapshot_content)
-    template_name = settings.TEMPLATE_SELECTOR_HTML_MAP.get(
-        posting.snapshot_template, "faangpath_simple_template_pdf.html"
+    design = resume_templates.get(posting.snapshot_template)
+    return render(
+        request,
+        design.template_file,
+        resume_templates.design_context(design.key, context),
     )
-    return render(request, template_name, context)
 
 
 @login_required

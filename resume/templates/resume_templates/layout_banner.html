@@ -1,0 +1,25 @@
+{% comment %}
+Single column under a full-bleed coloured banner. Structurally the same as
+layout_single — the banner is decoration, the text order a parser sees is
+unchanged — so the page margin is zero and the padding lives on the blocks.
+{% endcomment %}
+<!DOCTYPE html>
+<html lang="{{ language|default:"en" }}">
+<head>{% include "resume_templates/_head.html" %}</head>
+<body class="layout-banner sec-{{ tokens.section_style }}{% if tokens.date_style == 'rail' %} date-rail{% endif %}">
+    <div class="pdf-container" data-paginate="flow">
+        <div class="pdf-content flow-page" data-column>
+            <header class="banner-header" data-header>
+                <h1 class="full-name">{{ user_data.full_name }}</h1>
+                {% include "resume_templates/_contacts.html" %}
+            </header>
+
+            {% if education_data %}{% include "resume_templates/_education.html" %}{% endif %}
+            {% if user_data.skills %}{% include "resume_templates/_skills.html" %}{% endif %}
+            {% if experience_data %}{% include "resume_templates/_experience.html" %}{% endif %}
+            {% if project_data %}{% include "resume_templates/_projects.html" %}{% endif %}
+        </div>
+    </div>
+    {% include "resume_templates/_preview_runtime.html" %}
+</body>
+</html>

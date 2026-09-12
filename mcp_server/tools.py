@@ -18,15 +18,11 @@ Two properties hold across the whole surface:
 from django.conf import settings
 from django.urls import reverse
 
+from resume import resume_templates
 from resume.models import Resume, ResumeRevision
 from resume.services import download_links, resume_content, revision_service
 
 from .registry import ToolError, tool
-
-TEMPLATE_DESCRIPTIONS = {
-    "faangpath-simple": "Single column, classic. Safe for ATS screening.",
-    "modern-sidebar": "Two columns: contact and skills in a left sidebar.",
-}
 
 # The shape a resume is stored in. Declared strictly so the calling model gets
 # told about a misspelled key by its own schema validation rather than by us
@@ -214,8 +210,14 @@ def get_resume(user, resume_id, request=None):
 )
 def list_templates(user, request=None):
     templates = [
-        {"key": key, "description": TEMPLATE_DESCRIPTIONS.get(key, "")}
-        for key in sorted(settings.TEMPLATE_SELECTOR_HTML_MAP)
+        {
+            "key": design.key,
+            "name": design.name,
+            "description": design.description,
+            "layout": design.layout,
+            "ats_safe": design.ats_safe,
+        }
+        for design in resume_templates.catalog()
     ]
     names = ", ".join(t["key"] for t in templates)
     return f"{len(templates)} templates: {names}.", {"templates": templates}

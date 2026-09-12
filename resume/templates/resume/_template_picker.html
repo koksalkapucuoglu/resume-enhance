@@ -1,0 +1,60 @@
+{% comment %}
+The template picker. Rendered more than once per page (sidebar on desktop, the
+preview modal on mobile), so every id is prefixed with `group` and the radios
+are grouped per instance; `initTemplatePicker()` keeps the instances and the
+form's hidden `template` field in step.
+
+Native radios do the work: arrow keys move between cards, Space selects, and
+the selected state is a CSS sibling rule (.template-option input:checked) rather
+than classes pushed around by JS. The radios deliberately sit outside <form> and are not submitted — the
+hidden input is what posts.
+{% endcomment %}
+<fieldset class="template-picker" data-picker="{{ group }}">
+    <legend class="sr-only">Choose a resume template</legend>
+
+    <div class="flex flex-wrap gap-1.5 mb-3">
+        <button type="button"
+                class="template-filter px-2.5 py-1 text-xs font-medium rounded-full border border-primary bg-primary text-white transition-colors"
+                data-family="all" aria-pressed="true">All</button>
+        {% for value, label in families %}
+        <button type="button"
+                class="template-filter px-2.5 py-1 text-xs font-medium rounded-full border border-slate-200 text-slate-600 hover:border-slate-300 transition-colors"
+                data-family="{{ value }}" aria-pressed="false">{{ label }}</button>
+        {% endfor %}
+    </div>
+
+    <div class="grid grid-cols-2 gap-2 max-h-[22rem] overflow-y-auto pr-1">
+        {% for design in catalog %}
+        <div class="template-option" data-family="{{ design.family }}">
+            <input type="radio"
+                   class="sr-only"
+                   name="template_choice_{{ group }}"
+                   id="tpl-{{ group }}-{{ design.key }}"
+                   value="{{ design.key }}"
+                   data-template="{{ design.key }}"
+                   {% if design.key == selected %}checked{% endif %}>
+            <label for="tpl-{{ group }}-{{ design.key }}"
+                   class="template-card block cursor-pointer rounded-lg border-2 border-slate-200 bg-white
+                          overflow-hidden transition-all hover:shadow-md hover:border-slate-300">
+                <div class="aspect-[3/4] bg-slate-50 relative overflow-hidden">
+                    {% include "resume/_template_thumb.html" %}
+                    <span class="template-check absolute top-1 right-1 w-4 h-4 bg-primary rounded-full items-center justify-center">
+                        <span class="material-symbols-outlined text-white" style="font-size:12px;">check</span>
+                    </span>
+                </div>
+                <div class="p-2">
+                    <p class="text-xs font-semibold text-slate-900 truncate" title="{{ design.name }}">{{ design.name }}</p>
+                    <span class="text-[10px] font-medium {% if design.ats_safe %}text-emerald-600{% else %}text-slate-500{% endif %}">
+                        {% if design.ats_safe %}ATS-safe{% else %}Two column{% endif %}
+                    </span>
+                </div>
+            </label>
+        </div>
+        {% endfor %}
+    </div>
+
+    <p class="text-[11px] text-slate-500 mt-2 leading-snug">
+        ATS-safe designs are single column with no graphics — the layout an
+        applicant tracking system parses most reliably.
+    </p>
+</fieldset>

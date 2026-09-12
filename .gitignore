@@ -163,3 +163,5 @@ cython_debug/
 .idea/
 data/
 *.DS_Store
+# collectstatic output (built in the image, not source)
+/staticfiles/

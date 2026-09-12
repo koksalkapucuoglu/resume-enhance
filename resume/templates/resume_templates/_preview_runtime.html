@@ -1,0 +1,231 @@
+{% comment %}
+Preview-only behaviour, shared by every layout.
+
+Two jobs, neither of which touches the PDF: scale the A4 page down to the width
+of the editor's iframe, and cut the content into page-sized sheets so the
+preview shows where the printed page will break.
+
+Layouts describe themselves with data- attributes rather than class names, so
+this runs unchanged for a design it has never seen:
+
+  data-paginate="flow"|"sidebar"   on .pdf-container — how pages are built
+  data-header                      kept on page 1 only
+  data-column                      the column that paginates
+  data-sidebar                     repeated as a plain colour band on page 2+
+  data-section / data-section-head / data-item    what may be split where
+{% endcomment %}
+<script>
+    (function () {
+        const A4_HEIGHT = 11.69 * 96;   // px at 96dpi
+        const A4_WIDTH = 8.27 * 96;
+
+        function inIframe() {
+            try { return window.self !== window.top; } catch (e) { return true; }
+        }
+
+        /** Fit the fixed-width A4 page into whatever width the iframe has. */
+        function scaleToFit() {
+            if (!inIframe()) return;
+            const scale = (window.innerWidth - 20) / A4_WIDTH;
+            if (scale < 1) {
+                document.body.style.zoom = scale;
+                document.body.style.transform = `scale(${scale})`;
+                document.body.style.transformOrigin = 'top center';
+            } else {
+                document.body.style.zoom = 1;
+                document.body.style.transform = 'none';
+            }
+        }
+
+        function outerHeight(el) {
+            const style = window.getComputedStyle(el);
+            return el.getBoundingClientRect().height
+                + parseFloat(style.marginTop)
+                + parseFloat(style.marginBottom);
+        }
+
+        function verticalPadding(el) {
+            const style = window.getComputedStyle(el);
+            return parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+        }
+
+        /**
+         * Flatten a column into blocks that may each start a new page.
+         *
+         * A section's heading is glued to its first item, so a heading never
+         * ends up alone at the foot of a page. Everything else is atomic.
+         */
+        function flatten(column) {
+            const blocks = [];
+            Array.from(column.children).forEach(child => {
+                // The header is placed on page 1 by the caller, not flowed.
+                if (child.hasAttribute('data-header')) return;
+                if (!child.hasAttribute('data-section')) {
+                    blocks.push(child.cloneNode(true));
+                    return;
+                }
+                const items = Array.from(child.children)
+                    .filter(el => el.hasAttribute('data-item'));
+                if (items.length === 0) {
+                    blocks.push(child.cloneNode(true));
+                    return;
+                }
+                const group = document.createElement(child.tagName);
+                group.className = child.className;
+                group.setAttribute('data-section', '');
+                group.style.marginBottom = '0';
+                Array.from(child.children)
+                    .filter(el => !el.hasAttribute('data-item'))
+                    .forEach(el => group.appendChild(el.cloneNode(true)));
+                group.appendChild(items[0].cloneNode(true));
+                blocks.push(group);
+                items.slice(1).forEach(item => blocks.push(item.cloneNode(true)));
+            });
+            return blocks;
+        }
+
+        /**
+         * Measure blocks inside a stand-in built exactly like the real column,
+         * so a block's wrapped line count matches what the sheet will show.
+         */
+        function measure(blocks, holder) {
+            const area = document.createElement('div');
+            area.style.cssText =
+                'position:absolute;visibility:hidden;left:-9999px;top:0;width:8.27in;';
+            area.appendChild(holder);
+            document.body.appendChild(area);
+            const heights = blocks.map(block => {
+                holder.appendChild(block);
+                const h = outerHeight(block);
+                holder.removeChild(block);
+                return h;
+            });
+            document.body.removeChild(area);
+            return heights;
+        }
+
+        /** Greedily fill pages. Page 1 is usually shorter: it carries a header. */
+        function distribute(blocks, heights, firstUsable, laterUsable) {
+            const pages = [[]];
+            let usable = firstUsable;
+            let used = 0;
+            blocks.forEach((block, i) => {
+                if (used + heights[i] > usable && used > 0) {
+                    pages.push([]);
+                    usable = laterUsable;
+                    used = 0;
+                }
+                pages[pages.length - 1].push(block);
+                used += heights[i];
+            });
+            return pages;
+        }
+
+        function paginateFlow(container, header, column) {
+            // The page margin is padding on screen, so measuring and laying out
+            // both happen inside a .flow-page of the same width as the sheet's.
+            const makePage = () => {
+                const page = document.createElement('div');
+                page.className = 'flow-page';
+                return page;
+            };
+
+            const blocks = flatten(column);
+            if (blocks.length === 0) return;
+
+            const probe = makePage();
+            const heights = measure(blocks, probe);
+            const chrome = verticalPadding(probe);
+
+            let headerHeight = 0;
+            if (header) {
+                headerHeight = measure([header.cloneNode(true)], makePage())[0];
+            }
+
+            const pages = distribute(
+                blocks, heights,
+                A4_HEIGHT - chrome - headerHeight,
+                A4_HEIGHT - chrome
+            );
+
+            container.innerHTML = '';
+            pages.forEach((pageBlocks, index) => {
+                const sheet = document.createElement('div');
+                sheet.className = 'page-sheet';
+                const page = makePage();
+                if (index === 0 && header) page.appendChild(header.cloneNode(true));
+                pageBlocks.forEach(block => page.appendChild(block));
+                sheet.appendChild(page);
+                container.appendChild(sheet);
+            });
+        }
+
+        function paginateSidebar(container, header, column, sidebar) {
+            const blocks = flatten(column);
+            if (blocks.length === 0) return;
+
+            const holder = document.createElement('div');
+            holder.className = column.className;
+            holder.style.width = window.getComputedStyle(column).width;
+            holder.style.boxSizing = 'border-box';
+
+            const heights = measure(blocks, holder);
+            const headerHeight = header
+                ? measure([header.cloneNode(true)], document.createElement('div'))[0]
+                : 0;
+
+            const pages = distribute(
+                blocks, heights, A4_HEIGHT - headerHeight, A4_HEIGHT
+            );
+
+            container.innerHTML = '';
+            pages.forEach((pageBlocks, index) => {
+                const sheet = document.createElement('div');
+                sheet.className = 'page-sheet';
+                if (index === 0 && header) sheet.appendChild(header.cloneNode(true));
+
+                const body = document.createElement('div');
+                body.className = 'resume-body';
+                if (sidebar) {
+                    if (index === 0) {
+                        body.appendChild(sidebar.cloneNode(true));
+                    } else {
+                        const band = document.createElement('div');
+                        band.className = 'sidebar-bg';
+                        body.appendChild(band);
+                    }
+                }
+                const main = document.createElement('div');
+                main.className = column.className;
+                pageBlocks.forEach(block => main.appendChild(block));
+                body.appendChild(main);
+                sheet.appendChild(body);
+                container.appendChild(sheet);
+            });
+        }
+
+        function paginate() {
+            if (window.matchMedia('print').matches) return;
+            const container = document.querySelector('[data-paginate]');
+            if (!container) return;
+            const column = container.querySelector('[data-column]');
+            if (!column) return;
+            const header = container.querySelector('[data-header]');
+
+            if (container.getAttribute('data-paginate') === 'sidebar') {
+                paginateSidebar(
+                    container, header, column,
+                    container.querySelector('[data-sidebar]')
+                );
+            } else {
+                paginateFlow(container, header, column);
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', function () {
+            paginate();
+            scaleToFit();
+        });
+        window.addEventListener('resize', scaleToFit);
+    })();
+</script>

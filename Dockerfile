@@ -27,7 +27,10 @@ WORKDIR /app
 # Install runtime dependencies
 # - WeasyPrint needs: libpango, libpangocairo, libgdk-pixbuf, shared-mime-info, libcairo2
 # - Postgres: postgresql-client (for management/debugging)
-# - Fonts: fonts-liberation, fontconfig (crucial for PDF rendering)
+# - Fonts: the families the resume designs name (resume/resume_templates.py).
+#   A font that is missing here does not fail: the design silently renders in a
+#   fallback and stops matching its preview. All are metric-compatible clones of
+#   the usual resume faces, so no font is ever fetched at render time.
 # - No LaTeX packages installed as per MVP requirements
 RUN apt-get update && apt-get install -y --no-install-recommends \
     postgresql-client \
@@ -36,6 +39,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgdk-pixbuf-2.0-0 \
     shared-mime-info \
     fonts-liberation \
+    fonts-croscore \
+    fonts-crosextra-carlito \
+    fonts-crosextra-caladea \
+    fonts-dejavu-core \
     fontconfig \
     libcairo2 \
     && rm -rf /var/lib/apt/lists/*

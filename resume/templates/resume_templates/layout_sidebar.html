@@ -1,0 +1,54 @@
+{% comment %}
+Two columns: contact, skills and education in a sidebar, the career history in
+the main column. Only the main column paginates; page two onward repeats the
+sidebar as a plain colour band rather than repeating its content.
+{% endcomment %}
+<!DOCTYPE html>
+<html lang="{{ language|default:"en" }}">
+<head>{% include "resume_templates/_head.html" %}</head>
+<body class="layout-sidebar sec-{{ tokens.section_style }}">
+    <div class="pdf-container" data-paginate="sidebar">
+        <header class="resume-header sidebar-header" data-header>
+            <h1 class="full-name">{{ user_data.full_name }}</h1>
+        </header>
+
+        <div class="resume-body">
+            <aside class="sidebar" data-sidebar>
+                <section class="resume-section">
+                    {% include "resume_templates/_section_head.html" with title="CONTACT" %}
+                    {% include "resume_templates/_contacts.html" with stacked=True %}
+                </section>
+
+                {% if user_data.skills %}
+                <section class="resume-section">
+                    {% include "resume_templates/_section_head.html" with title="SKILLS" %}
+                    <ul class="sidebar-list">
+                        {% for skill in user_data.skills %}{% if skill %}<li>{{ skill }}</li>{% endif %}{% endfor %}
+                    </ul>
+                </section>
+                {% endif %}
+
+                {% if education_data %}
+                <section class="resume-section">
+                    {% include "resume_templates/_section_head.html" with title="EDUCATION" %}
+                    {% for edu in education_data %}
+                    <div class="education-item">
+                        <div class="degree-field">{{ edu.degree }}</div>
+                        {% if edu.field_of_study %}<div>{{ edu.field_of_study }}</div>{% endif %}
+                        <div class="institution">{{ edu.school }}</div>
+                        <div class="entry-date">{{ edu.start_year }} – {{ edu.end_year }}</div>
+                    </div>
+                    {% endfor %}
+                </section>
+                {% endif %}
+            </aside>
+
+            <main class="main" data-column>
+                {% if experience_data %}{% include "resume_templates/_experience.html" %}{% endif %}
+                {% if project_data %}{% include "resume_templates/_projects.html" %}{% endif %}
+            </main>
+        </div>
+    </div>
+    {% include "resume_templates/_preview_runtime.html" %}
+</body>
+</html>
