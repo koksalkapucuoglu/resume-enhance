@@ -65,7 +65,22 @@ INSTALLED_APPS = [
     "crispy_forms",
     "crispy_bootstrap4",
     "rest_framework",
+    "rest_framework.authtoken",
 ]
+
+# The API is reached two ways: the site's own session, and a token the user
+# issues for an MCP client. Session first, so browser calls keep working.
+REST_FRAMEWORK = {
+    # Token first so an unauthenticated API call answers 401 with a challenge
+    # rather than 403; session auth still applies whenever a cookie is present.
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.TokenAuthentication",
+        "rest_framework.authentication.SessionAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+}
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",

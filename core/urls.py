@@ -16,7 +16,7 @@ Including another URLconf
 
 from django.contrib import admin
 from django.urls import path, include
-from core.views import SignupView, ProfileView
+from core.views import SignupView, ProfileView, issue_api_token, revoke_api_token
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -25,4 +25,6 @@ urlpatterns = [
     path("accounts/", include("django.contrib.auth.urls")),  # Login, Logout, etc.
     path("accounts/signup/", SignupView.as_view(), name="signup"),  # Signup page
     path("accounts/profile/", ProfileView.as_view(), name="profile"),  # Profile page
+    path("accounts/api-token/", issue_api_token, name="issue_api_token"),
+    path("accounts/api-token/revoke/", revoke_api_token, name="revoke_api_token"),
 ]

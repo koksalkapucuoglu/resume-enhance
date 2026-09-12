@@ -115,8 +115,15 @@ model bozuk yapı üretemesin; sunucu ayrıca `resume_content.normalize()` uygul
 
 ## Adımlar
 
-1. **API temeli** — `authtoken` kur, serializer'ları güncelle (`template_selector`,
-   `language`, `derived_from` eksik), profil sayfasına token UI + kural metni
+1. ✅ **API temeli** — `authtoken` kuruldu, DRF token+session kimliği,
+   serializer'lar modele göre yenilendi (`template_selector`, `language`,
+   `derived_from`, `display_name`, `preview_url`), profil sayfasında token
+   oluştur/yenile/iptal + kural metni. Gelen `content` artık
+   `resume_content.normalize()`'dan geçiyor, şablon anahtarı doğrulanıyor.
+
+   Yol boyunca çıkan iki hata: serializer ve viewset ikisi birden `user` set
+   ediyordu (create patlıyordu); kimliksiz API isteği 403 dönüyordu, token
+   authenticator'ı öne alınca 401 oldu.
 2. **İmzalı indirme** — `render_pdf` için süreli URL üretimi ve doğrulaması
 3. **MCP endpoint** — `/mcp`, JSON-RPC: `initialize`, `tools/list`, `tools/call`
 4. **8 tool** — `mcp_server/tools.py`, DRF ve `services/` üstünde ince katman

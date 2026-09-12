@@ -12,6 +12,7 @@ from django.contrib.auth.models import User
 from django.shortcuts import render, redirect
 from django.utils.decorators import method_decorator
 from django.views import View
+from django.views.decorators.http import require_http_methods
 
 
 class SignupForm(UserCreationForm):
@@ -58,6 +59,39 @@ class SignupView(View):
         return render(request, "registration/signup.html", {"form": form})
 
 
+@login_required
+@require_http_methods(["POST"])
+def issue_api_token(request):
+    """
+    Create or replace the caller's API token.
+
+    Shown once and then only as a prefix: the stored value is the credential
+    itself, so re-displaying it would keep a bearer secret on screen long after
+    the moment it was needed. Replacing revokes the old one, which is how a
+    leaked token is dealt with.
+    """
+    from rest_framework.authtoken.models import Token
+
+    Token.objects.filter(user=request.user).delete()
+    token = Token.objects.create(user=request.user)
+    messages.success(request, "New token created. Copy it now — it is shown once.")
+    request.session["fresh_api_token"] = token.key
+    return redirect("profile")
+
+
+@login_required
+@require_http_methods(["POST"])
+def revoke_api_token(request):
+    """Revoke the token without issuing another."""
+    from rest_framework.authtoken.models import Token
+
+    deleted, _ = Token.objects.filter(user=request.user).delete()
+    if deleted:
+        messages.success(request, "Token revoked. Any client using it is now cut off.")
+    request.session.pop("fresh_api_token", None)
+    return redirect("profile")
+
+
 @method_decorator(login_required, name="dispatch")
 class ProfileView(View):
     """User profile view with password change."""
@@ -87,6 +121,21 @@ class ProfileView(View):
             else 0,
         }
 
+    def _token_context(self, request):
+        """
+        The token, once.
+
+        A freshly issued key is handed over through the session and removed on
+        read, so a refresh does not put it back on screen.
+        """
+        from rest_framework.authtoken.models import Token
+
+        token = Token.objects.filter(user=request.user).first()
+        return {
+            "api_token": token,
+            "fresh_api_token": request.session.pop("fresh_api_token", None),
+        }
+
     def get(self, request):
         """Display profile page."""
         password_form = PasswordChangeForm(request.user)
@@ -97,6 +146,7 @@ class ProfileView(View):
                 "password_form": password_form,
                 "settings": settings,
                 "quota_percentages": self._get_quota_percentages(request),
+                **self._token_context(request),
             },
         )
 
@@ -118,5 +168,6 @@ class ProfileView(View):
                 "password_form": password_form,
                 "settings": settings,
                 "quota_percentages": self._get_quota_percentages(request),
+                **self._token_context(request),
             },
         )

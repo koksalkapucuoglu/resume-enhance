@@ -273,6 +273,72 @@
                 </div>
             </div>
 
+            <!-- API Token Card -->
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-6">
+                <div class="px-6 py-4 border-b border-slate-100 bg-slate-50">
+                    <h2 class="font-semibold text-slate-900 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary">key</span>
+                        {{ UI.token_title }}
+                    </h2>
+                </div>
+                <div class="p-6">
+                    <p class="text-sm text-slate-600">{{ UI.token_body }}</p>
+
+                    {% if fresh_api_token %}
+                        <div class="mt-4 p-4 rounded-xl bg-amber-50 border border-amber-200">
+                            <p class="text-xs font-semibold text-amber-900 mb-2">{{ UI.token_copy_now }}</p>
+                            <div class="flex items-center gap-2">
+                                <code id="token-value" class="flex-1 text-xs bg-white border border-amber-200 rounded-lg px-3 py-2 font-mono break-all">{{ fresh_api_token }}</code>
+                                <button type="button" id="token-copy-btn" onclick="copyToken()"
+                                        class="px-3 py-2 rounded-lg bg-amber-600 text-white text-xs font-bold hover:bg-amber-700 transition-colors whitespace-nowrap">
+                                    {{ UI.token_copy }}
+                                </button>
+                            </div>
+                        </div>
+                    {% elif api_token %}
+                        <div class="mt-4 flex items-center gap-2 text-sm text-slate-600">
+                            <span class="material-symbols-outlined !text-[18px] text-green-600">check_circle</span>
+                            <span>{{ UI.token_active }}</span>
+                            <code class="text-xs bg-slate-100 rounded px-2 py-0.5 font-mono">{{ api_token.key|slice:":8" }}…</code>
+                            <span class="text-xs text-slate-400">· {{ UI.token_created_at }} {{ api_token.created|date:"d M Y" }}</span>
+                        </div>
+                    {% else %}
+                        <p class="mt-4 text-sm text-slate-400">{{ UI.token_none }}</p>
+                    {% endif %}
+
+                    <div class="mt-5 flex flex-wrap items-center gap-2">
+                        <form method="post" action="{% url 'issue_api_token' %}">
+                            {% csrf_token %}
+                            <button type="submit"
+                                    class="px-5 py-2.5 rounded-lg bg-primary text-white text-sm font-bold hover:bg-primary-hover transition-colors">
+                                {% if api_token %}{{ UI.token_replace }}{% else %}{{ UI.token_create }}{% endif %}
+                            </button>
+                        </form>
+                        {% if api_token %}
+                        <form method="post" action="{% url 'revoke_api_token' %}">
+                            {% csrf_token %}
+                            <button type="submit"
+                                    class="px-5 py-2.5 rounded-lg bg-slate-100 text-slate-600 text-sm font-semibold hover:bg-red-50 hover:text-red-600 transition-colors">
+                                {{ UI.token_revoke }}
+                            </button>
+                        </form>
+                        {% endif %}
+                    </div>
+
+                    <div class="mt-6 pt-5 border-t border-slate-100">
+                        <p class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">{{ UI.token_rules_title }}</p>
+                        <ul class="space-y-2 text-sm text-slate-600">
+                            <li class="flex gap-2"><span class="material-symbols-outlined !text-[18px] text-green-600 flex-shrink-0">check</span>{{ UI.token_rule_read }}</li>
+                            <li class="flex gap-2"><span class="material-symbols-outlined !text-[18px] text-green-600 flex-shrink-0">check</span>{{ UI.token_rule_write }}</li>
+                            <li class="flex gap-2"><span class="material-symbols-outlined !text-[18px] text-green-600 flex-shrink-0">check</span>{{ UI.token_rule_render }}</li>
+                            <li class="flex gap-2"><span class="material-symbols-outlined !text-[18px] text-red-500 flex-shrink-0">block</span>{{ UI.token_rule_nodelete }}</li>
+                            <li class="flex gap-2"><span class="material-symbols-outlined !text-[18px] text-slate-400 flex-shrink-0">info</span>{{ UI.token_rule_limits }}</li>
+                            <li class="flex gap-2"><span class="material-symbols-outlined !text-[18px] text-amber-500 flex-shrink-0">warning</span>{{ UI.token_rule_secret }}</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
             <!-- Dashboard Mode Card -->
             <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-6">
                 <div class="px-6 py-4 border-b border-slate-100 bg-slate-50">
@@ -471,6 +537,24 @@ async function toggleConfirmDestructive() {
         alert('Could not save. Please try again.');
     }
     button.disabled = false;
+}
+
+async function copyToken() {
+    const value = document.getElementById('token-value').textContent.trim();
+    const button = document.getElementById('token-copy-btn');
+    try {
+        await navigator.clipboard.writeText(value);
+    } catch (e) {
+        // Clipboard access can be refused; selecting it is still useful.
+        const range = document.createRange();
+        range.selectNodeContents(document.getElementById('token-value'));
+        window.getSelection().removeAllRanges();
+        window.getSelection().addRange(range);
+        return;
+    }
+    const original = button.textContent;
+    button.textContent = `{{ UI.token_copied|escapejs }}`;
+    setTimeout(() => { button.textContent = original; }, 2000);
 }
 
 async function setUiMode(mode) {
