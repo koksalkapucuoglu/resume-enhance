@@ -265,11 +265,16 @@ class ResumeRevision(models.Model):
     SOURCE_AGENT = "agent"
     SOURCE_IMPORT = "import"
     SOURCE_REVERT = "revert"
+    # A change that arrived over MCP is worth telling apart from one our own
+    # agent made: the history panel is where a user notices that something they
+    # do not remember doing came in from an outside client.
+    SOURCE_MCP = "mcp"
     SOURCE_CHOICES = [
         (SOURCE_MANUAL, "Manual edit"),
         (SOURCE_AGENT, "Agent"),
         (SOURCE_IMPORT, "Import"),
         (SOURCE_REVERT, "Revert"),
+        (SOURCE_MCP, "MCP client"),
     ]
 
     resume = models.ForeignKey(

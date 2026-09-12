@@ -10,6 +10,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm, PasswordChangeForm
 from django.contrib.auth.models import User
 from django.shortcuts import render, redirect
+from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.http import require_http_methods
@@ -134,6 +135,9 @@ class ProfileView(View):
         return {
             "api_token": token,
             "fresh_api_token": request.session.pop("fresh_api_token", None),
+            # The address to paste into the client. Built from this request so
+            # it is right in development and behind the proxy alike.
+            "mcp_endpoint": request.build_absolute_uri(reverse("mcp_server:endpoint")),
         }
 
     def get(self, request):

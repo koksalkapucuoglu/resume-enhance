@@ -156,8 +156,28 @@ model bozuk yapı üretemesin; sunucu ayrıca `resume_content.normalize()` uygul
      isteği cevaplayabiliyor.
    - **Sadece bearer token, çerez yok.** Uç CSRF'den muaf; oturum çerezini de
      kabul etseydik başka bir origin'deki sayfa tool çağırabilirdi.
-4. **8 tool** — `mcp_server/tools.py`, DRF ve `services/` üstünde ince katman
-5. **Testler** — kimlik, kota, şema doğrulama, imzalı URL süresi, yıkıcı tool yokluğu
+4. ✅ **8 tool** — `mcp_server/tools.py`. Planlanan yüzeyin tamamı: `list_resumes`,
+   `get_resume`, `create_resume`, `update_resume`, `list_templates`,
+   `set_template`, `render_pdf`, `check_quota`.
+
+   - Yazan her tool `preview_url` döndürüyor — "Claude'da yaptım, ResuStack'te
+     gördüm" akışı bu tek alan.
+   - `update_resume` **birleştirmez, değiştirir**; bu tool açıklamasında yazıyor
+     ve yazmadan önce revizyon alınıyor (`source="mcp"` — geçmiş panelinde
+     dışarıdan gelen değişiklik kendi adıyla görünsün diye yeni bir kaynak
+     türü, migration 0020).
+   - `render_pdf` kotayı **linki üretirken** kontrol ediyor (kullanıcı sınırı
+     hemen duysun), `signed_download` **teslimde tekrar** kontrol edip sayıyor.
+   - Tüm `get`/`update` çağrıları `user=` ile filtreleniyor: token başkasının
+     belgesini okuma izni değil. Hata metni id'nin başka yerde var olduğunu da
+     doğrulamıyor.
+   - Silme tool'u yok, `destructiveHint` hepsinde `false` — ve bunu bir test
+     tutuyor, yoksa ileride sessizce eklenebilir.
+   - Profil sayfasına sunucu adresi (`/mcp`) kopyalanabilir şekilde eklendi.
+5. ✅ **Testler** — 56 test (`mcp_server/tests/`): iki dönemin protokolü, header
+   doğrulama, kimlik ve çerez reddi, sahiplik, kota sınırları, revizyon
+   içeriği, imzalı linkin tek kullanımlığı, tool yüzeyinin sabitliği.
+   Tüm proje: 428 test, hepsi geçiyor.
 
 1 ve 2 bağımsız olarak da değerli (mobil/entegrasyon). 3-4 onların üstüne ince.
 
