@@ -87,7 +87,23 @@ def landing_page(request):
     """Landing page for anonymous and logged-in users."""
     if request.user.is_authenticated:
         return redirect("resume:dashboard")
-    return render(request, "index.html")
+
+    # Importing the tools module registers them; the landing page lists the
+    # real names rather than a copy that would drift from the server.
+    from mcp_server import registry as mcp_registry
+    from mcp_server import tools as _mcp_tools  # noqa: F401
+
+    return render(
+        request,
+        "index.html",
+        {
+            # The showcase is drawn from the catalogue, so a new design appears
+            # on the landing page the moment it exists.
+            "catalog": resume_templates.catalog(),
+            "mcp_endpoint": request.build_absolute_uri(reverse("mcp_server:endpoint")),
+            "mcp_tools": [d["name"] for d in mcp_registry.descriptors()],
+        },
+    )
 
 
 @login_required

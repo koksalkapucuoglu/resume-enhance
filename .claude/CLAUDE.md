@@ -213,6 +213,12 @@ Rules when touching templates:
 - Panes hidden with the `hidden` attribute need `[hidden] { display: none !important; }` on the page: Tailwind's `flex` on the same element otherwise wins.
 - **Two-column designs print differently from how they preview.** On screen the body is a flex row that the preview runtime cuts into sheets. WeasyPrint cannot split a flex container across pages (a tall body was pushed whole to page two, leaving page one blank), so under `@media print` the main column is a plain block that flows, the side column is `position: absolute` on page one, and the coloured band is a `linear-gradient` on `@page` (with `.pdf-container` transparent so it shows). A right rail must come *before* the main column in the markup — WeasyPrint places an absolute box on the page where it would otherwise have fallen — and `row-reverse` puts it back on the right on screen. Verify print changes with a real multi-page render, not only the browser preview.
 - Two layouts marked `side_column` are exempt from main-flow ordering rules (e.g. focus areas above Education), because their Education sits in the side column.
+
+### Public landing page (`resume/templates/index.html`)
+
+- The template showcase is rendered from `resume_templates.catalog()` and the "Use from Claude" tool chips from the MCP registry, both passed by `landing_page`. Never hardcode design names, counts or tool names there.
+- Only claims the product backs up: no company logos, model names, scores or user counts. `resume/tests/test_landing.py` fails on the phrases the old page used and on `href="#"` dead links.
+- Screenshots live in `static/screenshots/` (landing) and `screenshots/` (README) as the same files.
 - Every render path goes through `resume_templates.design_context(key, context)` so the tokens reach the template. A template rendered without it has no styling.
 - Only fonts installed in the image may be named (see the font packages in `Dockerfile`). A missing family falls back silently and the design stops matching its preview.
 - `_preview_runtime.html` paginates the screen preview using `data-` attributes (`data-paginate`, `data-column`, `data-header`, `data-section`, `data-item`), not class names. New layouts must mark themselves up the same way.

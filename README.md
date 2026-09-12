@@ -1,6 +1,6 @@
 # ResuStack
 
-**ResuStack** is an AI-powered resume builder that helps you create professional, ATS-optimized resumes in minutes. Import from LinkedIn, upload a PDF, or start from scratch — then let AI do the heavy lifting.
+**ResuStack** is an AI resume builder. Import a PDF or your LinkedIn profile, pick one of 14 designs, and edit by form or by chat — in the browser, or straight from Claude through its MCP server. Every change is reversible, and the PDF you download is rendered from the same template as the live preview.
 
 🔗 **Live:** [resustackapp.com](https://resustackapp.com)
 
@@ -8,162 +8,199 @@
 
 ## ✨ Features
 
-### Resume Builder
-- **PDF & LinkedIn Import** — Upload your existing resume or LinkedIn PDF; AI extracts and organizes your data automatically
-- **Blank Resume** — Start from scratch with a structured form editor
-- **Live Preview** — Split-pane editor shows a real-time preview of your resume as you type (desktop)
-- **Multiple Templates** — Choose between Classic (FaangPath) and Modern Sidebar (two-column) layouts
-- **PDF Export** — Download a polished, ATS-friendly PDF in one click
-- **Resume Dashboard** — Manage multiple resumes, duplicate versions, delete old ones
+### Resume builder
+- **PDF & LinkedIn import** — upload an existing resume or a LinkedIn PDF; AI extracts and structures it
+- **Split-pane editor** — the form on the left, a live preview on the right, with page breaks where the PDF will break
+- **14 designs on 6 layouts** — single column, banner, label gutter, header grid, left sidebar and right rail; ATS-safe designs are marked, and switching keeps your content
+- **English and Turkish resumes** — headings, "Present", month names and degree phrasing print in the language the resume is written in
+- **"What I'm working on"** — an optional section above Education, shown only when you tick it
+- **PDF export** — rendered with WeasyPrint from the same template the preview uses
 
-### AI Enhancement
-- **One-click AI Enhance** — Rewrites your experience bullet points into impactful, STAR-format descriptions
-- **Skill Extraction** — AI automatically pulls relevant skills from your experience
-- **Context-aware edits** — AI understands your role and tailors the language accordingly
+### AI
+- **One-click enhance** — rewrites experience and project descriptions into stronger bullet points
+- **Analyze and compare** — score a resume and see where it is weak, or compare two versions
+- **Guided build** — build a resume step by step through questions
 
-### Agentic Mode
-- **Conversational Resume Building** — Switch to Agentic Mode and talk to your resume in plain language
-- **Natural language edits** — Say *"Add AWS S3 integration to my skills"* or *"Make my last role sound more senior"* — the AI makes targeted edits instantly
-- **Context panel** — Live resume preview updates alongside the chat as changes are applied
-- **Multi-intent support** — List resumes, preview, download, duplicate, delete, switch templates — all from chat
+### Agentic mode
+- **Edit by chatting** — *"Make my last role sound more senior"*; the agent uses tools, streams its progress and asks for approval before destructive actions
+- **Template pane** — pick a design for the active resume without leaving the chat
+- **Undo** — revert the last change from the conversation
+
+### Change history
+- A restore point before every save and every AI or MCP edit
+- Diff any version against the current one, and restore it — on every plan
+
+### Job applications
+- **Match** a resume against a job posting and **tailor** a version for it
+- **Track** applications, each with a snapshot of the exact resume you sent; clone a snapshot back into an editable resume
+
+### Language versions
+- Translate a resume in place, or create a translated copy linked to the original
+
+---
+
+## 🤖 Use ResuStack from Claude (MCP)
+
+ResuStack is a [Model Context Protocol](https://modelcontextprotocol.io) server. Claude — or any MCP client with Streamable HTTP and custom headers — writes the resume; ResuStack stores it, versions it and renders it.
+
+**1. Create a token.** Sign in, open **Profile → API token**, and create one. It is shown once; replacing it revokes the old one. The Profile page also shows the endpoint address to use.
+
+**2. Add the server.** With Claude Code:
+
+```bash
+claude mcp add --transport http resustack https://resustackapp.com/mcp --header "Authorization: Bearer YOUR_TOKEN"
+```
+
+Authentication is a bearer token only; session cookies are not accepted on this endpoint.
+
+**3. Ask.** *"List my resumes"*, *"Switch my CV to the Label Gutter design and give me the PDF"*, *"Fill What I'm working on from what we did this month."*
+
+### Tools
+
+| Tool | What it does |
+|---|---|
+| `list_resumes` | Resumes on the account: id, title, language, template |
+| `get_resume` | The full stored content of one resume |
+| `create_resume` | Create a resume from structured content |
+| `update_resume` | Replace a resume's content (read it first — this is a replace, not a merge) |
+| `set_focus_areas` | Set only the "What I'm working on" section; the rest of the resume is untouched |
+| `list_templates` | The designs, with a description and whether each is ATS-safe |
+| `set_template` | Change a resume's design |
+| `render_pdf` | A download link for the PDF — single use, expires in 10 minutes |
+| `check_quota` | What the account has left this month |
+
+### Prompts
+
+| Prompt | What it does |
+|---|---|
+| `focus_areas_from_my_work` | Has the client's model summarise the work you have actually done — from the conversations it can see — into a few lines, show them to you, and save them with `set_focus_areas` only after you approve |
+
+### Safety rules
+- Every write takes a restore point first; you can undo it on the website
+- There is no delete tool — removing a resume stays on the website, where a person clicks
+- Every query is scoped to the token's owner
+- Rate limited per account
 
 ---
 
 ## 📸 Screenshots
 
+### Editor — form, live preview and the template pane
+![Resume editor](screenshots/editor.png)
+
+### Choosing a design
+![Template pane](screenshots/templates.png)
+
+### Agentic mode
+![Agentic mode](screenshots/agentic.png)
+
 ### Dashboard
 ![Dashboard](screenshots/dashboard.png)
 
-### Resume Editor — Split-pane with Live Preview
-![Resume Editor](screenshots/resume_editor_new.png)
+---
 
-### Agentic Mode — Chat to Build & Refine
-![Agentic Mode](screenshots/agentic_chat.png)
+## 💳 Plans
+
+Free to start. Pro is a **one-time purchase for a period** — no subscription.
+
+| Free plan | Limit |
+|---|---|
+| Resumes | 3 |
+| PDF or LinkedIn imports | 2 / month |
+| AI enhancements | 10 / month |
+| PDF downloads | 5 / month |
+| Agent chat messages | 10 / month |
+| Tracked applications | 3 |
+| Restore points per resume | 5 |
+
+Pro removes these limits. Current prices are on the [pricing page](https://resustackapp.com/pricing/). Limits live in `FREE_TIER_LIMITS` in `core/settings.py`.
 
 ---
 
-## 🚀 Running Locally
+## 🚀 Running locally
 
 ### Prerequisites
+- Docker & Docker Compose
+- An OpenAI API key
 
-- Python 3.12+ (for manual setup)
-- Docker & Docker Compose (for containerized setup)
-- PostgreSQL (for manual setup)
-- OpenAI API Key
-
-### 1. Clone the repo
+### 1. Clone and configure
 
 ```bash
 git clone https://github.com/koksalkapucuoglu/resume-enhance.git
-cd resume-enhance
 ```
-
-### 2. Configure environment variables
 
 ```bash
-cp .env.example .env
+cd resume-enhance && cp .env.example .env
 ```
-
-Edit `.env` with your values:
 
 | Variable | Description | Example |
 |---|---|---|
-| `OPENAI_API_KEY` | API key from OpenAI | `sk-proj-...` |
+| `OPENAI_API_KEY` | OpenAI API key | `sk-proj-...` |
 | `SECRET_KEY` | Django secret key | any long random string |
-| `DEBUG` | Debug mode | `True` (dev) |
+| `DEBUG` | Debug mode | `True` |
 | `ALLOWED_HOSTS` | Allowed hosts | `localhost,127.0.0.1` |
-| `POSTGRES_DB` | Database name | `postgres` |
-| `POSTGRES_USER` | Database user | `postgres` |
-| `POSTGRES_PASSWORD` | Database password | `postgres` |
-| `EMAIL_HOST_USER` | SMTP email address | `your@gmail.com` |
-| `EMAIL_HOST_PASSWORD` | SMTP app password | `xxxx xxxx xxxx xxxx` |
+| `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | Database credentials | `postgres` |
+| `POSTGRES_HOST` / `POSTGRES_PORT` | Database address | `db` / `5432` |
+| `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` | SMTP for password reset (optional) | |
+| `DOWNLOAD_LINK_MAX_AGE` | Seconds a signed PDF link stays valid (optional) | `600` |
+| `PAYMENT_STATUS` | `coming_soon` shows plans without taking payment; `live` enables checkout | `coming_soon` |
+| `PAYMENT_PROVIDER`, `PAYMENT_WEBHOOK_SECRET`, `CHECKOUT_URL_*`, `PRODUCT_ID_*` | Payment provider settings (optional) | |
 
-### Option A: Docker (Recommended)
+### 2. Start
 
 ```bash
 docker compose up --build
 ```
 
-App runs at [http://localhost:8000](http://localhost:8000).
+The app runs at [http://localhost:8000](http://localhost:8000).
 
-To stop:
-```bash
-docker compose down
-```
-
-### Option B: Manual (Python venv)
-
-Make sure PostgreSQL is running locally and your `.env` is configured.
+### 3. Run the tests
 
 ```bash
-# Create and activate virtual environment
-python3 -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run migrations
-python manage.py migrate
-
-# Collect static files
-python manage.py collectstatic --noinput
-
-# Start the server
-python manage.py runserver
+docker compose exec web python manage.py test resume mcp_server
 ```
 
-Visit [http://127.0.0.1:8000](http://127.0.0.1:8000).
+WeasyPrint and OpenAI are mocked in the unit tests; no API calls are made.
 
 ---
 
 ## ☁️ Deployment
 
-### Option A: Docker Compose + Caddy (VPS)
+Production runs on **[Dokploy](https://dokploy.com)**. Every push to `main` triggers a deploy through a GitHub webhook: Dokploy builds the `Dockerfile`, and `entrypoint.sh` runs `migrate` and `collectstatic` before starting Gunicorn. Traefik handles HTTPS.
 
-Self-hosted on any VPS (Hetzner, DigitalOcean, etc.) using Docker Compose and Caddy as a reverse proxy with automatic HTTPS.
-
-```bash
-# On your server
-git clone https://github.com/koksalkapucuoglu/resume-enhance.git
-cd resume-enhance
-cp .env.prod.example .env.prod  # fill in production values
-
-docker compose -f docker-compose.prod.yml up -d --build
-```
-
-**Stack:**
-- `Caddy` → handles 80/443, automatic Let's Encrypt SSL, static file serving
-- `Gunicorn` → serves Django on port 8000
-- `PostgreSQL 15` → persistent database via Docker volume
-
-For automatic deploys on `git push`, the repo includes a GitHub Actions workflow (`.github/workflows/deploy.yml`) that SSHs into the server and runs `scripts/deploy.sh`.
-
-### Option B: Dokploy (Recommended for multi-service setups)
-
-[Dokploy](https://dokploy.com) is a self-hosted PaaS that manages deployments via a UI. It uses Traefik as a reverse proxy and supports GitHub webhook-based auto-deploys.
-
-**Setup steps:**
-1. Install Dokploy on your server: `curl -sSL https://dokploy.com/install.sh | sh`
+Setting it up on a new server:
+1. Install Dokploy: `curl -sSL https://dokploy.com/install.sh | sh`
 2. Open `http://YOUR_SERVER_IP:3000` and create an admin account
-3. Create a new project → add an **Application** service → connect your GitHub repo
-4. Add a **PostgreSQL** database service in the same project
-5. Set environment variables (same as `.env.prod`)
-6. Set domain(s) and deploy
+3. Create a project → add an **Application** → connect this GitHub repository
+4. Add a **PostgreSQL** service in the same project
+5. Set the environment variables (see `.env.prod.example`) and the domain, then deploy
 
-**Notes:**
-- `entrypoint.sh` runs `migrate` + `collectstatic` automatically on each container start
-- If using Cloudflare proxy (orange cloud), set Dokploy domain Encrypt to **None** and Cloudflare SSL mode to **Full**
-- Run Command in Dokploy Advanced should be **empty** — `ENTRYPOINT` in the Dockerfile handles everything
+Notes:
+- Leave Dokploy's **Run Command** empty — the Dockerfile's `ENTRYPOINT` does everything
+- Behind Cloudflare's proxy, set Dokploy's domain encryption to **None** and Cloudflare SSL to **Full**
+- The image installs the fonts the resume designs use; nothing is fetched at render time
+
+`docker-compose.prod.yml` and the `Caddyfile` are kept for self-hosting without Dokploy; they are not what production uses.
+
+---
+
+## 🏗️ Architecture
+
+Monolithic Django: views, DRF API, an MCP endpoint, WeasyPrint for PDFs, OpenAI for parsing and writing. Resume content is a single `JSONField`; every design comes from one catalogue in `resume/resume_templates.py`. The full guide — conventions, patterns and pitfalls — is in [`.claude/CLAUDE.md`](.claude/CLAUDE.md).
 
 ---
 
 ## 🗺️ Roadmap
 
-- [ ] More resume templates
-- [ ] Job description matching (tailor resume to a specific JD)
-- [ ] Agentic mode enhancements (multi-resume context, smarter edits)
-- [ ] Payment integration 
+- [x] Multiple resume designs (14)
+- [x] Job description matching and application tracking
+- [x] Agentic mode with tool calling, approvals and undo
+- [x] Change history with diff and restore
+- [x] MCP server for Claude and other clients
+- [x] English and Turkish resumes
+- [ ] Listing in MCP registries
+- [ ] OAuth for MCP clients, alongside tokens
+- [ ] Payments going live
 
 ---
 
