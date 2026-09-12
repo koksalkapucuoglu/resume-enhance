@@ -40,7 +40,10 @@ INSTRUCTIONS = (
     "ResuStack builds and renders resumes. You structure the text; ResuStack "
     "stores it, versions it, and renders the PDF. Every tool that changes "
     "something returns a preview_url the user can open. There is no delete "
-    "tool: removing a resume is done by the user on the website."
+    "tool: removing a resume is done by the user on the website. To fill the "
+    "\"What I'm working on\" section from what the user has actually been "
+    "doing, use the focus_areas_from_my_work prompt, or follow the same steps: "
+    "draft, get approval, then set_focus_areas."
 )
 
 # JSON-RPC standard codes.
@@ -130,4 +133,4 @@ def capabilities():
     # No listChanged: the tool set is fixed at deploy time, so there is nothing
     # to notify about, and claiming otherwise would invite a listen stream we
     # would never write to.
-    return {"tools": {}}
+    return {"tools": {}, "prompts": {}}

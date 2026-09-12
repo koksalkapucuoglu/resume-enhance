@@ -33,6 +33,7 @@ from rest_framework.authtoken.models import Token
 
 from . import protocol, registry
 from . import tools as _tools  # noqa: F401  (importing registers the tools)
+from . import prompts
 from .protocol import ProtocolError
 
 logger = logging.getLogger(__name__)
@@ -251,6 +252,21 @@ def _dispatch(method, params, user, request, modern):
         return _tools_list(modern)
     if method == "tools/call":
         return _tools_call(params, user, request, modern)
+    if method == "prompts/list":
+        result = {"prompts": prompts.descriptors()}
+        if modern:
+            result["resultType"] = "complete"
+            result["ttlMs"] = TOOLS_TTL_MS
+            result["cacheScope"] = "public"
+        return result
+    if method == "prompts/get":
+        name = params.get("name")
+        if not name:
+            raise ProtocolError(protocol.INVALID_PARAMS, "Missing prompt name.")
+        result = prompts.get(name, params.get("arguments"))
+        if modern:
+            result["resultType"] = "complete"
+        return result
     raise ProtocolError(
         protocol.METHOD_NOT_FOUND, f"Method not found: {method}", http_status=404
     )

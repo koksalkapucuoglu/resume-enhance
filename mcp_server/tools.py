@@ -437,6 +437,85 @@ def set_template(user, resume_id, template, request=None):
     return f"'{resume.display_name}' now renders with {template}.", data
 
 
+FOCUS_AREAS_MAX_ITEMS = 8
+FOCUS_AREAS_MAX_LENGTH = 200
+
+
+@tool(
+    name="set_focus_areas",
+    description=(
+        "Set the \"What I'm working on\" section: short lines on what the "
+        "person is actually working on now, printed above Education when "
+        "include is true. Changes only this section — the rest of the resume "
+        "is left exactly as stored, so there is no need to get_resume first. "
+        "Write the lines from work the user really did, leave out client and "
+        "internal system names, and show the lines to the user for approval "
+        "BEFORE calling this. The previous version is kept as a restore point."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "resume_id": RESUME_ID_SCHEMA,
+            "items": {
+                "type": "array",
+                "items": {"type": "string", "maxLength": FOCUS_AREAS_MAX_LENGTH},
+                "maxItems": FOCUS_AREAS_MAX_ITEMS,
+                "description": "One area per line, 3-5 is usual.",
+            },
+            "include": {
+                "type": "boolean",
+                "description": (
+                    "Print the section. false stores the lines without showing "
+                    "them; the user can turn it on later on the website. "
+                    "Defaults to true."
+                ),
+            },
+        },
+        "required": ["resume_id", "items"],
+        "additionalProperties": False,
+    },
+    read_only=False,
+    idempotent=True,
+)
+def set_focus_areas(user, resume_id, items, include=True, request=None):
+    resume = _owned(user, resume_id)
+    if not isinstance(items, list) or not all(isinstance(i, str) for i in items):
+        raise ToolError("`items` must be a list of strings, one area per line.")
+    if len(items) > FOCUS_AREAS_MAX_ITEMS:
+        raise ToolError(
+            f"At most {FOCUS_AREAS_MAX_ITEMS} lines; this section is a summary."
+        )
+    if any(len(i) > FOCUS_AREAS_MAX_LENGTH for i in items):
+        raise ToolError(
+            f"Keep each line under {FOCUS_AREAS_MAX_LENGTH} characters."
+        )
+
+    revision_service.snapshot(
+        resume,
+        source=ResumeRevision.SOURCE_MCP,
+        summary="Before updating What I'm working on",
+        tool_name="set_focus_areas",
+    )
+    # Merge, not replace: only this section is written, so a model that never
+    # read the resume cannot wipe the rest of it.
+    content = resume_content.normalize(resume.content)
+    content["focus_areas"] = resume_content.normalize_focus_areas(
+        {"include": bool(include), "items": items}
+    )
+    resume.content = content
+    resume.save(update_fields=["content", "updated_at"])
+
+    data = _summarise(resume)
+    data["focus_areas"] = content["focus_areas"]
+    data["preview_url"] = _preview_url(resume, request)
+    shown = "printed above Education" if content["focus_areas"]["include"] else "stored but not printed"
+    return (
+        f"Saved {len(content['focus_areas']['items'])} lines to "
+        f"'{resume.display_name}' ({shown}). Open {data['preview_url']} to see it.",
+        data,
+    )
+
+
 @tool(
     name="render_pdf",
     description=(

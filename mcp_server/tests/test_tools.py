@@ -242,7 +242,7 @@ class RenderTests(ToolTestCase):
 
 
 class SurfaceTests(ToolTestCase):
-    def test_the_advertised_surface_is_the_eight_planned_tools(self):
+    def test_the_advertised_surface_is_the_planned_tools(self):
         names = {d["name"] for d in registry.descriptors()}
         self.assertEqual(
             names,
@@ -251,6 +251,7 @@ class SurfaceTests(ToolTestCase):
                 "get_resume",
                 "create_resume",
                 "update_resume",
+                "set_focus_areas",
                 "list_templates",
                 "set_template",
                 "render_pdf",
@@ -281,7 +282,10 @@ class SurfaceTests(ToolTestCase):
         templated = self.data(
             "set_template", {"resume_id": self.resume.pk, "template": "modern-sidebar"}
         )
-        for data in (created, updated, templated):
+        focused = self.data(
+            "set_focus_areas", {"resume_id": self.resume.pk, "items": ["Django"]}
+        )
+        for data in (created, updated, templated, focused):
             self.assertIn("preview_url", data)
 
     def test_tools_list_advertises_all_of_them(self):
@@ -292,5 +296,5 @@ class SurfaceTests(ToolTestCase):
             headers={"Authorization": f"Bearer {self.token.key}"},
         )
         tools = response.json()["result"]["tools"]
-        self.assertEqual(len(tools), 8)
+        self.assertEqual(len(tools), len(registry.descriptors()))
         self.assertEqual([t["name"] for t in tools], sorted(t["name"] for t in tools))
