@@ -66,6 +66,7 @@ INSTALLED_APPS = [
     "crispy_bootstrap4",
     "rest_framework",
     "rest_framework.authtoken",
+    "mcp_server",
 ]
 
 # The API is reached two ways: the site's own session, and a token the user

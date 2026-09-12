@@ -16,9 +16,8 @@ bizim için yazılmış bir istemci olmadan tool'ları kullanabiliyor.
 Biz `/mcp` adresinde JSON-RPC konuşan **tek bir Django view** yazacağız. Arkasında
 mevcut `services/` katmanı çalışır. Kullanıcı Claude'a bir URL ekler; kurulum yok.
 
-> Transport detayları (handshake, header'lar, streaming) hızlı evriliyor.
-> İmplementasyona başlarken güncel spesifikasyondan doğrulanacak; mimari karar
-> değişmez.
+> Transport detayları güncel spesifikasyondan (`2026-07-28`) doğrulandı ve
+> gerçekten değişmişti — 3. adıma bak. Mimari karar değişmedi.
 
 ## Tasarım kararları
 
@@ -130,7 +129,33 @@ model bozuk yapı üretemesin; sunucu ayrıca `resume_content.normalize()` uygul
    bu yüzden 10 dakika yaşıyor ve ilk kullanımda harcanıyor — yoksa kotalı bir
    şeye süresiz erişim olurdu. Kota **teslimde** sayılıyor: takip edilmeyen link
    bedava, başarısız render kota yakmıyor.
-3. **MCP endpoint** — `/mcp`, JSON-RPC: `initialize`, `tools/list`, `tools/call`
+3. ✅ **MCP endpoint** — `/mcp`, POST'a JSON-RPC. Spesifikasyon okunduğunda
+   çıkan sürpriz: **`2026-07-28` revizyonu handshake'i ve oturumu tamamen
+   kaldırmış.** Artık her istek kendi sürümünü, istemci kimliğini ve
+   yeteneklerini `_meta` içinde taşıyor; HTTP bağlaması bunların bir kısmını
+   header'a da yansıtıyor ki ara sunucular gövdeyi okumadan yönlendirebilsin.
+
+   Ama bugün sahadaki istemcilerin hepsi hâlâ eski sürümü (`initialize`)
+   konuşuyor. Bu yüzden **iki dönemi birden konuşan** bir sunucu yazıldı —
+   spec'in "dual-era" dediği şey. Sunucu davranışını istemcinin açılışından
+   seçiyor: gövdede `_meta` varsa modern, `initialize` geldiyse eski.
+
+   | | Eski (`2025-11-25` ve öncesi) | Modern (`2026-07-28`) |
+   |---|---|---|
+   | Açılış | `initialize` + `notifications/initialized` | yok; `server/discover` isteğe bağlı |
+   | Sürüm | handshake'de pazarlık | her istekte, `MCP-Protocol-Version` header'ı |
+   | Oturum | `Mcp-Session-Id` | yok |
+   | GET stream | var | kaldırıldı → `405` |
+   | Header–gövde | yok | uyuşmazlık `400` + `-32020` |
+
+   Üç uygulama kararı:
+   - **Cevap her zaman tek JSON nesnesi, SSE değil.** Spec seçimi sunucuya
+     bırakıyor; bizim tool'larımız milisaniyelik DB işlemleri, stream gunicorn
+     worker'ını boşuna açık tutardı.
+   - **Oturum kimliği hiç üretilmiyor.** İki worker'dan herhangi biri her
+     isteği cevaplayabiliyor.
+   - **Sadece bearer token, çerez yok.** Uç CSRF'den muaf; oturum çerezini de
+     kabul etseydik başka bir origin'deki sayfa tool çağırabilirdi.
 4. **8 tool** — `mcp_server/tools.py`, DRF ve `services/` üstünde ince katman
 5. **Testler** — kimlik, kota, şema doğrulama, imzalı URL süresi, yıkıcı tool yokluğu
 

@@ -16,12 +16,18 @@ Including another URLconf
 
 from django.contrib import admin
 from django.urls import path, include
+from mcp_server.views import mcp_endpoint
 from core.views import SignupView, ProfileView, issue_api_token, revoke_api_token
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("", include("resume.urls")),
     path("api/v1/", include("resume.api_urls")),  # Mobile API endpoints
+    # The MCP endpoint. One URL, POST only — clients are given exactly this.
+    path("mcp", include("mcp_server.urls")),
+    # The trailing-slash spelling answers too. APPEND_SLASH only adds slashes,
+    # it never strips them, so without this /mcp/ would be a bare 404.
+    path("mcp/", mcp_endpoint),
     path("accounts/", include("django.contrib.auth.urls")),  # Login, Logout, etc.
     path("accounts/signup/", SignupView.as_view(), name="signup"),  # Signup page
     path("accounts/profile/", ProfileView.as_view(), name="profile"),  # Profile page
