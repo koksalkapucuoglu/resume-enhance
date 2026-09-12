@@ -1,0 +1,12 @@
+{% comment %}
+"What I'm working on" — the current-work summary, above Education.
+
+Rendered only when the user ticked the include box; `build_context` passes an
+empty list otherwise, so no template needs to know about the flag.
+{% endcomment %}
+<section class="resume-section" data-section>
+    {% include "resume_templates/_section_head.html" with title="WHAT I'M WORKING ON" %}
+    <ul class="focus-areas" data-item>
+        {% for area in focus_areas %}<li>{{ area }}</li>{% endfor %}
+    </ul>
+</section>

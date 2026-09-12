@@ -46,6 +46,11 @@ urlpatterns = [
         name="download_resume_pdf",
     ),
     path(
+        "resume/<int:pk>/appearance/",
+        views.set_resume_appearance,
+        name="set_resume_appearance",
+    ),
+    path(
         "resume/<int:pk>/preview/",
         views.preview_saved_resume,
         name="preview_saved_resume",

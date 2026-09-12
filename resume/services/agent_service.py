@@ -15,6 +15,7 @@ import logging
 from django.conf import settings
 from django.urls import reverse
 
+from resume import resume_templates
 from resume.models import Resume, ResumeRevision
 from resume.services import resume_content, revision_service
 from resume.openai_engine import send_openai_message
@@ -523,6 +524,8 @@ User request: {user_message}"""
         return {"type": "chat", "message": msg}
 
     # Available templates map (key → display name)
+    # Spellings a user types that are not the key itself. Every key in the
+    # catalogue resolves to itself; this only covers the shorthands.
     TEMPLATE_ALIASES = {
         "faang": "faangpath-simple",
         "faangpath": "faangpath-simple",
@@ -531,9 +534,37 @@ User request: {user_message}"""
         "classic": "faangpath-simple",
         "modern": "modern-sidebar",
         "sidebar": "modern-sidebar",
-        "modern-sidebar": "modern-sidebar",
-        "faangpath-simple": "faangpath-simple",
+        "kenar": "modern-sidebar",
+        "compact": "compact-ats",
+        "ats": "compact-ats",
+        "engineering": "engineering-classic",
+        "muhendis": "engineering-classic",
+        "ivy": "ivy-serif",
+        "harvard": "ivy-serif",
+        "executive": "executive-serif",
+        "yonetici": "executive-serif",
+        "timeline": "timeline-rail",
+        "zaman": "timeline-rail",
+        "mono": "dev-mono",
+        "developer": "dev-mono",
+        "banner": "accent-banner",
+        "split": "split-column",
     }
+
+    def _template_key(self, requested: str):
+        """Resolve what the user typed to a catalogue key, or None."""
+        requested = (requested or "").lower().strip()
+        if not requested:
+            return None
+        if requested in resume_templates.BY_KEY:
+            return requested
+        if requested in self.TEMPLATE_ALIASES:
+            return self.TEMPLATE_ALIASES[requested]
+        # "Ivy Serif", "dev mono" — match on the display name too.
+        for design in resume_templates.catalog():
+            if requested == design.name.lower():
+                return design.key
+        return None
 
     def _exec_switch_template(
         self, user, params: dict, lang: str, active_resume=None
@@ -548,8 +579,7 @@ User request: {user_message}"""
             return self._resume_not_found(lang, params)
 
         # Resolve template key from params
-        requested = (params.get("template") or "").lower().strip()
-        template_key = self.TEMPLATE_ALIASES.get(requested)
+        template_key = self._template_key(params.get("template"))
 
         if not template_key:
             msg = {
@@ -562,19 +592,11 @@ User request: {user_message}"""
                 "message": msg,
                 "templates": [
                     {
-                        "key": "faangpath-simple",
-                        "name": "FAANGPath Simple",
-                        "description": "Classic single-column layout"
-                        if lang == "en"
-                        else "Klasik tek sütun düzeni",
-                    },
-                    {
-                        "key": "modern-sidebar",
-                        "name": "Modern Sidebar",
-                        "description": "Two-column layout with sidebar"
-                        if lang == "en"
-                        else "Kenar çubuklu iki sütun düzeni",
-                    },
+                        "key": design.key,
+                        "name": design.name,
+                        "description": design.description,
+                    }
+                    for design in resume_templates.catalog()
                 ],
             }
 
@@ -587,11 +609,7 @@ User request: {user_message}"""
         resume.template_selector = template_key
         resume.save(update_fields=["template_selector", "updated_at"])
 
-        names = {
-            "faangpath-simple": "FAANGPath Simple",
-            "modern-sidebar": "Modern Sidebar",
-        }
-        display = names.get(template_key, template_key)
+        display = resume_templates.get(template_key).name
 
         msg = {
             "tr": f"Sablon **{display}** olarak degistirildi. Onizleme guncelleniyor...",

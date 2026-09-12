@@ -95,6 +95,21 @@ CONTENT_SCHEMA = {
                 "additionalProperties": False,
             },
         },
+        "focus_areas": {
+            "type": "object",
+            "description": (
+                "What the person is working on now, in their own terms — one "
+                "short line per area, written from what they have actually "
+                "been doing. Printed above Education, and only when `include` "
+                "is true: store the lines even when it is false, and let the "
+                "person decide in ResuStack whether the section appears."
+            ),
+            "properties": {
+                "include": {"type": "boolean"},
+                "items": {"type": "array", "items": {"type": "string"}},
+            },
+            "additionalProperties": False,
+        },
     },
     "additionalProperties": False,
 }

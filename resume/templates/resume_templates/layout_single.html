@@ -15,6 +15,7 @@ a left rail — comes from the tokens, not from this file.
                 {% include "resume_templates/_contacts.html" %}
             </header>
 
+            {% if focus_areas %}{% include "resume_templates/_focus_areas.html" %}{% endif %}
             {% if education_data %}{% include "resume_templates/_education.html" %}{% endif %}
             {% if user_data.skills %}{% include "resume_templates/_skills.html" %}{% endif %}
             {% if experience_data %}{% include "resume_templates/_experience.html" %}{% endif %}

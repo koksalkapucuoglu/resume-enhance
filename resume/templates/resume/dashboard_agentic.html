@@ -28,6 +28,9 @@
 </script>
 <style type="text/tailwindcss">
     @layer base { body { @apply font-display bg-background-light text-slate-900; } }
+    /* A pane hidden with the attribute also carries Tailwind display classes
+       (`flex`), which would otherwise keep it on screen. */
+    [hidden] { display: none !important; }
     .material-symbols-outlined {
         font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
         font-size: 20px;
@@ -107,8 +110,42 @@
     <!-- Main Split Pane -->
     <div class="flex flex-1 overflow-hidden">
 
-        <!-- LEFT: Chat Panel (60% on lg, full on mobile) -->
+        <!-- LEFT: Chat + template picker (60% on lg, full on mobile) -->
         <div id="chat-panel" class="flex flex-col w-full lg:w-3/5 border-r border-slate-200 bg-white">
+
+            <!-- Pane switch. The chat stays mounted while the picker shows, so
+                 the conversation is not lost by looking at templates. -->
+            <nav class="flex gap-1 px-4 py-2 border-b border-slate-200" role="tablist"
+                 aria-label="Chat panes">
+                <button type="button" id="agent-pane-tab-chat" role="tab" aria-selected="true"
+                        aria-controls="agent-pane-chat" onclick="switchAgentPane('chat')"
+                        class="agent-pane-tab px-3 py-1.5 rounded-lg text-sm font-medium bg-primary text-white transition-colors">
+                    <span class="material-symbols-outlined !text-[16px] align-middle mr-1">chat_bubble</span>{{ UI.pane_chat }}
+                </button>
+                <button type="button" id="agent-pane-tab-template" role="tab" aria-selected="false"
+                        aria-controls="agent-pane-template" onclick="switchAgentPane('template')"
+                        class="agent-pane-tab px-3 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:bg-slate-100 transition-colors">
+                    <span class="material-symbols-outlined !text-[16px] align-middle mr-1">palette</span>{{ UI.choose_template }}
+                </button>
+            </nav>
+
+            <!-- Template pane -->
+            <div id="agent-pane-template" hidden class="flex-1 overflow-y-auto px-4 py-4" role="tabpanel"
+                 aria-labelledby="agent-pane-tab-template">
+                <p id="agent-template-hint" class="text-sm text-slate-500 mb-3">
+                    {{ UI.template_pane_hint }}
+                </p>
+                <label class="flex items-center gap-2 text-sm text-slate-600 mb-4 cursor-pointer">
+                    <input type="checkbox" id="agent-focus-include"
+                           class="rounded border-slate-300 text-primary focus:ring-primary"
+                           onchange="saveAgentAppearance({focus_areas_include: this.checked})">
+                    {{ UI.focus_areas_include }}
+                </label>
+                {% include "resume/_template_picker.html" with group="agent" %}
+            </div>
+
+            <div id="agent-pane-chat" class="flex flex-col flex-1 overflow-hidden" role="tabpanel"
+                 aria-labelledby="agent-pane-tab-chat">
 
             <!-- Chat Messages -->
             <div id="chat-messages" class="chat-scroll flex-1 overflow-y-auto px-4 py-4 space-y-4">
@@ -171,6 +208,7 @@
                         <span class="material-symbols-outlined !text-[20px]">send</span>
                     </button>
                 </div>
+            </div>
             </div>
         </div>
 
@@ -719,6 +757,7 @@ function setActiveResume(id, name) {
         bar.classList.add('hidden');
         bar.classList.remove('flex');
     }
+    if (typeof syncAgentTemplatePane === 'function') syncAgentTemplatePane();
 }
 
 function clearActiveResume() {
@@ -1453,6 +1492,117 @@ function loadPreviewPanel(resumeId, title) {
     // Handle deleted resume (iframe error)
     iframe.onerror = () => { clearActiveResume(); };
 }
+
+// ============================================
+// TEMPLATE PANE (agentic mode)
+// ============================================
+// Which template each resume is currently on, so the picker shows the truth
+// when the active resume changes.
+const RESUME_APPEARANCE = {{ resume_appearance_json|default:"{}"|safe }};
+const DEFAULT_TEMPLATE = '{{ default_template }}';
+
+function switchAgentPane(pane) {
+    ['chat', 'template'].forEach(name => {
+        const panel = document.getElementById('agent-pane-' + name);
+        const tab = document.getElementById('agent-pane-tab-' + name);
+        const on = name === pane;
+        if (panel) panel.hidden = !on;
+        if (tab) {
+            tab.setAttribute('aria-selected', String(on));
+            tab.classList.toggle('bg-primary', on);
+            tab.classList.toggle('text-white', on);
+            tab.classList.toggle('text-slate-500', !on);
+        }
+    });
+    if (pane === 'template') syncAgentTemplatePane();
+}
+
+/** Show the active resume's template, or explain that none is active. */
+function syncAgentTemplatePane() {
+    const picker = document.querySelector('[data-picker="agent"]');
+    const hint = document.getElementById('agent-template-hint');
+    if (!picker) return;
+
+    const state = activeResumeId ? RESUME_APPEARANCE[String(activeResumeId)] : null;
+    const key = activeResumeId ? ((state && state.template) || DEFAULT_TEMPLATE) : null;
+
+    picker.querySelectorAll('input[data-template]').forEach(radio => {
+        radio.checked = key !== null && radio.value === key;
+        radio.disabled = !activeResumeId;
+    });
+    picker.classList.toggle('opacity-50', !activeResumeId);
+
+    if (hint) {
+        hint.textContent = activeResumeId
+            ? `{{ UI.template_pane_hint|escapejs }}`
+            : `{{ UI.context_default_hint|escapejs }}`;
+    }
+
+    const include = document.getElementById('agent-focus-include');
+    if (include) {
+        include.disabled = !activeResumeId;
+        include.checked = Boolean(state && state.focus_include);
+    }
+}
+
+/**
+ * Persist a look change for the active resume and refresh the preview.
+ *
+ * Presentation only — this endpoint never rewrites the resume's wording.
+ */
+async function saveAgentAppearance(changes) {
+    if (!activeResumeId) return;
+    const body = new URLSearchParams();
+    Object.entries(changes).forEach(([key, value]) => {
+        body.append(key, value === true ? 'true' : value === false ? 'false' : value);
+    });
+
+    try {
+        const response = await fetch(`/resume/${activeResumeId}/appearance/`, {
+            method: 'POST',
+            headers: {'X-CSRFToken': CSRF_TOKEN, 'X-Requested-With': 'XMLHttpRequest'},
+            body,
+        });
+        if (!response.ok) return;
+        const data = await response.json();
+        RESUME_APPEARANCE[String(activeResumeId)] = {
+            template: data.template,
+            focus_include: data.focus_areas_include,
+        };
+        const include = document.getElementById('agent-focus-include');
+        if (include) include.checked = data.focus_areas_include;
+        refreshPreview();
+    } catch (e) {
+        /* A failed look change is not worth interrupting the chat for. */
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const picker = document.querySelector('[data-picker="agent"]');
+    if (!picker) return;
+    picker.addEventListener('change', event => {
+        const radio = event.target.closest('input[data-template]');
+        if (radio) saveAgentAppearance({template: radio.value});
+    });
+    picker.addEventListener('click', event => {
+        const chip = event.target.closest('.template-filter');
+        if (!chip) return;
+        const family = chip.dataset.family;
+        picker.querySelectorAll('.template-filter').forEach(other => {
+            const on = other === chip;
+            other.setAttribute('aria-pressed', String(on));
+            other.classList.toggle('bg-primary', on);
+            other.classList.toggle('text-white', on);
+            other.classList.toggle('border-primary', on);
+            other.classList.toggle('border-slate-200', !on);
+            other.classList.toggle('text-slate-600', !on);
+        });
+        picker.querySelectorAll('.template-option').forEach(option => {
+            option.hidden = family !== 'all' && option.dataset.family !== family;
+        });
+    });
+    syncAgentTemplatePane();
+});
 
 function refreshPreview() {
     if (!activeResumeId) return;

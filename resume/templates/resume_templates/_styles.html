@@ -150,6 +150,12 @@ quotes turn into &quot; and the family silently stops resolving.{% endcomment %}
 
     .skills-content { text-align: justify; }
 
+    .focus-areas { margin: 0; padding-left: 1.1rem; }
+    .focus-areas li {
+        list-style-type: {{ tokens.bullet }};
+        margin-bottom: 0.12rem;
+    }
+
     @media print {
         .experience-item,
         .education-item,
@@ -162,14 +168,28 @@ quotes turn into &quot; and the family silently stops resolving.{% endcomment %}
     .project-link { color: var(--link); text-decoration: none; margin-left: 0.3rem; }
 
     /* ── Date rail: dates in a left gutter instead of flush right ──── */
+    {% comment %} The rail is sized from the widest date string rather than a
+    fixed width: "Aug 2022 - Jan 2025" overflows a 1.15in column and lands on
+    top of the job title. {% endcomment %}
     .date-rail .entry-line {
         display: grid;
-        grid-template-columns: 1.15in 1fr;
-        gap: 0.4rem;
+        /* Wide enough for "Aug 2022 - Jan 2025" so the rail and the bullets
+           below it line up; max-content keeps a longer value from colliding
+           with the title rather than overlapping it. */
+        grid-template-columns: minmax(1.45in, max-content) 1fr;
+        column-gap: 0.5rem;
+        align-items: baseline;
     }
-    .date-rail .entry-date { text-align: left; order: -1; }
-    .date-rail .experience-description { padding-left: calc(1.15in + 1.5rem); }
-    .date-rail .experience-description { margin-left: 0; }
+    .date-rail .entry-date {
+        text-align: left;
+        order: -1;
+        padding-left: 0;
+        min-width: 0;
+    }
+    .date-rail .experience-description {
+        margin-left: calc(1.45in + 0.5rem);
+        padding-left: 1.1rem;
+    }
 
     /* ── Banner layout ────────────────────────────────────────────── */
     {% comment %} The banner bleeds past the page margin on three sides. It has

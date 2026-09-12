@@ -134,6 +134,34 @@ class DashboardView(LoginRequiredMixin, ListView):
             # localStorage entry — a deleted resume, or another account's on a
             # shared browser — would otherwise render "Resume not found".
             context["owned_resume_ids"] = json.dumps([r.pk for r in resumes])
+            # The template pane in agentic mode is the same picker the editor
+            # uses, so it stays in step with the catalogue on its own.
+            context.update(
+                template_picker_context(
+                    initial_resume
+                    and next(
+                        (
+                            r.template_selector
+                            for r in resumes
+                            if r.pk == initial_resume["id"]
+                        ),
+                        None,
+                    )
+                )
+            )
+            # What the template pane needs to show the truth for whichever
+            # resume is active, without a round trip per selection.
+            context["resume_appearance_json"] = json.dumps(
+                {
+                    str(r.pk): {
+                        "template": r.template_selector,
+                        "focus_include": resume_content.normalize(r.content)[
+                            "focus_areas"
+                        ]["include"],
+                    }
+                    for r in resumes
+                }
+            )
             if not resumes:
                 suggestions.append(
                     {
@@ -331,6 +359,8 @@ def get_init_values_for_resume_form():
         "education_formset": education_formset,
         "experience_formset": experience_formset,
         "project_formset": project_formset,
+        "focus_areas_text": "",
+        "focus_areas_include": False,
     }
     return context
 
@@ -424,11 +454,17 @@ def populate_formsets_from_extracted_json(extracted_json):
     ]
     project_formset = ProjectFormSet(initial=project_initial, prefix="project")
 
+    focus_areas = extracted_json["focus_areas"]
+
     return {
         "user_form": user_form,
         "education_formset": education_formset,
         "experience_formset": experience_formset,
         "project_formset": project_formset,
+        # One line per area in the textarea; the checkbox decides whether the
+        # section is printed at all.
+        "focus_areas_text": "\n".join(focus_areas["items"]),
+        "focus_areas_include": focus_areas["include"],
     }
 
 
@@ -443,6 +479,21 @@ def clean_data_for_json(data):
     elif isinstance(data, (date, datetime)):
         return data.strftime("%Y-%m")
     return data
+
+
+def focus_areas_from_post(request):
+    """
+    The "what I'm working on" section as posted by the editor.
+
+    A textarea of lines plus a checkbox. The lines are kept even when the box
+    is unticked, so turning the section off does not throw the text away.
+    """
+    return resume_content.normalize_focus_areas(
+        {
+            "include": request.POST.get("focus_areas_include") in ("on", "true", "1"),
+            "items": request.POST.get("focus_areas", ""),
+        }
+    )
 
 
 def template_picker_context(selected=None):
@@ -552,11 +603,14 @@ class ResumeFormView(TemplateView):
             form.cleaned_data for form in project_formset if form.cleaned_data
         ]
 
+        focus_areas = focus_areas_from_post(self.request)
+
         return {
             "user_data": user_data,
             "education_data": education_data,
             "experience_data": experience_data,
             "project_data": project_data,
+            "focus_areas": focus_areas["items"] if focus_areas["include"] else [],
             "generation_date": datetime.now().strftime("%Y-%m-%d"),
         }
 
@@ -699,6 +753,7 @@ class ResumeFormView(TemplateView):
             "projects_and_publications": clean_data_for_json(
                 [f.cleaned_data for f in project_formset if f.cleaned_data]
             ),
+            "focus_areas": focus_areas_from_post(self.request),
         }
 
         # Determine export format and action BEFORE saving resume
@@ -975,11 +1030,13 @@ def preview_resume_form(request):
                 form.cleaned_data for form in project_formset if form.cleaned_data
             ]
 
+            focus_areas = focus_areas_from_post(request)
             context = {
                 "user_data": user_data,
                 "education_data": education_data,
                 "experience_data": experience_data,
                 "project_data": project_data,
+                "focus_areas": focus_areas["items"] if focus_areas["include"] else [],
                 "generation_date": datetime.now().strftime("%Y-%m-%d"),
             }
 
@@ -1425,6 +1482,60 @@ def test_faangpath_template(request):
     context = get_init_values_for_resume_form()
     context.update(template_picker_context())
     return render(request, "resume_form.html", context)
+
+
+# ---------------------------------------------------------------------------
+# Saved-resume appearance: template and optional sections
+# ---------------------------------------------------------------------------
+
+
+@login_required
+@require_http_methods(["POST"])
+def set_resume_appearance(request, pk):
+    """
+    Change how a saved resume looks, without opening the editor.
+
+    This is what the agentic dashboard's template picker posts to. It touches
+    presentation only — the template key and whether the optional focus-areas
+    section prints — so the wording of the resume is never rewritten here.
+    """
+    resume = Resume.objects.filter(pk=pk, user=request.user).first()
+    if not resume:
+        return JsonResponse({"error": "Resume not found."}, status=404)
+
+    fields = []
+    template_key = request.POST.get("template")
+    if template_key is not None:
+        if template_key not in settings.TEMPLATE_SELECTOR_HTML_MAP:
+            return JsonResponse({"error": "Unknown template."}, status=400)
+        if template_key != resume.template_selector:
+            revision_service.snapshot(
+                resume,
+                source=ResumeRevision.SOURCE_MANUAL,
+                summary=f"Before switching to {template_key}",
+            )
+            resume.template_selector = template_key
+            fields.append("template_selector")
+
+    include = request.POST.get("focus_areas_include")
+    if include is not None:
+        content = resume_content.normalize(resume.content)
+        content["focus_areas"]["include"] = include in ("on", "true", "1")
+        resume.content = content
+        fields.append("content")
+
+    if fields:
+        resume.save(update_fields=fields + ["updated_at"])
+
+    focus_areas = resume_content.normalize(resume.content)["focus_areas"]
+    return JsonResponse(
+        {
+            "resume_id": resume.pk,
+            "template": resume.template_selector,
+            "focus_areas_include": focus_areas["include"],
+            "focus_areas_count": len(focus_areas["items"]),
+        }
+    )
 
 
 # ---------------------------------------------------------------------------

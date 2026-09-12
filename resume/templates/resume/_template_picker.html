@@ -9,6 +9,22 @@ the selected state is a CSS sibling rule (.template-option input:checked) rather
 than classes pushed around by JS. The radios deliberately sit outside <form> and are not submitted — the
 hidden input is what posts.
 {% endcomment %}
+<style>
+    /* The radio is visually hidden but still the source of truth: selection and
+       keyboard focus are drawn from its state, not from classes set by JS. */
+    .template-option input:checked ~ .template-card {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 2px #2563eb;
+    }
+    .template-option input:focus-visible ~ .template-card {
+        outline: 2px solid #2563eb;
+        outline-offset: 2px;
+    }
+    .template-check { display: none; }
+    .template-option input:checked ~ .template-card .template-check { display: flex; }
+    .template-option[hidden] { display: none; }
+    .template-picker input:disabled ~ .template-card { cursor: not-allowed; }
+</style>
 <fieldset class="template-picker" data-picker="{{ group }}">
     <legend class="sr-only">Choose a resume template</legend>
 
@@ -23,7 +39,9 @@ hidden input is what posts.
         {% endfor %}
     </div>
 
-    <div class="grid grid-cols-2 gap-2 max-h-[22rem] overflow-y-auto pr-1">
+    {% comment %} Auto-fill rather than a fixed column count: two columns on a
+    wide pane made each card as tall as the viewport. {% endcomment %}
+    <div class="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(8.5rem,1fr))]">
         {% for design in catalog %}
         <div class="template-option" data-family="{{ design.family }}">
             <input type="radio"

@@ -44,6 +44,7 @@ sidebar as a plain colour band rather than repeating its content.
             </aside>
 
             <main class="main" data-column>
+                {% if focus_areas %}{% include "resume_templates/_focus_areas.html" %}{% endif %}
                 {% if experience_data %}{% include "resume_templates/_experience.html" %}{% endif %}
                 {% if project_data %}{% include "resume_templates/_projects.html" %}{% endif %}
             </main>

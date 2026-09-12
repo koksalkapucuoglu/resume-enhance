@@ -121,7 +121,28 @@ def normalize(content):
         if isinstance(p, dict)
     ]
     content["projects_and_publications"] = projects
+    content["focus_areas"] = normalize_focus_areas(content.get("focus_areas"))
     return content
+
+
+def normalize_focus_areas(value):
+    """
+    The "what I'm working on" section: lines plus whether to show them.
+
+    Kept as a dict rather than a bare list because not everyone wants the
+    section printed — the lines are stored either way, so turning it off and
+    back on does not lose them. Accepts the older shapes (a bare list, or a
+    single string) so content written before this section existed still loads.
+    """
+    include = False
+    items = []
+    if isinstance(value, dict):
+        include = bool(value.get("include"))
+        items = as_list(value.get("items"))
+    elif value:
+        items = as_list(value)
+        include = bool(items)
+    return {"include": include, "items": [i for i in items if str(i).strip()]}
 
 
 def build_context(content, generation_date=None):
@@ -140,9 +161,14 @@ def build_context(content, generation_date=None):
         entry["end_date"] = parse_date(entry.get("end_date"))
         experience.append(entry)
 
+    focus_areas = content["focus_areas"]
+
     return {
         "user_data": content["user_info"],
         "education_data": content["education"],
+        # The template renders the section only when the user asked for it.
+        "focus_areas": focus_areas["items"] if focus_areas["include"] else [],
+        "focus_areas_data": focus_areas,
         "experience_data": experience,
         "project_data": content["projects_and_publications"],
         "generation_date": (

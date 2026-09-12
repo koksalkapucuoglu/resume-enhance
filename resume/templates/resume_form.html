@@ -148,25 +148,9 @@
         .message-toast.fade-out { animation: fadeOut 0.3s ease-out forwards; }
 
         /* Preview Modal */
-        /* Template picker: the radio is visually hidden but still the source of
-           truth, so selection and keyboard focus are drawn from its state. */
-        .template-option input:checked ~ .template-card {
-            border-color: #2563eb;
-            box-shadow: 0 0 0 2px #2563eb;
-        }
-
-        .template-option input:focus-visible ~ .template-card {
-            outline: 2px solid #2563eb;
-            outline-offset: 2px;
-        }
-
-        .template-check { display: none; }
-
-        .template-option input:checked ~ .template-card .template-check {
-            display: flex;
-        }
-
-        .template-option[hidden] { display: none; }
+        /* Panes are hidden with the attribute; Tailwind display utilities on
+           the same element must not win over it. */
+        [hidden] { display: none !important; }
 
         .preview-modal-dialog {
             width: 210mm;
@@ -294,10 +278,34 @@
     <!-- Main Content: Split Pane Layout (Equal width split) -->
     <main class="flex gap-3 md:gap-4 w-full px-3 md:px-4 pb-6 items-start">
 
-        <!-- LEFT: Form Section (60% width) -->
+        <!-- LEFT: Editor Section (60% width) -->
         <div class="w-full lg:w-3/5 xl:w-[60%] min-w-0">
 
+            <!-- Pane switch: the details form, or the template picker. Both stay
+                 in the DOM — the form still posts while the picker is showing. -->
+            <nav class="flex gap-1 mb-4 bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm"
+                 role="tablist" aria-label="Editor panes">
+                <button type="button" id="pane-tab-details" role="tab" aria-selected="true"
+                        aria-controls="pane-details" onclick="switchEditorPane('details')"
+                        class="editor-pane-tab active flex-1 px-4 py-2.5 text-sm font-medium rounded-lg transition-all">
+                    <span class="material-symbols-outlined text-lg align-middle mr-1">edit_note</span>
+                    {{ UI.pane_details }}
+                </button>
+                <button type="button" id="pane-tab-template" role="tab" aria-selected="false"
+                        aria-controls="pane-template" onclick="switchEditorPane('template')"
+                        class="editor-pane-tab flex-1 px-4 py-2.5 text-sm font-medium rounded-lg transition-all">
+                    <span class="material-symbols-outlined text-lg align-middle mr-1">palette</span>
+                    {{ UI.choose_template }}
+                </button>
+            </nav>
+
+            <div id="pane-template" role="tabpanel" aria-labelledby="pane-tab-template" hidden
+                 class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 mb-4">
+                {% include "resume/_template_picker.html" with group="editor" %}
+            </div>
+
             <!-- Resume Form -->
+            <div id="pane-details" role="tabpanel" aria-labelledby="pane-tab-details">
             <form method="post" id="resume-form" {% if resume_id %}action="{% url 'resume:resume_form_edit' pk=resume_id %}"{% endif %}>
                 {% csrf_token %}
                 <input type="hidden" name="template" id="selected-template" value="{{ saved_template|default:default_template }}">
@@ -346,6 +354,26 @@
                             <div>{{ user_form.linkedin|as_crispy_field }}</div>
                             <div>{{ user_form.github|as_crispy_field }}</div>
                             <div class="md:col-span-2">{{ user_form.skills|as_crispy_field }}</div>
+                        </div>
+
+                        <!-- What I'm working on: optional section, printed above
+                             Education when the box is ticked. -->
+                        <div class="mt-6 pt-6 border-t border-slate-200">
+                            <div class="flex items-center justify-between gap-3 mb-2 flex-wrap">
+                                <label for="focus-areas" class="text-sm font-semibold text-slate-800">
+                                    {{ UI.focus_areas_label }}
+                                </label>
+                                <label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                                    <input type="checkbox" name="focus_areas_include" id="focus-areas-include"
+                                           class="rounded border-slate-300 text-primary focus:ring-primary"
+                                           {% if focus_areas_include %}checked{% endif %}>
+                                    {{ UI.focus_areas_include }}
+                                </label>
+                            </div>
+                            <textarea name="focus_areas" id="focus-areas" rows="4"
+                                      class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:border-primary focus:ring-primary"
+                                      placeholder="{{ UI.focus_areas_hint }}">{{ focus_areas_text }}</textarea>
+                            <p class="text-xs text-slate-400 mt-1">{{ UI.focus_areas_hint }}</p>
                         </div>
                     </div>
                 </section>
@@ -460,31 +488,12 @@
                     </div>
                 </section>
             </form>
+            </div>
         </div>
 
         <!-- RIGHT: Live Preview Pane (Desktop only, 40% width) -->
         <aside class="hidden lg:flex flex-col w-full lg:w-2/5 xl:w-[40%]">
             <div class="sticky" style="top: 72px;">
-
-                <!-- Template Selection: Collapsible Accordion -->
-                <div class="mb-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
-                    <!-- Accordion Header (Toggle Button) -->
-                    <button type="button" id="template-toggle" onclick="toggleTemplateSection()"
-                            class="w-full flex items-center justify-between px-5 py-3 text-left hover:bg-slate-50 transition-colors">
-                        <div>
-                            <h2 class="text-base font-semibold text-slate-800">{{ UI.choose_template }}</h2>
-                            <p class="text-xs text-slate-500 mt-0.5">Select a layout for your resume</p>
-                        </div>
-                        <span id="template-chevron" class="material-symbols-outlined text-slate-400 transition-transform duration-200">
-                            expand_more
-                        </span>
-                    </button>
-
-                    <!-- Accordion Content (Collapsible) -->
-                    <div id="template-content" class="hidden border-t border-slate-200 p-4">
-                        {% include "resume/_template_picker.html" with group="desktop" %}
-                    </div>
-                </div>
 
                 <!-- Preview iframe container - fills space and allows inner scroll -->
                 <div class="relative bg-slate-200 rounded-xl overflow-hidden shadow-inner w-full flex-1 flex"
@@ -533,17 +542,6 @@
                 <button type="button" onclick="document.getElementById('preview-modal').classList.add('hidden')" class="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all">
                     <span class="material-symbols-outlined">close</span>
                 </button>
-            </div>
-            <div class="lg:hidden border-b border-slate-200">
-                <button type="button" onclick="toggleMobileTemplates()"
-                        class="w-full flex items-center justify-between px-6 py-3 text-left hover:bg-slate-50 transition-colors">
-                    <span class="text-sm font-semibold text-slate-800">{{ UI.choose_template }}</span>
-                    <span id="mobile-template-chevron"
-                          class="material-symbols-outlined text-slate-400 transition-transform duration-200">expand_more</span>
-                </button>
-                <div id="mobile-template-content" class="hidden px-6 pb-4">
-                    {% include "resume/_template_picker.html" with group="mobile" %}
-                </div>
             </div>
             <div class="flex-1 overflow-hidden bg-slate-100">
                 <iframe id="preview-iframe-modal" frameborder="0" class="w-full h-full border-none"></iframe>
@@ -634,14 +632,24 @@
 
     <script>
         // ============================================
-        // TEMPLATE ACCORDION TOGGLE
+        // EDITOR PANES (details | template)
         // ============================================
-        function toggleTemplateSection() {
-            const content = document.getElementById('template-content');
-            const chevron = document.getElementById('template-chevron');
-            const isHidden = content.classList.contains('hidden');
-            content.classList.toggle('hidden');
-            chevron.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+        // The form is hidden, never detached: it still holds the values that
+        // post, and the preview keeps reading them while the picker is open.
+        function switchEditorPane(pane) {
+            ['details', 'template'].forEach(name => {
+                const panel = document.getElementById('pane-' + name);
+                const tab = document.getElementById('pane-tab-' + name);
+                const on = name === pane;
+                if (panel) panel.hidden = !on;
+                if (tab) {
+                    tab.setAttribute('aria-selected', String(on));
+                    tab.classList.toggle('active', on);
+                    tab.classList.toggle('bg-primary', on);
+                    tab.classList.toggle('text-white', on);
+                    tab.classList.toggle('text-slate-500', !on);
+                }
+            });
         }
 
         // ============================================
@@ -761,6 +769,8 @@
                     document.getElementById(sectionId).classList.add('active');
                 });
             });
+
+            switchEditorPane('details');
 
             // Set initial active tab styling
             const activeTab = document.querySelector('.form-section-tab.active');
@@ -1291,13 +1301,6 @@
                 .forEach(radio => { radio.checked = radio.value === value; });
 
             schedulePreviewUpdate();
-        }
-
-        function toggleMobileTemplates() {
-            const content = document.getElementById('mobile-template-content');
-            const chevron = document.getElementById('mobile-template-chevron');
-            const open = content.classList.toggle('hidden');
-            chevron.style.transform = open ? '' : 'rotate(180deg)';
         }
 
         function initTemplatePickers() {

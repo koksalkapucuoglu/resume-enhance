@@ -14,6 +14,7 @@ unchanged — so the page margin is zero and the padding lives on the blocks.
                 {% include "resume_templates/_contacts.html" %}
             </header>
 
+            {% if focus_areas %}{% include "resume_templates/_focus_areas.html" %}{% endif %}
             {% if education_data %}{% include "resume_templates/_education.html" %}{% endif %}
             {% if user_data.skills %}{% include "resume_templates/_skills.html" %}{% endif %}
             {% if experience_data %}{% include "resume_templates/_experience.html" %}{% endif %}
