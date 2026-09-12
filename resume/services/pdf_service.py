@@ -159,21 +159,17 @@ class ResumePdfService:
                 self.logger.error(error_msg)
                 raise PdfGenerationError(error_msg)
 
-            # Get CSS file path
-            css_file_path = self._get_css_file_path()
-
             self.logger.info(f"Using template selector: {template_selector}")
             self.logger.info(f"Using template: {template_html_name}")
-            self.logger.info(
-                f"Using CSS file: {css_file_path if css_file_path else 'None'}"
-            )
 
-            # Generate PDF
+            # No extra stylesheet: each template carries its own <style>, and the
+            # live preview renders that same template with nothing added. Feeding
+            # WeasyPrint a second sheet here made the download diverge from the
+            # preview (different font, body size and @page margin).
             pdf_bytes = self.pdf_converter.convert_template_to_pdf(
                 template_name=template_html_name,
                 context=resume_data,
                 request=request,
-                css_file_path=css_file_path,
             )
 
             # A truncated or empty body still arrives with a PDF content type,
@@ -193,31 +189,6 @@ class ResumePdfService:
             error_msg = f"Failed to generate resume PDF: {str(e)}"
             self.logger.error(error_msg)
             raise PdfGenerationError(error_msg) from e
-
-    def _get_css_file_path(self) -> Optional[Path]:
-        """
-        Get CSS file path for PDF styling.
-
-        Returns:
-            Path to CSS file or None if not found
-        """
-        try:
-            # Look for CSS file in templates directory
-            css_file_name = "resume_pdf_styles.css"
-            css_file_path = (
-                Path(settings.BASE_DIR) / "resume" / "templates" / css_file_name
-            )
-
-            if css_file_path.exists():
-                self.logger.info(f"Found CSS file: {css_file_path}")
-                return css_file_path
-            else:
-                self.logger.info("No CSS file found, using default styling")
-                return None
-
-        except Exception as e:
-            self.logger.warning(f"Error looking for CSS file: {e}")
-            return None
 
 
 # Service instance for dependency injection

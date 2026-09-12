@@ -22,9 +22,14 @@
 
         body {
             margin: 0;
+            /* Declared here, not left to the renderer's default: WeasyPrint and
+               the preview iframe pick different defaults otherwise, and the
+               downloaded PDF stops matching what the editor showed. */
+            font-family: "Times New Roman", "Liberation Serif", Times, serif;
             font-size: 12px;
             width: 100%;
             line-height: 1.4;
+            color: #000;
         }
         
         /* Smaller fonts for PDF generation (WeasyPrint uses print media)

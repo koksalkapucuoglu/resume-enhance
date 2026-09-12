@@ -286,7 +286,6 @@ TEMPLATE_SELECTOR_HTML_MAP = {
 # PDF Generation Settings
 PDF_SETTINGS = {
     "ENGINE": "weasyprint",
-    "CSS_FILE": BASE_DIR / "resume" / "templates" / "resume_pdf_styles.css",
     "ENABLE_LOGGING": True,
     "FONT_CONFIG": True,
 }

@@ -4,7 +4,6 @@ Unit Tests for PDF Service
 Tests following Django and Python best practices for clean, readable, and maintainable code.
 """
 
-from pathlib import Path
 from unittest.mock import Mock, patch
 
 from django.test import RequestFactory, TestCase
@@ -126,27 +125,6 @@ class ResumePdfServiceTestCase(TestCase):
         self.assertIn("Invalid template selector", str(context.exception))
 
     @patch("resume.services.pdf_service.settings")
-    def test_get_css_file_path_exists(self, mock_settings):
-        """Test CSS file path retrieval when file exists."""
-        mock_settings.BASE_DIR = "/app"
-
-        with patch.object(Path, "exists", return_value=True):
-            result = self.service._get_css_file_path()
-
-        self.assertIsNotNone(result)
-        self.assertIsInstance(result, Path)
-
-    @patch("resume.services.pdf_service.settings")
-    def test_get_css_file_path_not_exists(self, mock_settings):
-        """Test CSS file path retrieval when file doesn't exist."""
-        mock_settings.BASE_DIR = "/app"
-
-        with patch.object(Path, "exists", return_value=False):
-            result = self.service._get_css_file_path()
-
-        self.assertIsNone(result)
-
-    @patch("resume.services.pdf_service.settings")
     def test_generate_resume_pdf_success(self, mock_settings):
         """Test successful resume PDF generation."""
         mock_settings.TEMPLATE_SELECTOR_HTML_MAP = {
@@ -155,24 +133,24 @@ class ResumePdfServiceTestCase(TestCase):
         mock_settings.BASE_DIR = "/app"
         request = self.request_factory.get("/")
 
-        with patch.object(self.service, "_get_css_file_path", return_value=None):
-            with patch.object(
-                self.service.pdf_converter, "convert_template_to_pdf"
-            ) as mock_convert:
-                expected_pdf = b"%PDF-1.7 resume pdf content"
-                mock_convert.return_value = expected_pdf
+        with patch.object(
+            self.service.pdf_converter, "convert_template_to_pdf"
+        ) as mock_convert:
+            expected_pdf = b"%PDF-1.7 resume pdf content"
+            mock_convert.return_value = expected_pdf
 
-                result = self.service.generate_resume_pdf(
-                    self.sample_resume_data, "faangpath-simple", request
-                )
+            result = self.service.generate_resume_pdf(
+                self.sample_resume_data, "faangpath-simple", request
+            )
 
-                self.assertEqual(result, expected_pdf)
-                mock_convert.assert_called_once_with(
-                    template_name="test_template.html",
-                    context=self.sample_resume_data,
-                    request=request,
-                    css_file_path=None,
-                )
+            self.assertEqual(result, expected_pdf)
+            # No stylesheet argument: the template is the only source of style,
+            # so the PDF matches the live preview of the same template.
+            mock_convert.assert_called_once_with(
+                template_name="test_template.html",
+                context=self.sample_resume_data,
+                request=request,
+            )
 
     @patch("resume.services.pdf_service.settings")
     def test_generate_resume_pdf_failure(self, mock_settings):
@@ -182,18 +160,17 @@ class ResumePdfServiceTestCase(TestCase):
         }
         mock_settings.BASE_DIR = "/app"
 
-        with patch.object(self.service, "_get_css_file_path", return_value=None):
-            with patch.object(
-                self.service.pdf_converter, "convert_template_to_pdf"
-            ) as mock_convert:
-                mock_convert.side_effect = Exception("Template error")
+        with patch.object(
+            self.service.pdf_converter, "convert_template_to_pdf"
+        ) as mock_convert:
+            mock_convert.side_effect = Exception("Template error")
 
-                with self.assertRaises(PdfGenerationError) as context:
-                    self.service.generate_resume_pdf(
-                        self.sample_resume_data, "faangpath-simple"
-                    )
+            with self.assertRaises(PdfGenerationError) as context:
+                self.service.generate_resume_pdf(
+                    self.sample_resume_data, "faangpath-simple"
+                )
 
-                self.assertIn("Failed to generate resume PDF", str(context.exception))
+            self.assertIn("Failed to generate resume PDF", str(context.exception))
 
 
 class PdfServiceIntegrationTestCase(TestCase):
@@ -230,14 +207,18 @@ class PdfServiceIntegrationTestCase(TestCase):
         mock_html_class.return_value = mock_html_instance
         mock_html_instance.write_pdf.return_value = b"%PDF-1.7 integration test pdf"
 
-        with patch.object(Path, "exists", return_value=False):
-            result = self.service.generate_resume_pdf(
-                self.sample_context, "faangpath-simple"
-            )
+        result = self.service.generate_resume_pdf(
+            self.sample_context, "faangpath-simple"
+        )
 
         self.assertEqual(result, b"%PDF-1.7 integration test pdf")
         mock_render.assert_called_once()
         mock_html_instance.write_pdf.assert_called_once()
+        # The rendered template is the whole style: an extra sheet here is what
+        # made downloads render in a different font than the live preview.
+        self.assertEqual(
+            mock_html_instance.write_pdf.call_args.kwargs["stylesheets"], []
+        )
 
 
 class PdfSanityCheckTestCase(TestCase):
