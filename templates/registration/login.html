@@ -419,6 +419,13 @@
             
             <!-- Card Body -->
             <div class="card-body">
+                <!-- One-off notices, e.g. a Google sign-in that did not complete -->
+                {% for message in messages %}
+                <div class="alert {% if message.tags == 'error' %}alert-error{% else %}alert-warning{% endif %}" data-message>
+                    <span>{{ message }}</span>
+                </div>
+                {% endfor %}
+
                 <!-- Error Messages -->
                 {% if form.errors %}
                 <div class="alert alert-error">

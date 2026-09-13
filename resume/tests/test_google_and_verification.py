@@ -334,6 +334,12 @@ class GoogleFailurePathTests(TestCase):
         response = self.client.get(reverse("google_callback"))
         self.assertRedirects(response, reverse("login"), fetch_redirect_response=False)
 
+    def test_the_sign_in_page_says_what_happened(self):
+        response = self.client.get(reverse("google_callback"), follow=True)
+        body = response.content.decode()
+        self.assertIn("data-message", body)
+        self.assertIn("could not be completed", body)
+
     def test_a_failure_while_signed_in_returns_to_the_profile(self):
         user = User.objects.create_user("connector", email="c@example.com", password=PASSWORD)
         self.client.force_login(user)
