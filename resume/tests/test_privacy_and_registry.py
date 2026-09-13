@@ -153,3 +153,29 @@ class ServerJsonTests(TestCase):
         self.assertEqual(header["name"], "Authorization")
         self.assertTrue(header["isRequired"])
         self.assertTrue(header["isSecret"])
+
+
+class PolicyMatchesTheCodeTests(TestCase):
+    """Details of the policy that follow from how the site actually works."""
+
+    def test_both_versions_mention_the_messages_cookie(self):
+        # Django's message framework keeps one-off notices in a cookie.
+        en = self.client.get(reverse("resume:privacy")).content.decode()
+        tr = self.client.get(reverse("resume:privacy_tr")).content.decode()
+        self.assertIn("one-off notices", en)
+        self.assertIn("tek seferlik bildirimleri", tr)
+
+    def test_both_versions_say_logs_can_hold_an_ip_address(self):
+        en = self.client.get(reverse("resume:privacy")).content.decode()
+        tr = self.client.get(reverse("resume:privacy_tr")).content.decode()
+        self.assertIn("IP address", en)
+        self.assertIn("IP adresinizi de içerebilen", tr)
+
+
+class SignupPrivacyNoticeTests(TestCase):
+    """KVKK asks for the information notice where the data is collected."""
+
+    def test_signup_links_to_both_policies(self):
+        body = self.client.get(reverse("signup")).content.decode()
+        self.assertIn(reverse("resume:privacy"), body)
+        self.assertIn(reverse("resume:privacy_tr"), body)

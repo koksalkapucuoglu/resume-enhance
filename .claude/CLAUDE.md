@@ -223,6 +223,8 @@ Rules when touching templates:
 ### Privacy policy and MCP Registry listing
 
 - `resume/templates/privacy.html` (`/privacy/`) and its Turkish KVKK version `privacy_tr.html` (`/gizlilik/`) state what is collected and **every processor that receives user data** — keep the two in step. When a data flow changes — a new AI call, a new third-party script or CDN, a new provider, a new stored field — update the policy in the same change; `resume/tests/test_privacy_and_registry.py` checks the named processors.
+- **Logs hold technical information, never user content.** Do not log AI prompts or responses, resume content, chat messages, job descriptions or email addresses — log ids, lengths and error types instead. The privacy policy states this, so a log line with content makes it untrue.
+- The signup page links to both policies (KVKK expects the notice where data is collected). A new place that collects personal data needs the same link.
 - Account deletion (`core.views.delete_account`, POST with password) relies on `on_delete=CASCADE` from `User`; feedback is `SET_NULL`. Adding a model with user data means deciding its `on_delete` and updating both policies and `resume/tests/test_account_deletion.py`.
 - `server.json` (repo root) is the listing for the official MCP Registry as `com.resustackapp/resustack`. Keep `version` equal to `SERVER_INFO["version"]` and `description` within 100 characters.
 - `/.well-known/mcp-registry-auth` serves `settings.MCP_REGISTRY_AUTH` (a public-key proof record from the environment) and refuses anything not starting with `v=MCPv1;`. The private key is never committed (`key.pem` is ignored).

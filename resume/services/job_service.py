@@ -149,7 +149,9 @@ def _analyze(content, description, lang="en"):
     try:
         parsed = json.loads(raw)
     except (ValueError, TypeError):
-        logger.warning("Job match returned unparseable JSON: %s", raw[:200])
+        # Length only: the response describes the user's resume, and logs are
+        # promised to hold technical information, not personal data.
+        logger.warning("Job match returned unparseable JSON (%d chars)", len(raw or ""))
         return {"error": "Could not analyse this posting. Please try again."}
 
     try:
@@ -219,7 +221,7 @@ def tailor_content(resume, description, missing_keywords=None):
     try:
         parsed = json.loads(raw)
     except (ValueError, TypeError):
-        logger.warning("Tailoring returned unparseable JSON: %s", raw[:200])
+        logger.warning("Tailoring returned unparseable JSON (%d chars)", len(raw or ""))
         return {"error": "Could not tailor the resume. Please try again."}
 
     tailored = parsed.get("resume")

@@ -486,6 +486,13 @@
                         <span id="button-text">Create Account</span>
                         <span id="button-loader" class="spinner hidden"></span>
                     </button>
+
+                    <!-- Where the data is collected is where people are told how it is used. -->
+                    <p id="signup-privacy-notice" style="margin-top: 14px; font-size: 12px; line-height: 1.5; color: #64748b; text-align: center;">
+                        By creating an account you acknowledge our
+                        <a href="{% url 'resume:privacy' %}" target="_blank" rel="noopener" style="color: #2563eb;">Privacy Policy</a>
+                        (<a href="{% url 'resume:privacy_tr' %}" hreflang="tr" target="_blank" rel="noopener" style="color: #2563eb;">Aydınlatma Metni</a>).
+                    </p>
                 </form>
             </div>
             
