@@ -228,6 +228,13 @@ Rules when touching templates:
 - Account deletion (`core.views.delete_account`, POST with password) relies on `on_delete=CASCADE` from `User`; feedback is `SET_NULL`. Adding a model with user data means deciding its `on_delete` and updating both policies and `resume/tests/test_account_deletion.py`.
 - `server.json` (repo root) is the listing for the official MCP Registry as `com.resustackapp/resustack`. Keep `version` equal to `SERVER_INFO["version"]` and `description` within 100 characters.
 - `/.well-known/mcp-registry-auth` serves `settings.MCP_REGISTRY_AUTH` (a public-key proof record from the environment) and refuses anything not starting with `v=MCPv1;`. The private key is never committed (`key.pem` is ignored).
+
+### Sign in with Google and email verification
+
+- **django-allauth is used only for Google.** ResuStack's own `login`, `SignupView` and password views keep their paths; `include("allauth.urls")` is the last entry in `core/urls.py` so ours answer first. Two authentication backends are configured, so any `login(request, user)` call must pass `backend=`.
+- **No matching on email.** `SOCIALACCOUNT_EMAIL_AUTHENTICATION` and `..._AUTO_CONNECT` stay `False`: local addresses were never verified, so matching on them enables account takeover. Google is linked to an existing account only from the Profile page (`process="connect"`). `SOCIALACCOUNT_AUTO_SIGNUP = False` forces `core.forms.GoogleSignupForm`, which asks for the transfer consent and locks the email to Google's; `core.adapters.SocialAccountAdapter` refuses unverified Google emails.
+- **Soft email verification** (`core/email_verification.py`): email sign-ups get `UserProfile.email_verification_required = True` and a signed, expiring link. While it is set, every AI entry point refuses with `_ai_locked_message` — enhance (HTML 403), imports (JSON 403), agent chat/approve (chat-shaped JSON, like the quota answer). A new AI entry point must check `_email_unverified(request)` first. Google and pre-existing accounts are never set.
+- The Google button renders only when `GOOGLE_LOGIN_ENABLED` (both credentials set); tests that render it must configure `SOCIALACCOUNT_PROVIDERS["google"]["APP"]`.
 - Every render path goes through `resume_templates.design_context(key, context)` so the tokens reach the template. A template rendered without it has no styling.
 - Only fonts installed in the image may be named (see the font packages in `Dockerfile`). A missing family falls back silently and the design stops matching its preview.
 - `_preview_runtime.html` paginates the screen preview using `data-` attributes (`data-paginate`, `data-column`, `data-header`, `data-section`, `data-item`), not class names. New layouts must mark themselves up the same way.

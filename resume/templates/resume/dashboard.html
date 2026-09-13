@@ -119,6 +119,7 @@
             </div>
 
             <!-- Messages -->
+            {% include "partials/verify_email_banner.html" %}
             {% if messages %}
             <div class="mb-6 space-y-3 relative z-[9999]" id="messagesContainer">
                 {% for message in messages %}

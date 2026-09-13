@@ -1,0 +1,17 @@
+{% comment %}
+Shown to accounts that signed up with an email address until they confirm it.
+The account works; only the AI features wait.
+{% endcomment %}
+{% if email_verification_pending %}
+<div id="verify-email-banner" role="status"
+     class="flex flex-wrap items-center gap-3 px-4 py-3 mb-4 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 text-sm">
+    <span class="material-symbols-outlined !text-[20px] shrink-0">mark_email_unread</span>
+    <span class="flex-1 min-w-[12rem]">{{ UI.verify_banner_text }}</span>
+    <form method="post" action="{% url 'resend_verification_email' %}">
+        {% csrf_token %}
+        <button type="submit" class="px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-bold hover:bg-amber-700 transition-colors">
+            {{ UI.verify_resend }}
+        </button>
+    </form>
+</div>
+{% endif %}

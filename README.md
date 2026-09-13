@@ -14,6 +14,7 @@
 - **14 designs on 6 layouts** — single column, banner, label gutter, header grid, left sidebar and right rail; ATS-safe designs are marked, and switching keeps your content
 - **English and Turkish resumes** — headings, "Present", month names and degree phrasing print in the language the resume is written in
 - **"What I'm working on"** — an optional section above Education, shown only when you tick it
+- **Sign in with Google** — or with a username and password; email sign-ups confirm their address before using the AI features
 - **PDF export** — rendered with WeasyPrint from the same template the preview uses
 
 ### AI
@@ -177,6 +178,8 @@ cd resume-enhance && cp .env.example .env
 | `POSTGRES_HOST` / `POSTGRES_PORT` | Database address | `db` / `5432` |
 | `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` | SMTP for password reset (optional) | |
 | `DOWNLOAD_LINK_MAX_AGE` | Seconds a signed PDF link stays valid (optional) | `600` |
+| `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` | Google sign-in; the button stays hidden until both are set (optional) | from Google Cloud Console |
+| `DEFAULT_FROM_EMAIL` | Sender for account emails; defaults to `EMAIL_HOST_USER` (optional) | `ResuStack <you@gmail.com>` |
 | `MCP_REGISTRY_AUTH` | MCP Registry domain proof served at `/.well-known/mcp-registry-auth` (optional, public key only) | `v=MCPv1; k=ed25519; p=...` |
 | `PAYMENT_STATUS` | `coming_soon` shows plans without taking payment; `live` enables checkout | `coming_soon` |
 | `PAYMENT_PROVIDER`, `PAYMENT_WEBHOOK_SECRET`, `CHECKOUT_URL_*`, `PRODUCT_ID_*` | Payment provider settings (optional) | |
@@ -216,6 +219,25 @@ Notes:
 - The image installs the fonts the resume designs use; nothing is fetched at render time
 
 `docker-compose.prod.yml` and the `Caddyfile` are kept for self-hosting without Dokploy; they are not what production uses.
+
+---
+
+## 🔑 Google sign-in
+
+Sign-in with Google uses [django-allauth](https://docs.allauth.org). ResuStack's own login, sign-up and password pages stay in charge; allauth adds only the Google flow.
+
+1. In [Google Cloud Console](https://console.cloud.google.com/apis/credentials), configure the **OAuth consent screen** (External), with the privacy policy URL `https://resustackapp.com/privacy/` and only the `openid`, `email` and `profile` scopes.
+2. Create an **OAuth client ID** of type *Web application* with:
+   - Authorized JavaScript origin: `https://resustackapp.com`
+   - Authorized redirect URI: `https://resustackapp.com/accounts/google/login/callback/`
+   - For local development, also `http://localhost:8000/accounts/google/login/callback/`
+3. Set `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` and redeploy.
+
+How it behaves:
+- A Google account is never attached to an existing ResuStack account because the email matches — local addresses were never verified. Existing users connect Google from their Profile page while signed in.
+- New Google users pass through a short step to pick a username and give consent to transfers abroad.
+- Google accounts with an unverified email are refused.
+- Accounts created with an email address work at once, but AI features stay locked until the address is confirmed (soft verification). Accounts created before this existed are not affected.
 
 ---
 

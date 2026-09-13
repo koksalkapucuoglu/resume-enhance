@@ -87,6 +87,8 @@
             {% endfor %}
             {% endif %}
 
+{% include "partials/verify_email_banner.html" %}
+
             <!-- Profile Info Card -->
             <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-6">
                 <div class="px-6 py-4 border-b border-slate-100 bg-slate-50">
@@ -489,6 +491,37 @@
                 </div>
             </div>
 
+            {% load socialaccount %}
+            {% if google_login_enabled %}
+            <!-- Google Account Card: linking happens only here, while signed in -->
+            <div id="google-account" class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-6">
+                <div class="px-6 py-4 border-b border-slate-100 bg-slate-50">
+                    <h2 class="font-semibold text-slate-900 flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary">link</span>
+                        {{ UI.google_card_title }}
+                    </h2>
+                </div>
+                <div class="p-6">
+                    {% get_social_accounts user as social_accounts %}
+                    {% if social_accounts.google %}
+                        <p class="text-sm text-slate-600 flex items-center gap-2">
+                            <span class="material-symbols-outlined !text-[18px] text-green-600">check_circle</span>
+                            {{ UI.google_connected }}{% if social_accounts.google.0.extra_data.email %}: {{ social_accounts.google.0.extra_data.email }}{% endif %}
+                        </p>
+                        <a href="{% url 'socialaccount_connections' %}" class="inline-block mt-4 text-sm font-semibold text-primary hover:underline">{{ UI.google_manage }}</a>
+                    {% else %}
+                        <p class="text-sm text-slate-600">{{ UI.google_card_body }}</p>
+                        <form method="post" action="{% provider_login_url 'google' process='connect' next='/accounts/profile/' %}" class="mt-4">
+                            {% csrf_token %}
+                            <button type="submit" class="px-5 py-2.5 rounded-lg bg-white border border-slate-300 text-slate-800 text-sm font-bold hover:bg-slate-50 transition-colors">
+                                {{ UI.google_connect }}
+                            </button>
+                        </form>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
             <!-- Delete Account Card -->
             <div id="delete-account" class="bg-white rounded-xl border border-red-200 shadow-sm overflow-hidden mb-6">
                 <div class="px-6 py-4 border-b border-red-100 bg-red-50">
@@ -502,6 +535,7 @@
                     <form method="post" action="{% url 'delete_account' %}" class="mt-5 space-y-4"
                           onsubmit="return confirm('{{ UI.delete_account_confirm|escapejs }}');">
                         {% csrf_token %}
+                        {% if user.has_usable_password %}
                         <div>
                             <label for="delete-account-password" class="block text-sm font-semibold text-slate-700 mb-1.5">
                                 {{ UI.delete_account_password }}
@@ -510,6 +544,16 @@
                                    autocomplete="current-password"
                                    class="w-full max-w-sm px-4 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent">
                         </div>
+                        {% else %}
+                        <div>
+                            <label for="delete-account-username" class="block text-sm font-semibold text-slate-700 mb-1.5">
+                                {{ UI.delete_account_username }}
+                            </label>
+                            <input type="text" name="confirm_username" id="delete-account-username" required autocomplete="off"
+                                   placeholder="{{ user.username }}"
+                                   class="w-full max-w-sm px-4 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent">
+                        </div>
+                        {% endif %}
                         <button type="submit"
                                 class="px-5 py-2.5 rounded-lg bg-red-600 text-white text-sm font-bold hover:bg-red-700 transition-colors">
                             {{ UI.delete_account_button }}

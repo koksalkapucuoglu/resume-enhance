@@ -1,0 +1,83 @@
+{% load static %}
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Finish signing up - ResuStack</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+    <script>
+        tailwind.config = { theme: { extend: {
+            colors: { "primary": "#2563eb" },
+            fontFamily: { "sans": ["Inter", "sans-serif"] },
+        } } }
+    </script>
+</head>
+<body class="bg-slate-100 text-slate-900 font-sans min-h-screen flex items-center justify-center p-4">
+    {% comment %}
+    The step between Google and a new account: choose a username and give the
+    consent to transfers abroad. The email address is Google's and cannot be
+    changed here.
+    {% endcomment %}
+    <main class="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-sm p-8">
+        <a href="{% url 'resume:index' %}" class="flex items-center gap-2 mb-6">
+            <img src="{% static 'img/resustack_logo.png' %}" alt="ResuStack" class="h-8 w-auto"/>
+            <span class="text-xl font-black tracking-tight">ResuStack</span>
+        </a>
+        <h1 class="text-2xl font-bold mb-1">Finish signing up</h1>
+        <p class="text-sm text-slate-500 mb-6">One step left: pick a username and confirm the consent below. / <span lang="tr">Son adım: bir kullanıcı adı seçin ve aşağıdaki rızayı onaylayın.</span></p>
+
+        {% if form.non_field_errors %}
+        <div class="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+            {% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}
+        </div>
+        {% endif %}
+
+        <form method="post" action="{% url 'socialaccount_signup' %}" class="space-y-5" id="google-signup-form">
+            {% csrf_token %}
+            {% if redirect_field_value %}
+            <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}"/>
+            {% endif %}
+
+            <div>
+                <label for="{{ form.email.id_for_label }}" class="block text-sm font-semibold text-slate-700 mb-1.5">Email</label>
+                <input type="email" id="{{ form.email.id_for_label }}" value="{{ form.email.value|default:'' }}" disabled
+                       class="w-full px-4 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-500">
+                <p class="mt-1 text-xs text-slate-400">From your Google account. / <span lang="tr">Google hesabınızdan.</span></p>
+                {% for error in form.email.errors %}<p class="mt-1 text-xs text-red-600">{{ error }}</p>{% endfor %}
+            </div>
+
+            <div>
+                <label for="{{ form.username.id_for_label }}" class="block text-sm font-semibold text-slate-700 mb-1.5">Username / <span lang="tr">Kullanıcı adı</span></label>
+                <input type="text" name="{{ form.username.html_name }}" id="{{ form.username.id_for_label }}"
+                       value="{{ form.username.value|default:'' }}" required autocomplete="username"
+                       class="w-full px-4 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                {% for error in form.username.errors %}<p class="mt-1 text-xs text-red-600">{{ error }}</p>{% endfor %}
+            </div>
+
+            <div>
+                <label for="id_privacy_consent" class="flex gap-3 items-start text-xs leading-relaxed text-slate-600 cursor-pointer">
+                    <input type="checkbox" name="privacy_consent" id="id_privacy_consent" required
+                           {% if form.privacy_consent.value %}checked{% endif %}
+                           class="mt-0.5 w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary">
+                    <span>
+                        I give my explicit consent to my personal data being transferred abroad to the service providers ResuStack needs to work
+                        (OpenAI, Hetzner, Cloudflare and Google), as described in the
+                        <a href="{% url 'resume:privacy' %}" target="_blank" rel="noopener" class="text-primary">Privacy Policy</a>.
+                        <br>
+                        <span lang="tr">Kişisel verilerimin, <a href="{% url 'resume:privacy_tr' %}" hreflang="tr" target="_blank" rel="noopener" class="text-primary">Aydınlatma Metni</a>'nde
+                        belirtildiği şekilde ResuStack'in çalışması için gerekli yurt dışındaki hizmet sağlayıcılara (OpenAI, Hetzner, Cloudflare ve Google)
+                        aktarılmasına açık rıza veriyorum.</span>
+                    </span>
+                </label>
+                {% for error in form.privacy_consent.errors %}<p class="mt-1 text-xs text-red-600">{{ error }}</p>{% endfor %}
+            </div>
+
+            <button type="submit" class="w-full py-3 rounded-lg bg-primary text-white font-bold hover:bg-blue-700 transition-colors">
+                Create account / <span lang="tr">Hesap oluştur</span>
+            </button>
+        </form>
+    </main>
+</body>
+</html>

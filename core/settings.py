@@ -67,6 +67,12 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework.authtoken",
     "mcp_server",
+    # Sign in with Google. Only allauth's social side is used; sign-in, sign-up
+    # and passwords stay on ResuStack's own views.
+    "allauth",
+    "allauth.account",
+    "allauth.socialaccount",
+    "allauth.socialaccount.providers.google",
 ]
 
 # The API is reached two ways: the site's own session, and a token the user
@@ -91,6 +97,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    "allauth.account.middleware.AccountMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
@@ -108,6 +115,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "resume.context_processors.ui_translations",
+                "core.context_processors.account_status",
             ],
         },
     },
@@ -197,6 +205,61 @@ LOGIN_URL = "/accounts/login/"  # Custom login page
 LOGIN_REDIRECT_URL = "/dashboard/"  # Redirect to dashboard after login
 LOGOUT_REDIRECT_URL = "/accounts/login/"  # Redirect to login after logout
 
+AUTHENTICATION_BACKENDS = [
+    "django.contrib.auth.backends.ModelBackend",
+    "allauth.account.auth_backends.AuthenticationBackend",
+]
+
+# --- Sign in with Google (django-allauth) -------------------------------------
+GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
+GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")
+# The Google button only appears once both credentials are configured.
+GOOGLE_LOGIN_ENABLED = bool(GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET)
+
+ACCOUNT_LOGIN_METHODS = {"username"}
+ACCOUNT_SIGNUP_FIELDS = ["username*", "email*", "password1*", "password2*"]
+# allauth sends no verification mail. Email sign-ups use ResuStack's own soft
+# verification (core/email_verification.py); Google sign-ups arrive with an
+# address Google verified, or are refused (core/adapters.py).
+ACCOUNT_EMAIL_VERIFICATION = "none"
+ACCOUNT_UNIQUE_EMAIL = True
+
+# Never sign someone in to, or attach Google to, an existing account because the
+# email matches. Addresses on local accounts were never verified, so matching on
+# them would let whoever registered an address first take over the real owner's
+# account. Linking happens only from the Profile page, while signed in.
+SOCIALACCOUNT_EMAIL_AUTHENTICATION = False
+SOCIALACCOUNT_EMAIL_AUTHENTICATION_AUTO_CONNECT = False
+# Always stop at the sign-up step: it carries the consent to transfers abroad.
+SOCIALACCOUNT_AUTO_SIGNUP = False
+# Starting a sign-in takes a POST, so a link cannot start one on someone's behalf.
+SOCIALACCOUNT_LOGIN_ON_GET = False
+SOCIALACCOUNT_STORE_TOKENS = False
+SOCIALACCOUNT_QUERY_EMAIL = True
+SOCIALACCOUNT_ADAPTER = "core.adapters.SocialAccountAdapter"
+SOCIALACCOUNT_FORMS = {"signup": "core.forms.GoogleSignupForm"}
+SOCIALACCOUNT_PROVIDERS = {
+    "google": {
+        "SCOPE": ["profile", "email"],
+        "OAUTH_PKCE_ENABLED": True,
+        "FETCH_USERINFO": False,
+        **(
+            {
+                "APP": {
+                    "client_id": GOOGLE_OAUTH_CLIENT_ID,
+                    "secret": GOOGLE_OAUTH_CLIENT_SECRET,
+                    "key": "",
+                }
+            }
+            if GOOGLE_LOGIN_ENABLED
+            else {}
+        ),
+    }
+}
+
+# How long the link in a verification email stays valid, in seconds.
+EMAIL_VERIFICATION_MAX_AGE = 3 * 24 * 60 * 60
+
 # Email Configuration
 # For development: emails are printed to console
 # EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
@@ -209,6 +272,7 @@ EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER")
 EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD")
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL") or EMAIL_HOST_USER or "webmaster@localhost"
 
 
 # Logging Configuration

@@ -952,6 +952,24 @@ def get_field_value(request, prefix, field):
     return form_index, field_value
 
 
+def _ai_locked_message(request):
+    """Why an AI feature is refused to an account that has not confirmed its email."""
+    from resume.i18n import TRANSLATIONS
+
+    lang = request.user.profile.ui_language
+    return TRANSLATIONS.get(lang, TRANSLATIONS["en"])["ai_locked"]
+
+
+def _email_unverified(request):
+    """
+    Soft email verification: the account works, AI features wait.
+
+    Checked before any quota or model call, so an unconfirmed account costs
+    nothing and cannot use a throwaway address to multiply the free allowance.
+    """
+    return request.user.profile.email_verification_required
+
+
 def enhance_field(request, prefix, field, enhance_function):
     """
     Enhances the specified field based on given enhancement function.
@@ -987,6 +1005,12 @@ def enhance_field(request, prefix, field, enhance_function):
 @login_required
 @require_http_methods(["POST"])
 def enhance_experience(request):
+    if _email_unverified(request):
+        from django.utils.html import escape
+
+        return HttpResponse(
+            f'<p class="text-red-500">{escape(_ai_locked_message(request))}</p>', status=403
+        )
     # QUOTA: Check enhance limit
     profile = request.user.profile
     if not profile.can_enhance():
@@ -1013,6 +1037,12 @@ def enhance_experience(request):
 @login_required
 @require_http_methods(["POST"])
 def enhance_project(request):
+    if _email_unverified(request):
+        from django.utils.html import escape
+
+        return HttpResponse(
+            f'<p class="text-red-500">{escape(_ai_locked_message(request))}</p>', status=403
+        )
     # QUOTA: Check enhance limit
     profile = request.user.profile
     if not profile.can_enhance():
@@ -1144,6 +1174,11 @@ def preview_resume_form(request):
 @login_required
 def upload_cv(request):
     if request.method == "POST":
+        if _email_unverified(request):
+            return JsonResponse(
+                {"error": _ai_locked_message(request), "email_verification_required": True},
+                status=403,
+            )
         # QUOTA: Check resume creation limit (PDF upload with AI parsing counts toward resume limit)
         profile = request.user.profile
         if not profile.can_create_resume():
@@ -1253,6 +1288,11 @@ def upload_cv(request):
 @login_required
 def upload_linkedin_cv(request):
     if request.method == "POST" and request.FILES.get("linkedin_file"):
+        if _email_unverified(request):
+            return JsonResponse(
+                {"error": _ai_locked_message(request), "email_verification_required": True},
+                status=403,
+            )
         # QUOTA: Check resume creation limit (PDF upload with AI parsing counts toward resume limit)
         profile = request.user.profile
         if not profile.can_create_resume():
@@ -1930,6 +1970,15 @@ def agent_chat(request):
     limited = _agent_rate_limited(request)
     if limited:
         return limited
+    if _email_unverified(request):
+        # Same shape as the quota answer, so the chat shows it as a message.
+        return JsonResponse(
+            {
+                "type": "chat",
+                "message": _ai_locked_message(request),
+                "email_verification_required": True,
+            }
+        )
 
     try:
         data = json.loads(request.body)
@@ -2065,6 +2114,15 @@ def agent_chat_stream(request):
     limited = _agent_rate_limited(request)
     if limited:
         return limited
+    if _email_unverified(request):
+        # Same shape as the quota answer, so the chat shows it as a message.
+        return JsonResponse(
+            {
+                "type": "chat",
+                "message": _ai_locked_message(request),
+                "email_verification_required": True,
+            }
+        )
 
     try:
         data = json.loads(request.body)
@@ -2109,6 +2167,15 @@ def agent_approve_stream(request):
     limited = _agent_rate_limited(request)
     if limited:
         return limited
+    if _email_unverified(request):
+        # Same shape as the quota answer, so the chat shows it as a message.
+        return JsonResponse(
+            {
+                "type": "chat",
+                "message": _ai_locked_message(request),
+                "email_verification_required": True,
+            }
+        )
 
     try:
         data = json.loads(request.body)
@@ -2178,6 +2245,15 @@ def agent_approve(request):
     limited = _agent_rate_limited(request)
     if limited:
         return limited
+    if _email_unverified(request):
+        # Same shape as the quota answer, so the chat shows it as a message.
+        return JsonResponse(
+            {
+                "type": "chat",
+                "message": _ai_locked_message(request),
+                "email_verification_required": True,
+            }
+        )
 
     try:
         data = json.loads(request.body)

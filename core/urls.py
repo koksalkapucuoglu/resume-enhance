@@ -22,7 +22,9 @@ from core.views import (
     ProfileView,
     delete_account,
     issue_api_token,
+    resend_verification_email,
     revoke_api_token,
+    verify_email,
 )
 
 urlpatterns = [
@@ -40,4 +42,15 @@ urlpatterns = [
     path("accounts/api-token/", issue_api_token, name="issue_api_token"),
     path("accounts/api-token/revoke/", revoke_api_token, name="revoke_api_token"),
     path("accounts/delete/", delete_account, name="delete_account"),
+    # "resend" before the token pattern, or it would be read as a token.
+    path(
+        "accounts/verify-email/resend/",
+        resend_verification_email,
+        name="resend_verification_email",
+    ),
+    path("accounts/verify-email/<str:token>/", verify_email, name="verify_email"),
+    # allauth last: ResuStack's own login, signup and logout above answer first
+    # on the same paths. What allauth adds is Google (accounts/google/...), the
+    # Google sign-up step and connection management (accounts/3rdparty/...).
+    path("accounts/", include("allauth.urls")),
 ]

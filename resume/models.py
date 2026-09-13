@@ -348,6 +348,11 @@ class UserProfile(models.Model):
     # accounts created before consent was asked for.
     privacy_consent_at = models.DateTimeField(null=True, blank=True)
     privacy_consent_version = models.CharField(max_length=20, blank=True, default="")
+    # Soft email verification. Set for accounts created with an email address
+    # and password, cleared when the link in the verification email is
+    # followed; AI features stay locked while it is set. Google sign-ups arrive
+    # verified, and accounts created before this existed were never set.
+    email_verification_required = models.BooleanField(default=False)
 
     # Monthly quota counters
     import_count = models.IntegerField(default=0)

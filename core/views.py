@@ -15,6 +15,16 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.http import require_http_methods
 
+from core import email_verification
+from core.consent import CONSENT_ERROR, record_privacy_consent
+
+
+def _ui(user):
+    """Interface strings in the user's chosen language."""
+    from resume.i18n import TRANSLATIONS
+
+    return TRANSLATIONS.get(user.profile.ui_language, TRANSLATIONS["en"])
+
 
 class SignupForm(UserCreationForm):
     """Custom signup form with email field."""
@@ -30,13 +40,7 @@ class SignupForm(UserCreationForm):
     # Hetzner, Cloudflare, Google). Separate from being told about the policy:
     # KVKK treats information and consent as two different things.
     privacy_consent = forms.BooleanField(
-        required=True,
-        error_messages={
-            "required": (
-                "Please give your consent to continue. / "
-                "Devam etmek için açık rızanızı vermeniz gerekiyor."
-            )
-        },
+        required=True, error_messages={"required": CONSENT_ERROR}
     )
 
     class Meta:
@@ -48,18 +52,8 @@ class SignupForm(UserCreationForm):
         user.email = self.cleaned_data["email"]
         if commit:
             user.save()
-            self.record_consent(user)
+            record_privacy_consent(user)
         return user
-
-    @staticmethod
-    def record_consent(user):
-        """Store when consent was given and to which version of the policy."""
-        from django.utils import timezone
-
-        profile = user.profile
-        profile.privacy_consent_at = timezone.now()
-        profile.privacy_consent_version = settings.PRIVACY_POLICY_VERSION
-        profile.save(update_fields=["privacy_consent_at", "privacy_consent_version"])
 
 
 class SignupView(View):
@@ -78,7 +72,14 @@ class SignupView(View):
         form = SignupForm(request.POST)
         if form.is_valid():
             user = form.save()
-            login(request, user)  # Auto-login after signup
+            # The account works now; AI features wait for the address.
+            if email_verification.require_verification(request, user):
+                messages.info(request, _ui(user)["verify_sent"])
+            else:
+                messages.warning(request, _ui(user)["verify_send_failed"])
+            # Two authentication backends are configured (allauth for Google),
+            # so Django needs to be told which one vouched for this user.
+            login(request, user, backend="django.contrib.auth.backends.ModelBackend")
             return redirect("resume:index")
 
         return render(request, "registration/signup.html", {"form": form})
@@ -117,6 +118,73 @@ def revoke_api_token(request):
     return redirect("profile")
 
 
+@require_http_methods(["GET"])
+def verify_email(request, token):
+    """
+    Follow the link from the verification email.
+
+    Works signed in or out: people often open the email on another device.
+    """
+    from django.core import signing
+
+    destination = "resume:dashboard" if request.user.is_authenticated else "login"
+    try:
+        payload = email_verification.read_token(token)
+    except signing.SignatureExpired:
+        messages.error(request, _ui_for(request)["verify_expired"])
+        return redirect(destination)
+    except signing.BadSignature:
+        messages.error(request, _ui_for(request)["verify_invalid"])
+        return redirect(destination)
+
+    user = User.objects.filter(pk=payload.get("u")).first()
+    # A link sent to an address the account no longer has is not proof of the
+    # current one.
+    if user is None or user.email != payload.get("e"):
+        messages.error(request, _ui_for(request)["verify_invalid"])
+        return redirect(destination)
+
+    profile = user.profile
+    if profile.email_verification_required:
+        profile.email_verification_required = False
+        profile.save(update_fields=["email_verification_required"])
+    messages.success(request, _ui(user)["verify_done"])
+    return redirect(destination)
+
+
+@login_required
+@require_http_methods(["POST"])
+def resend_verification_email(request):
+    """Send the verification link again, at most once a minute."""
+    from django.core.cache import cache
+    from django.utils.http import url_has_allowed_host_and_scheme
+
+    user = request.user
+    ui = _ui(user)
+    back = request.META.get("HTTP_REFERER", "")
+    if not url_has_allowed_host_and_scheme(back, allowed_hosts={request.get_host()}):
+        back = reverse("resume:dashboard")
+
+    if not user.profile.email_verification_required:
+        messages.info(request, ui["verify_already"])
+    elif not cache.add(f"verify_resend_{user.pk}", 1, 60):
+        messages.warning(request, ui["verify_wait"])
+    elif email_verification.send_verification_email(request, user):
+        messages.success(request, ui["verify_sent"])
+    else:
+        messages.error(request, ui["verify_send_failed"])
+    return redirect(back)
+
+
+def _ui_for(request):
+    """Interface strings for a request that may not be signed in."""
+    from resume.i18n import TRANSLATIONS
+
+    if request.user.is_authenticated:
+        return _ui(request.user)
+    return TRANSLATIONS["en"]
+
+
 @login_required
 @require_http_methods(["POST"])
 def delete_account(request):
@@ -129,13 +197,20 @@ def delete_account(request):
     profile and API tokens cascade; feedback is kept with the user cleared —
     and the privacy policy promises exactly that list.
     """
-    from resume.i18n import TRANSLATIONS
-
     user = request.user
-    ui = TRANSLATIONS.get(user.profile.ui_language, TRANSLATIONS["en"])
+    ui = _ui(user)
 
-    if not user.check_password(request.POST.get("password", "")):
-        messages.error(request, ui["delete_account_wrong_password"])
+    if user.has_usable_password():
+        confirmed = user.check_password(request.POST.get("password", ""))
+        failure = ui["delete_account_wrong_password"]
+    else:
+        # Accounts created with Google have no password to ask for; typing the
+        # username is the deliberate step instead.
+        confirmed = request.POST.get("confirm_username", "").strip() == user.username
+        failure = ui["delete_account_wrong_username"]
+
+    if not confirmed:
+        messages.error(request, failure)
         return redirect(f"{reverse('profile')}#delete-account")
 
     # End the session first, then delete: the message is added after the
