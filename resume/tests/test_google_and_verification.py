@@ -305,3 +305,22 @@ class EmailSettingsTests(TestCase):
             self.assertEqual(settings.EMAIL_HOST, "smtp.gmail.com")
             self.assertEqual(settings.EMAIL_PORT, 587)
             self.assertTrue(settings.EMAIL_USE_TLS)
+
+
+class GoogleUrlsWithoutCredentialsTests(TestCase):
+    """Production ran for a while without credentials; the URLs must not 500."""
+
+    @override_settings(GOOGLE_LOGIN_ENABLED=False)
+    def test_google_urls_are_not_found_until_configured(self):
+        for name in ("google_login", "google_callback"):
+            self.assertEqual(self.client.get(reverse(name)).status_code, 404, name)
+
+    @override_settings(GOOGLE_LOGIN_ENABLED=False)
+    def test_the_rest_of_the_site_is_untouched(self):
+        self.assertEqual(self.client.get(reverse("login")).status_code, 200)
+
+    @override_settings(GOOGLE_LOGIN_ENABLED=True, SOCIALACCOUNT_PROVIDERS=GOOGLE_APP)
+    def test_once_configured_sign_in_goes_to_google(self):
+        response = self.client.post(reverse("google_login"))
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response["Location"].startswith("https://accounts.google.com/"))
