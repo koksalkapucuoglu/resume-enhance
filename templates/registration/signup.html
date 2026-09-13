@@ -481,6 +481,28 @@
                         <p class="form-hint">Enter the same password as before, for verification.</p>
                     </div>
                     
+                    <!-- Explicit consent to transfers abroad (KVKK art. 9). Required:
+                         the service cannot run without these providers. -->
+                    <div class="form-group" id="privacy-consent-group">
+                        <label for="id_privacy_consent" style="display: flex; gap: 10px; align-items: flex-start; font-size: 12px; line-height: 1.5; color: #475569; cursor: pointer;">
+                            <input type="checkbox" name="privacy_consent" id="id_privacy_consent" required
+                                   {% if form.privacy_consent.value %}checked{% endif %}
+                                   style="margin-top: 3px; width: 16px; height: 16px; flex-shrink: 0; accent-color: #2563eb;">
+                            <span>
+                                I give my explicit consent to my personal data being transferred abroad to the service providers ResuStack needs to work
+                                (OpenAI, Hetzner, Cloudflare and Google), as described in the
+                                <a href="{% url 'resume:privacy' %}" target="_blank" rel="noopener" style="color: #2563eb;">Privacy Policy</a>.
+                                <br>
+                                <span lang="tr">Kişisel verilerimin, <a href="{% url 'resume:privacy_tr' %}" hreflang="tr" target="_blank" rel="noopener" style="color: #2563eb;">Aydınlatma Metni</a>'nde
+                                belirtildiği şekilde ResuStack'in çalışması için gerekli yurt dışındaki hizmet sağlayıcılara (OpenAI, Hetzner, Cloudflare ve Google)
+                                aktarılmasına açık rıza veriyorum.</span>
+                            </span>
+                        </label>
+                        {% for error in form.privacy_consent.errors %}
+                        <p class="field-error">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+
                     <!-- Submit Button -->
                     <button type="submit" class="btn-primary" id="signup-button">
                         <span id="button-text">Create Account</span>

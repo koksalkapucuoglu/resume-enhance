@@ -342,6 +342,12 @@ class UserProfile(models.Model):
     # Whether the agent stops for confirmation before changing a resume. Some
     # people want the speed and have the change history to fall back on.
     confirm_destructive = models.BooleanField(default=True)
+    # Explicit consent to transferring personal data abroad (KVKK art. 9),
+    # given at sign-up. Kept as evidence: the controller has to be able to show
+    # when consent was given and to which version of the policy. NULL for
+    # accounts created before consent was asked for.
+    privacy_consent_at = models.DateTimeField(null=True, blank=True)
+    privacy_consent_version = models.CharField(max_length=20, blank=True, default="")
 
     # Monthly quota counters
     import_count = models.IntegerField(default=0)

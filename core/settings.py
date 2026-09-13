@@ -300,6 +300,11 @@ DOWNLOAD_LINK_MAX_AGE = int(os.environ.get("DOWNLOAD_LINK_MAX_AGE", "600"))
 # key stays with whoever runs `mcp-publisher login http`.
 MCP_REGISTRY_AUTH = os.environ.get("MCP_REGISTRY_AUTH", "")
 
+# The version of the privacy policy a new user consents to at sign-up — the
+# "Last updated" date on /privacy/ and /gizlilik/. Change it together with the
+# policy text, so each stored consent points at the words it agreed to.
+PRIVACY_POLICY_VERSION = "2026-09-13"
+
 # Subscription Tier Limits
 FREE_TIER_LIMITS = {
     "import_count": 2,  # Monthly PDF imports

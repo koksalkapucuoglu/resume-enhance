@@ -26,6 +26,19 @@ class SignupForm(UserCreationForm):
         ),
     )
 
+    # Explicit consent to the transfers abroad the service depends on (OpenAI,
+    # Hetzner, Cloudflare, Google). Separate from being told about the policy:
+    # KVKK treats information and consent as two different things.
+    privacy_consent = forms.BooleanField(
+        required=True,
+        error_messages={
+            "required": (
+                "Please give your consent to continue. / "
+                "Devam etmek için açık rızanızı vermeniz gerekiyor."
+            )
+        },
+    )
+
     class Meta:
         model = User
         fields = ("username", "email", "password1", "password2")
@@ -35,7 +48,18 @@ class SignupForm(UserCreationForm):
         user.email = self.cleaned_data["email"]
         if commit:
             user.save()
+            self.record_consent(user)
         return user
+
+    @staticmethod
+    def record_consent(user):
+        """Store when consent was given and to which version of the policy."""
+        from django.utils import timezone
+
+        profile = user.profile
+        profile.privacy_consent_at = timezone.now()
+        profile.privacy_consent_version = settings.PRIVACY_POLICY_VERSION
+        profile.save(update_fields=["privacy_consent_at", "privacy_consent_version"])
 
 
 class SignupView(View):
