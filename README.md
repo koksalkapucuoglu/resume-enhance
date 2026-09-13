@@ -176,7 +176,8 @@ cd resume-enhance && cp .env.example .env
 | `ALLOWED_HOSTS` | Allowed hosts | `localhost,127.0.0.1` |
 | `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | Database credentials | `postgres` |
 | `POSTGRES_HOST` / `POSTGRES_PORT` | Database address | `db` / `5432` |
-| `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` | SMTP for password reset (optional) | |
+| `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` | SMTP credentials for password resets and email verification; for Gmail, an app password | `you@gmail.com` / app password |
+| `EMAIL_HOST` / `EMAIL_PORT` / `EMAIL_USE_TLS` / `EMAIL_USE_SSL` | SMTP server; defaults to Gmail (`smtp.gmail.com`, `587`, TLS). For implicit TLS on 465, set `EMAIL_USE_SSL=True` | `smtp.gmail.com` / `587` / `True` / `False` |
 | `DOWNLOAD_LINK_MAX_AGE` | Seconds a signed PDF link stays valid (optional) | `600` |
 | `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` | Google sign-in; the button stays hidden until both are set (optional) | from Google Cloud Console |
 | `DEFAULT_FROM_EMAIL` | Sender for account emails; defaults to `EMAIL_HOST_USER` (optional) | `ResuStack <you@gmail.com>` |

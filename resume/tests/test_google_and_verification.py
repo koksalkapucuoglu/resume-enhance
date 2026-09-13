@@ -289,3 +289,19 @@ class GoogleInPrivacyPolicyTests(TestCase):
         tr = self.client.get(reverse("resume:privacy_tr")).content.decode()
         self.assertIn("If you sign in with Google", en)
         self.assertIn("Google ile giriş yaparsanız", tr)
+
+
+class EmailSettingsTests(TestCase):
+    """Account email has to work: verification locks AI until a link arrives."""
+
+    def test_tls_and_ssl_are_never_both_on(self):
+        self.assertFalse(settings.EMAIL_USE_TLS and settings.EMAIL_USE_SSL)
+
+    def test_the_defaults_are_the_gmail_setup_production_uses(self):
+        # Only meaningful when the environment does not override them.
+        import os
+
+        if not any(os.environ.get(k) for k in ("EMAIL_HOST", "EMAIL_PORT", "EMAIL_USE_TLS", "EMAIL_USE_SSL")):
+            self.assertEqual(settings.EMAIL_HOST, "smtp.gmail.com")
+            self.assertEqual(settings.EMAIL_PORT, 587)
+            self.assertTrue(settings.EMAIL_USE_TLS)

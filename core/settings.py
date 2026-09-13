@@ -267,9 +267,17 @@ EMAIL_VERIFICATION_MAX_AGE = 3 * 24 * 60 * 60
 
 # For production with SMTP (uncomment and configure):
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
+# Defaults are Gmail with an app password. Switching provider is a matter of
+# environment variables — e.g. Cloudflare Email Service needs
+# EMAIL_HOST=smtp.mx.cloudflare.net, EMAIL_PORT=465, EMAIL_USE_TLS=False,
+# EMAIL_USE_SSL=True. TLS (STARTTLS) and SSL (implicit TLS) are exclusive.
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+EMAIL_USE_SSL = os.environ.get("EMAIL_USE_SSL", "False").strip().lower() in ("1", "true", "yes")
+EMAIL_USE_TLS = (
+    not EMAIL_USE_SSL
+    and os.environ.get("EMAIL_USE_TLS", "True").strip().lower() in ("1", "true", "yes")
+)
 EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER")
 EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD")
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL") or EMAIL_HOST_USER or "webmaster@localhost"
