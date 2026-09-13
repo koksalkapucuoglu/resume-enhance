@@ -81,6 +81,40 @@ Authentication is a bearer token only; session cookies are not accepted on this 
 - Every query is scoped to the token's owner
 - Rate limited per account
 
+### Listing in the MCP Registry
+
+`server.json` at the repository root describes the server for the [official MCP Registry](https://modelcontextprotocol.io/registry/about) as `com.resustackapp/resustack`. Publishing under that name requires proving ownership of `resustackapp.com` with a file served at `/.well-known/mcp-registry-auth`:
+
+1. Generate a key pair locally. Never commit `key.pem` (it is in `.gitignore`):
+
+   ```bash
+   openssl genpkey -algorithm Ed25519 -out key.pem
+   ```
+
+2. Print the proof record and set it as the `MCP_REGISTRY_AUTH` environment variable in Dokploy, then redeploy:
+
+   ```bash
+   echo "v=MCPv1; k=ed25519; p=$(openssl pkey -in key.pem -pubout -outform DER | tail -c 32 | base64)"
+   ```
+
+3. Check it is live:
+
+   ```bash
+   curl https://resustackapp.com/.well-known/mcp-registry-auth
+   ```
+
+4. Log in and publish from the repository root:
+
+   ```bash
+   mcp-publisher login http --domain resustackapp.com --private-key "$(openssl pkey -in key.pem -noout -text | grep -A3 'priv:' | tail -n +2 | tr -d ' :\n')"
+   ```
+
+   ```bash
+   mcp-publisher publish
+   ```
+
+Bump `version` in `server.json` (and `SERVER_INFO` in `mcp_server/protocol.py`) for each new listing.
+
 ---
 
 ## 📸 Screenshots
@@ -143,6 +177,7 @@ cd resume-enhance && cp .env.example .env
 | `POSTGRES_HOST` / `POSTGRES_PORT` | Database address | `db` / `5432` |
 | `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` | SMTP for password reset (optional) | |
 | `DOWNLOAD_LINK_MAX_AGE` | Seconds a signed PDF link stays valid (optional) | `600` |
+| `MCP_REGISTRY_AUTH` | MCP Registry domain proof served at `/.well-known/mcp-registry-auth` (optional, public key only) | `v=MCPv1; k=ed25519; p=...` |
 | `PAYMENT_STATUS` | `coming_soon` shows plans without taking payment; `live` enables checkout | `coming_soon` |
 | `PAYMENT_PROVIDER`, `PAYMENT_WEBHOOK_SECRET`, `CHECKOUT_URL_*`, `PRODUCT_ID_*` | Payment provider settings (optional) | |
 
@@ -181,6 +216,12 @@ Notes:
 - The image installs the fonts the resume designs use; nothing is fetched at render time
 
 `docker-compose.prod.yml` and the `Caddyfile` are kept for self-hosting without Dokploy; they are not what production uses.
+
+---
+
+## 🔒 Privacy
+
+What ResuStack collects, who processes it (including OpenAI for AI features) and how to have it deleted: [resustackapp.com/privacy](https://resustackapp.com/privacy/).
 
 ---
 

@@ -1,0 +1,163 @@
+{% load static %}
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Privacy Policy - ResuStack</title>
+    <meta name="description" content="What ResuStack collects, why, who processes it, how long it is kept, and how to get it deleted."/>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+    <script>
+        tailwind.config = {
+            theme: { extend: {
+                colors: { "primary": "#2563eb" },
+                fontFamily: { "sans": ["Inter", "sans-serif"] },
+            } },
+        }
+    </script>
+</head>
+<body class="bg-white text-slate-900 font-sans">
+
+    <nav class="border-b border-slate-100">
+        <div class="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between">
+            <a href="{% url 'resume:index' %}" class="flex items-center gap-2">
+                <img src="{% static 'img/resustack_logo.png' %}" alt="ResuStack" class="h-7 w-auto"/>
+                <span class="text-lg font-black tracking-tight">ResuStack</span>
+            </a>
+            <a href="{% url 'resume:index' %}" class="text-sm font-semibold text-slate-500 hover:text-primary">Back to site</a>
+        </div>
+    </nav>
+
+    <main class="max-w-3xl mx-auto px-4 py-12">
+        <article class="prose prose-slate max-w-none prose-headings:font-bold prose-a:text-primary">
+            <h1>Privacy Policy</h1>
+            <p class="text-sm text-slate-500">Last updated: 13 September 2026</p>
+
+            <p>
+                ResuStack is a resume builder run by an independent developer. This page explains what we collect when you use
+                <a href="https://resustackapp.com">resustackapp.com</a> and the ResuStack MCP server, why, who processes it on our behalf,
+                how long we keep it, and how to have it deleted. Questions go to
+                <a href="mailto:koksalkapucuoglu@gmail.com">koksalkapucuoglu@gmail.com</a>.
+            </p>
+
+            <h2>The short version</h2>
+            <ul>
+                <li>We keep what you put into ResuStack so the product can work: your account and your resumes.</li>
+                <li>We do not sell your data, share it with advertisers, or use analytics or advertising trackers.</li>
+                <li>AI features send your resume text to OpenAI to generate results. A few other service providers, listed below, help run the service.</li>
+                <li>Your password is never stored in readable form.</li>
+                <li>You can delete any resume yourself, and ask us to delete your whole account.</li>
+            </ul>
+
+            <h2>What we collect</h2>
+            <h3>Your account</h3>
+            <ul>
+                <li><strong>Username and email address</strong>, used to sign you in and to reach you about your account.</li>
+                <li><strong>Your password</strong>, stored only as a salted one-way hash. We cannot read it, and nobody at ResuStack can see it.</li>
+                <li><strong>Settings and usage</strong>: interface language and mode, your plan, and monthly usage counters used to apply plan limits.</li>
+                <li><strong>API tokens</strong> you create to connect an MCP client. You can replace or revoke them on your Profile page at any time.</li>
+            </ul>
+
+            <h3>What you put into ResuStack</h3>
+            <ul>
+                <li><strong>Resume content</strong>: the details you enter or import — typically your name, contact details, links, work history, education, skills, projects and the optional "What I'm working on" section.</li>
+                <li><strong>Earlier versions</strong> of a resume, kept as restore points so changes can be undone.</li>
+                <li><strong>Imported files</strong>: when you import a PDF or a LinkedIn export, we read the file to extract its text. The file itself is not stored; the extracted details become your resume.</li>
+                <li><strong>Job applications</strong>: postings you add (title, company, link and description), match results, and a copy of the resume you attached to each application.</li>
+                <li><strong>Feedback</strong> you send us through the site.</li>
+            </ul>
+
+            <h3>Payments</h3>
+            <p>
+                When Pro purchases are enabled, payment is handled by our payment provider. Your card details go to them, not to us.
+                We keep a record of the purchase: the plan, amount, currency, date and the provider's order reference.
+            </p>
+
+            <h3>Technical data</h3>
+            <ul>
+                <li><strong>Server logs</strong> (for example requests and errors), used to keep the service running and secure.</li>
+                <li><strong>Short-lived counters</strong> tied to your account, used to rate-limit requests.</li>
+            </ul>
+
+            <h2>What stays in your browser</h2>
+            <p>
+                In Agentic Mode, your chat history and the progress of a guided build are saved in your browser's local storage, not on our servers.
+                Clearing this site's data in your browser removes them. The messages you send are still processed by our server and our AI provider to produce a reply.
+            </p>
+
+            <h2>Cookies</h2>
+            <p>
+                We use only cookies needed for the site to work: a session cookie that keeps you signed in, and a CSRF cookie that protects forms against forgery.
+                We do not use analytics or advertising cookies.
+            </p>
+
+            <h2>How we use your data</h2>
+            <ul>
+                <li>To provide the features you use: editing, AI writing and scoring, rendering PDFs, job matching, application tracking and the MCP server.</li>
+                <li>To apply plan limits and prevent abuse.</li>
+                <li>To send account emails such as password resets, and — if you asked to hear when Pro is available — that notice.</li>
+                <li>To answer you when you contact us.</li>
+            </ul>
+
+            <h2>Who processes your data</h2>
+            <p>We share data only with service providers that help us run ResuStack, and only what they need:</p>
+            <ul>
+                <li>
+                    <strong>OpenAI</strong> — when you use AI features, the relevant text is sent to OpenAI to generate a result: resume content,
+                    text extracted from imported files, your chat messages and job posting descriptions.
+                    See <a href="https://openai.com/policies/privacy-policy/">OpenAI's privacy policy</a>.
+                </li>
+                <li><strong>Our hosting provider</strong> — runs the application and stores the database.</li>
+                <li><strong>Google</strong> — delivers account emails through Gmail, and serves the fonts our pages load (Google Fonts).</li>
+                <li><strong>Lemon Squeezy</strong> — processes payments, once Pro purchases are enabled.</li>
+                <li>
+                    <strong>Content delivery networks</strong> — our pages load scripts from <code>cdn.tailwindcss.com</code> and <code>unpkg.com</code>.
+                    Like Google Fonts, these services receive your IP address and browser details when your browser loads those files.
+                </li>
+            </ul>
+            <p>
+                <strong>MCP clients you connect.</strong> If you connect Claude or another MCP client with your token, that client can read and change
+                your resumes as you instruct it. What that client does with the data is covered by its own provider's privacy policy.
+            </p>
+            <p>We may also disclose data if the law requires it.</p>
+
+            <h2>How long we keep it</h2>
+            <ul>
+                <li><strong>Resumes, versions and applications</strong> are kept until you delete them or your account.</li>
+                <li><strong>Deleting a resume</strong> also deletes its restore points and the language versions created from it. An application keeps its copy of the resume you sent until you delete the application.</li>
+                <li><strong>Deleting your account</strong>: email us from your account's address and we will delete your account, resumes, versions, applications, tokens and purchase records. Feedback you sent is kept without your name attached. Payment providers keep their own records as the law requires.</li>
+                <li><strong>Server logs</strong> are kept only as long as needed to operate and secure the service.</li>
+            </ul>
+
+            <h2>Security</h2>
+            <p>
+                The site is served over HTTPS. Passwords are hashed. Every request to your data is checked against your account, and
+                API tokens can be revoked at any time. No method of storing or transmitting data is perfectly secure, but we work to protect yours.
+            </p>
+
+            <h2>Your choices and rights</h2>
+            <p>
+                You can view and edit your resumes in the app and delete them at any time. To get a copy of your data, correct your account
+                details, or delete your account, email <a href="mailto:koksalkapucuoglu@gmail.com">koksalkapucuoglu@gmail.com</a>.
+                Depending on where you live, data-protection law may give you further rights, and you can complain to your local data-protection authority.
+            </p>
+
+            <h2>Children</h2>
+            <p>ResuStack is not intended for children under 16, and we do not knowingly collect their data.</p>
+
+            <h2>Changes to this policy</h2>
+            <p>
+                If we change this policy, we will update the date at the top. If a change is significant, we will tell you by email or with a notice on the site.
+            </p>
+
+            <h2>Contact</h2>
+            <p><a href="mailto:koksalkapucuoglu@gmail.com">koksalkapucuoglu@gmail.com</a></p>
+        </article>
+    </main>
+
+    <footer class="border-t border-slate-100 py-8">
+        <p class="max-w-3xl mx-auto px-4 text-xs text-slate-400">© 2026 ResuStack</p>
+    </footer>
+</body>
+</html>

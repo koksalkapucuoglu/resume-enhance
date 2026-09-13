@@ -10,6 +10,13 @@ urlpatterns = [
     # Short, unguessable path: this is followed by a browser with no session.
     path("d/<str:token>/", views.signed_download, name="signed_download"),
     path("pricing/", views.pricing_page, name="pricing"),
+    path("privacy/", views.privacy_policy, name="privacy"),
+    # Domain proof for publishing as com.resustackapp/* in the MCP Registry.
+    path(
+        ".well-known/mcp-registry-auth",
+        views.mcp_registry_auth,
+        name="mcp_registry_auth",
+    ),
     path("checkout/<str:plan_code>/", views.start_checkout, name="start_checkout"),
     path(
         "pricing/notify/",

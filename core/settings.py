@@ -295,6 +295,11 @@ PDF_SETTINGS = {
 # so this only bounds how long a leaked link is worth anything.
 DOWNLOAD_LINK_MAX_AGE = int(os.environ.get("DOWNLOAD_LINK_MAX_AGE", "600"))
 
+# The proof record served at /.well-known/mcp-registry-auth, e.g.
+# "v=MCPv1; k=ed25519; p=<base64 public key>". A public key only; the private
+# key stays with whoever runs `mcp-publisher login http`.
+MCP_REGISTRY_AUTH = os.environ.get("MCP_REGISTRY_AUTH", "")
+
 # Subscription Tier Limits
 FREE_TIER_LIMITS = {
     "import_count": 2,  # Monthly PDF imports

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "com.resustackapp/resustack",
+  "title": "ResuStack",
+  "description": "Build, version and render resumes as PDFs from Claude or any MCP client.",
+  "version": "1.0.0",
+  "websiteUrl": "https://resustackapp.com",
+  "repository": {
+    "url": "https://github.com/koksalkapucuoglu/resume-enhance",
+    "source": "github"
+  },
+  "icons": [
+    {
+      "src": "https://resustackapp.com/static/img/resustack_logo.png",
+      "mimeType": "image/png"
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://resustackapp.com/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Bearer token from your ResuStack Profile page (Profile > API token).",
+          "isRequired": true,
+          "isSecret": true,
+          "placeholder": "Bearer YOUR_TOKEN"
+        }
+      ]
+    }
+  ]
+}

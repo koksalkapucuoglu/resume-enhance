@@ -219,6 +219,12 @@ Rules when touching templates:
 - The template showcase is rendered from `resume_templates.catalog()` and the "Use from Claude" tool chips from the MCP registry, both passed by `landing_page`. Never hardcode design names, counts or tool names there.
 - Only claims the product backs up: no company logos, model names, scores or user counts. `resume/tests/test_landing.py` fails on the phrases the old page used and on `href="#"` dead links.
 - Screenshots live in `static/screenshots/` (landing) and `screenshots/` (README) as the same files.
+
+### Privacy policy and MCP Registry listing
+
+- `resume/templates/privacy.html` (`/privacy/`) states what is collected and **every processor that receives user data**. When a data flow changes — a new AI call, a new third-party script or CDN, a new provider, a new stored field — update the policy in the same change; `resume/tests/test_privacy_and_registry.py` checks the named processors.
+- `server.json` (repo root) is the listing for the official MCP Registry as `com.resustackapp/resustack`. Keep `version` equal to `SERVER_INFO["version"]` and `description` within 100 characters.
+- `/.well-known/mcp-registry-auth` serves `settings.MCP_REGISTRY_AUTH` (a public-key proof record from the environment) and refuses anything not starting with `v=MCPv1;`. The private key is never committed (`key.pem` is ignored).
 - Every render path goes through `resume_templates.design_context(key, context)` so the tokens reach the template. A template rendered without it has no styling.
 - Only fonts installed in the image may be named (see the font packages in `Dockerfile`). A missing family falls back silently and the design stops matching its preview.
 - `_preview_runtime.html` paginates the screen preview using `data-` attributes (`data-paginate`, `data-column`, `data-header`, `data-section`, `data-item`), not class names. New layouts must mark themselves up the same way.

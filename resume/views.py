@@ -106,6 +106,32 @@ def landing_page(request):
     )
 
 
+def privacy_policy(request):
+    """The privacy policy. Public: directories and registries link to it."""
+    return render(request, "privacy.html")
+
+
+@require_http_methods(["GET", "HEAD"])
+def mcp_registry_auth(request):
+    """
+    Domain proof for the official MCP Registry.
+
+    Serving `/.well-known/mcp-registry-auth` proves we own resustackapp.com, which
+    lets us publish under the `com.resustackapp/*` namespace. The record holds
+    only a public key; it comes from the environment so the key can be rotated
+    without a code change and never sits in the repository.
+
+    Anything that does not look like a proof record is refused, so a private
+    key pasted into the wrong variable is never published.
+    """
+    from django.http import Http404
+
+    proof = (getattr(settings, "MCP_REGISTRY_AUTH", "") or "").strip()
+    if not proof.startswith("v=MCPv1;"):
+        raise Http404("No registry proof configured.")
+    return HttpResponse(proof + "\n", content_type="text/plain; charset=utf-8")
+
+
 @login_required
 def selection_page(request):
     """Resume creation method selection page."""
