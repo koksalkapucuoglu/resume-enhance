@@ -221,7 +221,7 @@ Notes:
 
 ## 🔒 Privacy
 
-What ResuStack collects, who processes it (including OpenAI for AI features) and how to have it deleted: [resustackapp.com/privacy](https://resustackapp.com/privacy/).
+What ResuStack collects, who processes it (including OpenAI for AI features) and how to delete it: [resustackapp.com/privacy](https://resustackapp.com/privacy/). The Turkish version, written as the KVKK information notice, is at [resustackapp.com/gizlilik](https://resustackapp.com/gizlilik/). Users can delete their account and all its data from the Profile page.
 
 ---
 

@@ -17,6 +17,34 @@ from mcp_server import protocol
 
 SERVER_JSON = Path(settings.BASE_DIR) / "server.json"
 
+# Everyone who receives user data, in both language versions.
+PROCESSORS = ("OpenAI", "Hetzner", "Cloudflare", "Google", "cdn.tailwindcss.com", "unpkg.com")
+
+
+class TurkishPrivacyPolicyTests(TestCase):
+    def body(self):
+        response = self.client.get(reverse("resume:privacy_tr"))
+        self.assertEqual(response.status_code, 200)
+        return response.content.decode()
+
+    def test_is_public_and_turkish(self):
+        self.assertIn('lang="tr"', self.body())
+
+    def test_names_the_same_processors(self):
+        body = self.body()
+        for processor in PROCESSORS:
+            self.assertIn(processor, body)
+
+    def test_covers_what_the_kvkk_notice_must_state(self):
+        body = self.body()
+        for section in ("Veri sorumlusu", "hukuki sebep", "yurt dışına", "11. maddesi"):
+            self.assertIn(section, body)
+
+    def test_gives_the_privacy_contact_and_links_back(self):
+        body = self.body()
+        self.assertIn("mailto:privacy@resustackapp.com", body)
+        self.assertIn(reverse("resume:privacy"), body)
+
 
 class PrivacyPolicyTests(TestCase):
     def body(self):
@@ -30,15 +58,30 @@ class PrivacyPolicyTests(TestCase):
     def test_names_every_processor_that_receives_user_data(self):
         """AI features send resume text to OpenAI; the policy must say so."""
         body = self.body()
-        for processor in ("OpenAI", "Google", "Lemon Squeezy", "cdn.tailwindcss.com", "unpkg.com"):
+        for processor in PROCESSORS:
             self.assertIn(processor, body)
+
+    def test_says_nothing_about_payments_yet(self):
+        """No payment provider is chosen; the policy must not name one."""
+        self.assertNotIn("Lemon Squeezy", self.body())
 
     def test_states_passwords_are_hashed_not_absent(self):
         body = self.body()
         self.assertIn("one-way hash", body)
 
-    def test_gives_a_way_to_delete_the_account(self):
-        self.assertIn("mailto:", self.body())
+    def test_gives_the_privacy_contact(self):
+        self.assertIn("mailto:privacy@resustackapp.com", self.body())
+
+    def test_points_to_self_service_account_deletion(self):
+        self.assertIn("Deleting your account", self.body())
+
+    def test_makes_no_promises_we_cannot_keep(self):
+        body = self.body()
+        self.assertNotIn("copy of your data", body)
+        self.assertNotIn("tell you by email", body)
+
+    def test_links_to_the_turkish_version(self):
+        self.assertIn(reverse("resume:privacy_tr"), self.body())
 
     def test_is_linked_from_the_landing_page(self):
         landing = self.client.get(reverse("resume:index")).content.decode()

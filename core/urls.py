@@ -17,7 +17,13 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from mcp_server.views import mcp_endpoint
-from core.views import SignupView, ProfileView, issue_api_token, revoke_api_token
+from core.views import (
+    SignupView,
+    ProfileView,
+    delete_account,
+    issue_api_token,
+    revoke_api_token,
+)
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -33,4 +39,5 @@ urlpatterns = [
     path("accounts/profile/", ProfileView.as_view(), name="profile"),  # Profile page
     path("accounts/api-token/", issue_api_token, name="issue_api_token"),
     path("accounts/api-token/revoke/", revoke_api_token, name="revoke_api_token"),
+    path("accounts/delete/", delete_account, name="delete_account"),
 ]

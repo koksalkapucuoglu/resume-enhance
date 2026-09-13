@@ -111,6 +111,16 @@ def privacy_policy(request):
     return render(request, "privacy.html")
 
 
+def privacy_policy_tr(request):
+    """
+    The Turkish policy, written as the KVKK information notice.
+
+    A separate page rather than a translation toggle: it carries sections the
+    English one does not need (legal bases, transfers abroad, Article 11 rights).
+    """
+    return render(request, "privacy_tr.html")
+
+
 @require_http_methods(["GET", "HEAD"])
 def mcp_registry_auth(request):
     """

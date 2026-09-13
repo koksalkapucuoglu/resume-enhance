@@ -11,6 +11,7 @@ urlpatterns = [
     path("d/<str:token>/", views.signed_download, name="signed_download"),
     path("pricing/", views.pricing_page, name="pricing"),
     path("privacy/", views.privacy_policy, name="privacy"),
+    path("gizlilik/", views.privacy_policy_tr, name="privacy_tr"),
     # Domain proof for publishing as com.resustackapp/* in the MCP Registry.
     path(
         ".well-known/mcp-registry-auth",

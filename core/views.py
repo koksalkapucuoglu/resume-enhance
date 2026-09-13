@@ -5,7 +5,7 @@ Authentication views for user signup and profile.
 from django import forms
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import login, update_session_auth_hash
+from django.contrib.auth import login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm, PasswordChangeForm
 from django.contrib.auth.models import User
@@ -91,6 +91,35 @@ def revoke_api_token(request):
         messages.success(request, "Token revoked. Any client using it is now cut off.")
     request.session.pop("fresh_api_token", None)
     return redirect("profile")
+
+
+@login_required
+@require_http_methods(["POST"])
+def delete_account(request):
+    """
+    Delete the signed-in user's account and everything that belongs to it.
+
+    The password is asked for again because this is irreversible and a stolen
+    session should not be enough. What disappears follows from the models'
+    on_delete rules — resumes, restore points, language versions, applications,
+    profile and API tokens cascade; feedback is kept with the user cleared —
+    and the privacy policy promises exactly that list.
+    """
+    from resume.i18n import TRANSLATIONS
+
+    user = request.user
+    ui = TRANSLATIONS.get(user.profile.ui_language, TRANSLATIONS["en"])
+
+    if not user.check_password(request.POST.get("password", "")):
+        messages.error(request, ui["delete_account_wrong_password"])
+        return redirect(f"{reverse('profile')}#delete-account")
+
+    # End the session first, then delete: the message is added after the
+    # session is flushed so it survives into the next page.
+    logout(request)
+    user.delete()
+    messages.success(request, ui["delete_account_done"])
+    return redirect("resume:index")
 
 
 @method_decorator(login_required, name="dispatch")

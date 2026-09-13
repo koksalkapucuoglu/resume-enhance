@@ -1,0 +1,195 @@
+{% load static %}
+<!DOCTYPE html>
+<html class="light" lang="tr">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Gizlilik Politikası ve Aydınlatma Metni - ResuStack</title>
+    <meta name="description" content="ResuStack'in hangi kişisel verileri, hangi amaçla ve hangi hukuki sebeple işlediği, kimlere aktardığı ve haklarınız."/>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+    <script>
+        tailwind.config = {
+            theme: { extend: {
+                colors: { "primary": "#2563eb" },
+                fontFamily: { "sans": ["Inter", "sans-serif"] },
+            } },
+        }
+    </script>
+</head>
+<body class="bg-white text-slate-900 font-sans">
+
+    <nav class="border-b border-slate-100">
+        <div class="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between">
+            <a href="{% url 'resume:index' %}" class="flex items-center gap-2">
+                <img src="{% static 'img/resustack_logo.png' %}" alt="ResuStack" class="h-7 w-auto"/>
+                <span class="text-lg font-black tracking-tight">ResuStack</span>
+            </a>
+            <div class="flex items-center gap-5">
+                <a href="{% url 'resume:privacy' %}" hreflang="en" class="text-sm font-semibold text-slate-500 hover:text-primary">English</a>
+                <a href="{% url 'resume:index' %}" class="text-sm font-semibold text-slate-500 hover:text-primary">Siteye dön</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-3xl mx-auto px-4 py-12">
+        <article class="prose prose-slate max-w-none prose-headings:font-bold prose-a:text-primary">
+            <h1>Gizlilik Politikası ve Aydınlatma Metni</h1>
+            <p class="text-sm text-slate-500">Son güncelleme: 13 Eylül 2026</p>
+
+            <p>
+                Bu metin, 6698 sayılı Kişisel Verilerin Korunması Kanunu ("KVKK") kapsamında,
+                <a href="https://resustackapp.com">resustackapp.com</a> ve ResuStack MCP sunucusunu kullandığınızda hangi kişisel verilerinizin,
+                hangi amaçla ve hangi hukuki sebeple işlendiğini, kimlere aktarıldığını, ne kadar saklandığını ve haklarınızı açıklar.
+            </p>
+
+            <h2>Veri sorumlusu</h2>
+            <p>
+                ResuStack bağımsız bir geliştirici tarafından işletilmektedir. Kişisel verilerinizle ilgili tüm talepleriniz için:
+                <a href="mailto:privacy@resustackapp.com">privacy@resustackapp.com</a>.
+            </p>
+
+            <h2>Kısaca</h2>
+            <ul>
+                <li>ResuStack'e girdiğiniz verileri, ürünün çalışabilmesi için saklarız: hesabınız ve özgeçmişleriniz.</li>
+                <li>Verilerinizi satmayız, reklamcılarla paylaşmayız; analitik veya reklam takip araçları kullanmayız.</li>
+                <li>Yapay zekâ özellikleri, sonuç üretmek için özgeçmiş metninizi OpenAI'ye gönderir. Hizmeti işletmemize yardımcı olan diğer sağlayıcılar aşağıda listelenmiştir.</li>
+                <li>Şifreniz hiçbir zaman okunabilir biçimde saklanmaz.</li>
+                <li>Herhangi bir özgeçmişinizi veya hesabınızın tamamını kendiniz silebilirsiniz.</li>
+            </ul>
+
+            <h2>İşlediğimiz kişisel veriler</h2>
+            <h3>Hesap bilgileri</h3>
+            <ul>
+                <li><strong>Kullanıcı adı ve e-posta adresi</strong>: giriş yapabilmeniz ve hesabınızla ilgili size ulaşabilmemiz için.</li>
+                <li><strong>Şifre</strong>: yalnızca tuzlanmış, geri döndürülemez bir özet (hash) olarak saklanır. Şifrenizi okuyamayız; ResuStack'te kimse göremez.</li>
+                <li><strong>Ayarlar ve kullanım</strong>: arayüz dili ve modu, planınız ve plan limitlerini uygulamak için kullanılan aylık kullanım sayaçları.</li>
+                <li><strong>API anahtarları (token)</strong>: bir MCP istemcisi bağlamak için oluşturduğunuz anahtarlar. Profil sayfanızdan istediğiniz zaman yenileyebilir veya iptal edebilirsiniz.</li>
+            </ul>
+
+            <h3>ResuStack'e girdiğiniz içerik</h3>
+            <ul>
+                <li><strong>Özgeçmiş içeriği</strong>: girdiğiniz veya içe aktardığınız bilgiler — genellikle adınız, iletişim bilgileriniz, bağlantılarınız, iş deneyiminiz, eğitim bilgileriniz, yetenekleriniz, projeleriniz ve isteğe bağlı "Şu an üzerinde çalıştıklarım" bölümü.</li>
+                <li><strong>Önceki sürümler</strong>: değişikliklerin geri alınabilmesi için saklanan geri yükleme noktaları.</li>
+                <li><strong>İçe aktarılan dosyalar</strong>: bir PDF veya LinkedIn dışa aktarımı yüklediğinizde, metni çıkarmak için dosya okunur. Dosyanın kendisi saklanmaz; çıkarılan bilgiler özgeçmişiniz olur.</li>
+                <li><strong>İş başvuruları</strong>: eklediğiniz ilanlar (başlık, şirket, bağlantı ve açıklama), eşleşme sonuçları ve her başvuruya eklediğiniz özgeçmişin bir kopyası.</li>
+                <li><strong>Geri bildirim</strong>: site üzerinden bize gönderdiğiniz mesajlar.</li>
+            </ul>
+
+            <h3>Teknik veriler</h3>
+            <ul>
+                <li><strong>Sunucu kayıtları (log)</strong>: istekler ve hatalarla ilgili teknik bilgiler. Yalnızca hizmetin çalışması ve güvenliği için kullanılır.</li>
+                <li><strong>Kısa ömürlü sayaçlar</strong>: istek sınırlaması (rate limit) için hesabınıza bağlı tutulan sayaçlar.</li>
+            </ul>
+
+            <h2>Tarayıcınızda kalan veriler</h2>
+            <p>
+                Agentic Mod'daki sohbet geçmişiniz ve adım adım oluşturma ilerlemeniz sunucularımızda değil, tarayıcınızın yerel depolamasında (local storage) tutulur.
+                Tarayıcınızda bu sitenin verilerini temizlediğinizde silinir. Gönderdiğiniz mesajlar ise yanıt üretilmesi için sunucumuz ve yapay zekâ sağlayıcımız tarafından işlenir.
+            </p>
+
+            <h2>Çerezler</h2>
+            <p>
+                Yalnızca sitenin çalışması için zorunlu çerezleri kullanırız: oturumunuzu açık tutan oturum çerezi ve formları sahteciliğe karşı koruyan CSRF çerezi.
+                Analitik veya reklam çerezi kullanmayız.
+            </p>
+
+            <h2>İşleme amaçları ve hukuki sebepler</h2>
+            <ul>
+                <li>
+                    <strong>Kullandığınız özellikleri sunmak</strong> — düzenleme, yapay zekâ ile yazma ve puanlama, PDF oluşturma, ilan eşleştirme, başvuru takibi ve MCP sunucusu.
+                    Hukuki sebep: bir sözleşmenin kurulması veya ifasıyla doğrudan ilgili olması (KVKK m. 5/2-c).
+                </li>
+                <li>
+                    <strong>Plan limitlerini uygulamak, güvenliği sağlamak ve kötüye kullanımı önlemek.</strong>
+                    Hukuki sebep: temel hak ve özgürlüklerinize zarar vermemek kaydıyla meşru menfaatimiz (KVKK m. 5/2-f).
+                </li>
+                <li>
+                    <strong>Şifre sıfırlama gibi hesap e-postaları göndermek ve bize yazdığınızda yanıt vermek.</strong>
+                    Hukuki sebep: sözleşmenin ifası (KVKK m. 5/2-c).
+                </li>
+                <li>
+                    <strong>Yetkili makamların talepleri.</strong>
+                    Hukuki sebep: hukuki yükümlülüğümüzü yerine getirmek (KVKK m. 5/2-ç).
+                </li>
+            </ul>
+            <p>Kişisel verileriniz, ResuStack'e kayıt olduğunuzda, siteyi ve MCP sunucusunu kullandığınızda elektronik ortamda toplanır.</p>
+
+            <h2>Verilerin aktarıldığı taraflar</h2>
+            <p>Verileri yalnızca ResuStack'i işletmemize yardımcı olan hizmet sağlayıcılarla ve yalnızca ihtiyaç duydukları ölçüde paylaşırız:</p>
+            <ul>
+                <li>
+                    <strong>OpenAI</strong> (Amerika Birleşik Devletleri) — yapay zekâ özelliklerini kullandığınızda sonuç üretmek için ilgili metin gönderilir:
+                    özgeçmiş içeriği, içe aktarılan dosyalardan çıkarılan metin, sohbet mesajlarınız ve ilan açıklamaları.
+                    Bkz. <a href="https://openai.com/policies/privacy-policy/">OpenAI gizlilik politikası</a>.
+                </li>
+                <li><strong>Hetzner</strong> (Almanya) — uygulamayı barındırır ve veritabanını saklar.</li>
+                <li>
+                    <strong>Cloudflare</strong> — alan adımızın DNS hizmetini sağlar ve sitenin önünde vekil sunucu (proxy) olarak çalışır. ResuStack'e gelen trafik
+                    Cloudflare üzerinden geçer; Cloudflare siteyi sunmak ve korumak için IP adresinizi ve istek bilgilerini işler.
+                </li>
+                <li><strong>Google</strong> — hesap e-postalarını Gmail üzerinden iletir ve sayfalarımızın yüklediği yazı tiplerini (Google Fonts) sunar.</li>
+                <li>
+                    <strong>İçerik dağıtım ağları</strong> — sayfalarımız <code>cdn.tailwindcss.com</code> ve <code>unpkg.com</code> üzerinden betik yükler.
+                    Google Fonts gibi bu hizmetler de tarayıcınız dosyaları yüklediğinde IP adresinizi ve tarayıcı bilgilerinizi alır.
+                </li>
+            </ul>
+            <p>
+                Bu sağlayıcıların bir kısmı yurt dışındadır; bu nedenle kişisel verileriniz, hizmetin sunulması amacıyla yurt dışına aktarılmaktadır.
+            </p>
+            <p>
+                <strong>Bağladığınız MCP istemcileri.</strong> Claude veya başka bir MCP istemcisini API anahtarınızla bağlarsanız, bu istemci talimatlarınız doğrultusunda
+                özgeçmişlerinizi okuyabilir ve değiştirebilir. İstemcinin verileri nasıl işlediği, kendi sağlayıcısının gizlilik politikasına tabidir.
+            </p>
+            <p>Kanunen zorunlu olduğu hâllerde veriler yetkili kurum ve kuruluşlarla da paylaşılabilir.</p>
+
+            <h2>Saklama süreleri</h2>
+            <ul>
+                <li><strong>Özgeçmişler, sürümler ve başvurular</strong>, siz silene veya hesabınızı silene kadar saklanır.</li>
+                <li><strong>Bir özgeçmişi sildiğinizde</strong> geri yükleme noktaları ve ondan oluşturulan dil sürümleri de silinir. Bir başvuru, gönderdiğiniz özgeçmişin kopyasını siz başvuruyu silene kadar saklar.</li>
+                <li>
+                    <strong>Hesabınızı Profil sayfanızdan sildiğinizde</strong> hesabınız, ayarlarınız, özgeçmişleriniz, geri yükleme noktalarınız, dil sürümleriniz,
+                    başvurularınız ve API anahtarlarınız kalıcı olarak silinir. Gönderdiğiniz geri bildirimler adınızla ilişkisi kesilerek saklanır. Bu işlem geri alınamaz.
+                </li>
+            </ul>
+
+            <h2>Güvenlik</h2>
+            <p>
+                Site HTTPS üzerinden sunulur. Şifreler özetlenerek (hash) saklanır. Verilerinize yapılan her istek hesabınızla doğrulanır ve
+                API anahtarları istediğiniz zaman iptal edilebilir. Hiçbir saklama veya iletim yöntemi kusursuz değildir; ancak verilerinizi korumak için çalışırız.
+            </p>
+
+            <h2>KVKK kapsamındaki haklarınız</h2>
+            <p>KVKK'nın 11. maddesi uyarınca şu haklara sahipsiniz:</p>
+            <ul>
+                <li>Kişisel verilerinizin işlenip işlenmediğini öğrenme ve işlenmişse bilgi talep etme,</li>
+                <li>İşlenme amacını ve amacına uygun kullanılıp kullanılmadığını öğrenme,</li>
+                <li>Yurt içinde veya yurt dışında aktarıldığı üçüncü kişileri bilme,</li>
+                <li>Eksik veya yanlış işlenmişse düzeltilmesini isteme,</li>
+                <li>KVKK'da öngörülen şartlar çerçevesinde silinmesini veya yok edilmesini isteme,</li>
+                <li>Düzeltme ve silme işlemlerinin, verilerin aktarıldığı üçüncü kişilere bildirilmesini isteme,</li>
+                <li>Münhasıran otomatik sistemlerle analiz edilmesi sonucunda aleyhinize bir sonuç çıkmasına itiraz etme,</li>
+                <li>Kanuna aykırı işleme nedeniyle zarara uğramanız hâlinde zararın giderilmesini talep etme.</li>
+            </ul>
+            <p>
+                Özgeçmişlerinizi uygulama içinden görüntüleyebilir, düzenleyebilir ve silebilir; hesabınızı Profil sayfanızdan silebilirsiniz.
+                Diğer talepleriniz için <a href="mailto:privacy@resustackapp.com">privacy@resustackapp.com</a> adresine yazabilirsiniz.
+                Başvurunuza en geç 30 gün içinde yanıt verilir. Ayrıca Kişisel Verileri Koruma Kurulu'na şikâyette bulunma hakkınız saklıdır.
+            </p>
+
+            <h2>Çocuklar</h2>
+            <p>ResuStack 16 yaşın altındaki kişilere yönelik değildir.</p>
+
+            <h2>Bu metindeki değişiklikler</h2>
+            <p>Bu metni değiştirirsek, sayfanın başındaki tarihi güncelleriz.</p>
+
+            <h2>İletişim</h2>
+            <p><a href="mailto:privacy@resustackapp.com">privacy@resustackapp.com</a></p>
+        </article>
+    </main>
+
+    <footer class="border-t border-slate-100 py-8">
+        <p class="max-w-3xl mx-auto px-4 text-xs text-slate-400">© 2026 ResuStack</p>
+    </footer>
+</body>
+</html>

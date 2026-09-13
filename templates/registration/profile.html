@@ -489,6 +489,35 @@
                 </div>
             </div>
 
+            <!-- Delete Account Card -->
+            <div id="delete-account" class="bg-white rounded-xl border border-red-200 shadow-sm overflow-hidden mb-6">
+                <div class="px-6 py-4 border-b border-red-100 bg-red-50">
+                    <h2 class="font-semibold text-red-700 flex items-center gap-2">
+                        <span class="material-symbols-outlined">delete_forever</span>
+                        {{ UI.delete_account_title }}
+                    </h2>
+                </div>
+                <div class="p-6">
+                    <p class="text-sm text-slate-600">{{ UI.delete_account_body }}</p>
+                    <form method="post" action="{% url 'delete_account' %}" class="mt-5 space-y-4"
+                          onsubmit="return confirm('{{ UI.delete_account_confirm|escapejs }}');">
+                        {% csrf_token %}
+                        <div>
+                            <label for="delete-account-password" class="block text-sm font-semibold text-slate-700 mb-1.5">
+                                {{ UI.delete_account_password }}
+                            </label>
+                            <input type="password" name="password" id="delete-account-password" required
+                                   autocomplete="current-password"
+                                   class="w-full max-w-sm px-4 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent">
+                        </div>
+                        <button type="submit"
+                                class="px-5 py-2.5 rounded-lg bg-red-600 text-white text-sm font-bold hover:bg-red-700 transition-colors">
+                            {{ UI.delete_account_button }}
+                        </button>
+                    </form>
+                </div>
+            </div>
+
             <!-- Back to Dashboard -->
             <div class="mt-8 text-center">
                 <a href="{% url 'resume:dashboard' %}" class="text-sm text-slate-500 hover:text-primary transition-colors inline-flex items-center gap-1">
