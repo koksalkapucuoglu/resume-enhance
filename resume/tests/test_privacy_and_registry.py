@@ -17,6 +17,8 @@ from mcp_server import protocol
 
 SERVER_JSON = Path(settings.BASE_DIR) / "server.json"
 
+DATA_CONTROLLER = "Köksal Kapucuoğlu"
+
 # Everyone who receives user data, in both language versions.
 PROCESSORS = ("OpenAI", "Hetzner", "Cloudflare", "Google", "cdn.tailwindcss.com", "unpkg.com")
 
@@ -39,6 +41,10 @@ class TurkishPrivacyPolicyTests(TestCase):
         body = self.body()
         for section in ("Veri sorumlusu", "hukuki sebep", "yurt dışına", "11. maddesi"):
             self.assertIn(section, body)
+
+    def test_names_the_data_controller(self):
+        """KVKK requires the controller's identity, not a description of them."""
+        self.assertIn(DATA_CONTROLLER, self.body())
 
     def test_gives_the_privacy_contact_and_links_back(self):
         body = self.body()
@@ -71,6 +77,11 @@ class PrivacyPolicyTests(TestCase):
 
     def test_gives_the_privacy_contact(self):
         self.assertIn("mailto:privacy@resustackapp.com", self.body())
+
+    def test_names_the_data_controller(self):
+        body = self.body()
+        self.assertIn(DATA_CONTROLLER, body)
+        self.assertNotIn("independent developer", body)
 
     def test_points_to_self_service_account_deletion(self):
         self.assertIn("Deleting your account", self.body())
