@@ -1,0 +1,22 @@
+{% extends "socialaccount/_frame.html" %}
+{% comment %}
+Shown when /accounts/google/login/ is opened directly. Sign-in never starts on
+a plain GET (SOCIALACCOUNT_LOGIN_ON_GET is off), so this asks for one click.
+{% endcomment %}
+{% block title %}Continue with Google - ResuStack{% endblock %}
+{% block content %}
+    {% if process == "connect" %}
+        <h1 class="text-2xl font-bold mb-2">Connect Google</h1>
+        <p class="text-sm text-slate-500 mb-6">Connect your Google account to this ResuStack account. / <span lang="tr">Google hesabınızı bu ResuStack hesabına bağlayın.</span></p>
+    {% else %}
+        <h1 class="text-2xl font-bold mb-2">Continue with Google</h1>
+        <p class="text-sm text-slate-500 mb-6">You will be taken to Google to sign in. / <span lang="tr">Giriş için Google'a yönlendirileceksiniz.</span></p>
+    {% endif %}
+    <form method="post" id="google-continue-form">
+        {% csrf_token %}
+        <button type="submit" class="w-full py-3 rounded-lg bg-primary text-white font-bold hover:bg-blue-700 transition-colors">
+            Continue / <span lang="tr">Devam et</span>
+        </button>
+    </form>
+    <a href="{% url 'login' %}" class="block text-center mt-4 text-sm text-slate-500 hover:text-primary">Back to sign in / <span lang="tr">Girişe dön</span></a>
+{% endblock %}

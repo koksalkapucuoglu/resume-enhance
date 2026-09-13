@@ -14,7 +14,7 @@ from allauth.account.models import EmailAddress
 from allauth.core.exceptions import ImmediateHttpResponse
 from allauth.socialaccount.models import SocialAccount, SocialLogin
 from django.conf import settings
-from django.contrib.auth.models import User
+from django.contrib.auth.models import AnonymousUser, User
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.core import mail
@@ -324,3 +324,38 @@ class GoogleUrlsWithoutCredentialsTests(TestCase):
         response = self.client.post(reverse("google_login"))
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response["Location"].startswith("https://accounts.google.com/"))
+
+
+@override_settings(GOOGLE_LOGIN_ENABLED=True, SOCIALACCOUNT_PROVIDERS=GOOGLE_APP)
+class GoogleFailurePathTests(TestCase):
+    """What people see when Google sign-in does not complete."""
+
+    def test_opening_the_callback_directly_returns_to_sign_in(self):
+        response = self.client.get(reverse("google_callback"))
+        self.assertRedirects(response, reverse("login"), fetch_redirect_response=False)
+
+    def test_a_failure_while_signed_in_returns_to_the_profile(self):
+        user = User.objects.create_user("connector", email="c@example.com", password=PASSWORD)
+        self.client.force_login(user)
+        response = self.client.get(reverse("google_callback"))
+        self.assertRedirects(response, reverse("profile"), fetch_redirect_response=False)
+
+    def test_cancelling_on_google_says_so(self):
+        request = request_with_session()
+        request.user = AnonymousUser()
+        with self.assertRaises(ImmediateHttpResponse):
+            SocialAccountAdapter().on_authentication_error(request, provider=None, error="cancelled")
+        self.assertIn("cancelled", " ".join(str(m) for m in request._messages))
+
+    def test_the_continue_page_is_resustack_branded(self):
+        body = self.client.get(reverse("google_login")).content.decode()
+        self.assertIn("data-resustack-frame", body)
+        self.assertIn('id="google-continue-form"', body)
+
+    def test_the_connections_page_is_resustack_branded(self):
+        user = User.objects.create_user("manager", email="m@example.com", password=PASSWORD)
+        SocialAccount.objects.create(user=user, provider="google", uid="42", extra_data={"email": "m@gmail.com"})
+        self.client.force_login(user)
+        body = self.client.get(reverse("socialaccount_connections")).content.decode()
+        self.assertIn("data-resustack-frame", body)
+        self.assertIn("m@gmail.com", body)

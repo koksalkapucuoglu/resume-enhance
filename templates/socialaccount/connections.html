@@ -1,0 +1,50 @@
+{% extends "socialaccount/_frame.html" %}
+{% load socialaccount %}
+{% comment %}
+Connected sign-in accounts, reached from the Profile page. Removing the only
+sign-in method of an account without a password is refused by allauth; the
+error shows in form.non_field_errors.
+{% endcomment %}
+{% block title %}Connected accounts - ResuStack{% endblock %}
+{% block content %}
+    <h1 class="text-2xl font-bold mb-2">Connected accounts</h1>
+    <p class="text-sm text-slate-500 mb-6">Accounts you can use to sign in to ResuStack. / <span lang="tr">ResuStack'e giriş için kullanabileceğiniz hesaplar.</span></p>
+
+    {% if form.non_field_errors %}
+    <div class="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+        {% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}
+    </div>
+    {% endif %}
+
+    {% if form.accounts %}
+    <form method="post" action="{% url 'socialaccount_connections' %}" class="space-y-3" id="connections-form">
+        {% csrf_token %}
+        {% for choice in form.fields.account.choices %}
+            {% with account=choice.0.instance %}
+            <label class="flex items-center gap-3 p-3 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50">
+                <input type="radio" name="account" value="{{ account.pk }}" class="text-primary focus:ring-primary">
+                <span class="flex-1 text-sm">
+                    <span class="font-semibold">{{ account.get_provider.name }}</span>
+                    <span class="block text-slate-500">{{ account.extra_data.email|default:account.uid }}</span>
+                </span>
+            </label>
+            {% endwith %}
+        {% endfor %}
+        <button type="submit" class="w-full py-2.5 rounded-lg bg-white border border-red-300 text-red-600 text-sm font-bold hover:bg-red-50 transition-colors">
+            Remove selected / <span lang="tr">Seçileni kaldır</span>
+        </button>
+    </form>
+    {% else %}
+    <p class="text-sm text-slate-600">No accounts connected yet. / <span lang="tr">Henüz bağlı hesap yok.</span></p>
+    {% if google_login_enabled %}
+    <form method="post" action="{% provider_login_url 'google' process='connect' next='/accounts/profile/' %}" class="mt-4">
+        {% csrf_token %}
+        <button type="submit" class="w-full py-2.5 rounded-lg bg-white border border-slate-300 text-slate-800 text-sm font-bold hover:bg-slate-50 transition-colors">
+            Connect Google / <span lang="tr">Google'ı bağla</span>
+        </button>
+    </form>
+    {% endif %}
+    {% endif %}
+
+    <a href="{% url 'profile' %}" class="block text-center mt-6 text-sm text-slate-500 hover:text-primary">Back to profile / <span lang="tr">Profile dön</span></a>
+{% endblock %}
