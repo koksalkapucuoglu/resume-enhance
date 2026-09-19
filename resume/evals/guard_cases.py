@@ -13,10 +13,6 @@ RESUMES = {
     "alt": {"title": "Alternative — Data Engineer", "language": "en"},
 }
 
-APPLICATIONS = {
-    "acme": {"title": "Backend Engineer", "company": "Acme"},
-}
-
 CASES = [
     {
         "name": "named another resume, call acts on the active one",
@@ -69,22 +65,6 @@ CASES = [
         "tool": "modify_resume",
         "arguments": {"instruction": "Strengthen the weak bullet points"},
         "expect": "allow",
-    },
-    {
-        "name": "status update in Turkish",
-        "active": "main",
-        "conversation": [("user", "Acme'den mülakata çağrıldım!")],
-        "tool": "update_job",
-        "arguments": {"job_id": "acme", "status": "interview"},
-        "expect": "allow",
-    },
-    {
-        "name": "status argument contradicts the user",
-        "active": "main",
-        "conversation": [("user", "Acme beni reddetti maalesef")],
-        "tool": "update_job",
-        "arguments": {"job_id": "acme", "status": "offer"},
-        "expect": "block",
     },
     {
         "name": "undo right after an edit",

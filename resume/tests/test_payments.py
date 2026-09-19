@@ -4,9 +4,7 @@ import hashlib
 import hmac
 import json
 from datetime import timedelta
-from unittest.mock import patch
 
-from django.conf import settings
 from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -286,33 +284,6 @@ class PurchasedAccessUnlocksFeaturesTest(TestCase):
         self.assertTrue(profile.can_download())
         self.assertTrue(profile.can_send_agent_message())
         self.assertTrue(profile.can_create_resume())
-
-    def test_application_tracking_stops_being_capped(self):
-        """Job matching is open to everyone; Pro is what removes the ceiling."""
-        from resume.models import JobPosting
-
-        for i in range(settings.FREE_TIER_LIMITS["application_count"]):
-            JobPosting.objects.create(
-                user=self.user, title=f"Job {i}", description="advert",
-                content_hash=f"h{i}",
-            )
-        self.assertFalse(self.user.profile.can_track_application())
-
-        self.user.profile.grant_premium(90)
-        self.assertTrue(self.user.profile.can_track_application())
-
-    def test_the_cap_notice_disappears(self):
-        from resume.models import JobPosting
-
-        for i in range(settings.FREE_TIER_LIMITS["application_count"]):
-            JobPosting.objects.create(
-                user=self.user, title=f"Job {i}", description="advert",
-                content_hash=f"h{i}",
-            )
-        self.assertTrue(self.client.get(reverse("resume:jobs")).context["at_cap"])
-
-        self.user.profile.grant_premium(90)
-        self.assertFalse(self.client.get(reverse("resume:jobs")).context["at_cap"])
 
 
 @override_settings(

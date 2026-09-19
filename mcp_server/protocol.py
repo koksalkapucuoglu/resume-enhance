@@ -43,9 +43,7 @@ INSTRUCTIONS = (
     "tool: removing a resume is done by the user on the website. To fill the "
     "\"What I'm working on\" section from what the user has actually been "
     "doing, use the focus_areas_from_my_work prompt, or follow the same steps: "
-    "draft, get approval, then set_focus_areas. For a job posting, "
-    "match_job measures the resume requirement by requirement and tracks the "
-    "application; list_jobs, get_job and update_job follow it through."
+    "draft, get approval, then set_focus_areas."
 )
 
 # JSON-RPC standard codes.

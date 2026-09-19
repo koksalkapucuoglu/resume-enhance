@@ -169,3 +169,7 @@ data/
 # MCP Registry signing key — the private half never leaves the publisher's machine
 key.pem
 mcp-registry-auth
+
+# Scratch output from local debugging scripts
+.frames*.json
+.render_*.html

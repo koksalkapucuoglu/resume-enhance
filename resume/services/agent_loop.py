@@ -17,7 +17,6 @@ import logging
 import time
 import uuid
 
-from django.conf import settings
 from django.core.cache import cache
 
 from resume.openai_engine import send_openai_tool_turn, stream_openai_tool_turn
@@ -62,8 +61,6 @@ DESTRUCTIVE_COPY = {
         "delete_resume": "Delete the resume permanently",
         "revert_last_change": "Undo the most recent change",
         "create_translated_copy": "Create a translated copy",
-        "tailor_resume_for_job": "Rewrite this application's copy for the job",
-        "clone_application_resume": "Make an editable resume from this copy",
     },
     "tr": {
         "modify_resume": "CV içeriğini düzenle",
@@ -72,8 +69,6 @@ DESTRUCTIVE_COPY = {
         "delete_resume": "CV'yi kalıcı olarak sil",
         "revert_last_change": "Son değişikliği geri al",
         "create_translated_copy": "Çevrilmiş bir kopya oluştur",
-        "tailor_resume_for_job": "Bu başvurunun kopyasını ilana göre yaz",
-        "clone_application_resume": "Bu kopyadan düzenlenebilir bir CV oluştur",
     },
 }
 
@@ -103,13 +98,6 @@ STEP_COPY = {
         "upload_resume": "Getting ready for your file...",
         "delete_resume": "Deleting...",
         "revert_last_change": "Undoing the last change...",
-        "match_job": "Comparing against the posting...",
-        "rescore_job": "Re-measuring against the posting...",
-        "clone_application_resume": "Making an editable copy...",
-        "tailor_resume_for_job": "Tailoring the resume...",
-        "list_jobs": "Looking up your applications...",
-        "update_job": "Updating the application...",
-        "resume_groups": "Grouping your resumes...",
     },
     "tr": {
         "_default": "Çalışıyorum...",
@@ -133,13 +121,6 @@ STEP_COPY = {
         "upload_resume": "Dosyanız için hazırlanıyorum...",
         "delete_resume": "Siliniyor...",
         "revert_last_change": "Son değişiklik geri alınıyor...",
-        "match_job": "İlanla karşılaştırılıyor...",
-        "rescore_job": "İlana göre yeniden ölçülüyor...",
-        "clone_application_resume": "Düzenlenebilir kopya oluşturuluyor...",
-        "tailor_resume_for_job": "CV ilana göre uyarlanıyor...",
-        "list_jobs": "Başvurularınıza bakıyorum...",
-        "update_job": "Başvuru güncelleniyor...",
-        "resume_groups": "CV'leriniz gruplanıyor...",
     },
 }
 
@@ -167,32 +148,7 @@ You help the user manage and improve their resumes by calling tools. Rules:
   the user is chatting in English.
 - To give the user the same resume in a second language, use
   create_translated_copy — it keeps the original. translate_resume overwrites.
-- When the user pastes a job posting, call match_job. Pasting the same posting
-  again updates that application; it does not create a second one.
-- After match_job the side panel already shows the score and every
-  requirement. Do not list them again: reply in two or three sentences — the
-  score, the one or two gaps that matter most among required lines, and what
-  you can do next. Never suggest adding experience or skills that the
-  requirements table marks "missing"; suggest showing what is "partial"
-  more clearly, or an honest route (a course, a project) for real gaps.
-- Tailoring needs a saved posting: match_job first, tailor_resume_for_job
-  second. Tailoring rewrites that application's stored copy; it never adds a
-  resume to the user's list.
-- An application's stored copy is a record of what was sent and cannot be
-  edited. If the user wants to change it, use clone_application_resume — and
-  tell them first that the clone is a resume of their own and counts against
-  their resume limit.
-- "Fix my CV for this posting" is ambiguous while a posting is in play: it can
-  mean rewrite the application's copy (tailor_resume_for_job) or change the
-  user's own resume (modify_resume). Prefer tailoring, which leaves their
-  resume alone, and say that is what you did. Only call modify_resume as well
-  if they clearly asked to change their own resume — never both for one
-  request without saying so.
-- After tailoring or editing a resume attached to an application, offer
-  rescore_job. A score the user cannot see move is not useful to them.
-- If the posting and the resume are in different languages, say so and offer
-  create_translated_copy rather than silently tailoring across languages.
-- Language versions and per-job variants do not count against the resume limit.
+- Language versions do not count against the resume limit.
 - Prefer acting over asking. If the user's intent is clear, call the tool.
 - Never narrate an action instead of performing it. "I'll save that now" with no
   tool call is a failure; call the tool in the same turn.
@@ -205,10 +161,9 @@ You help the user manage and improve their resumes by calling tools. Rules:
 - After tools run, write a short, friendly confirmation. Do not repeat data the
   side panel already shows in full; summarise it.
 - If a tool returns an error, explain it plainly and suggest what to do next.
-- Job matching and application tracking are available to everyone; the free
-  plan tracks a few applications and then stops. If a tool reports the cap has
-  been reached, say so plainly and point at /pricing/ to see what Pro will
-  include. Pro is not on sale yet, so never imply they can buy it today.
+- If a tool reports a plan limit, say so plainly and point at /pricing/ to
+  see what Pro will include. Pro is not on sale yet, so never imply they can
+  buy it today.
 """
 
 
@@ -233,12 +188,6 @@ def _context_block(ctx):
         )
     else:
         lines.append("No resume is currently active.")
-    applications = ctx.get("applications")
-    if applications:
-        lines.append(
-            "Tracked applications (use these ids; do not ask the user to repeat "
-            f"a posting you already have): {json.dumps(applications, ensure_ascii=False)}"
-        )
     lines.append(f"Quota: {json.dumps(ctx['quota'], ensure_ascii=False)}")
     return "\n".join(lines)
 

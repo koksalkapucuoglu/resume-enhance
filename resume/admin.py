@@ -3,7 +3,6 @@ from django.utils import timezone
 
 from .models import (
     Feedback,
-    JobPosting,
     Purchase,
     Resume,
     ResumeRevision,
@@ -35,22 +34,6 @@ class ResumeRevisionAdmin(admin.ModelAdmin):
     list_filter = ("source", "created_at")
     search_fields = ("resume__title", "resume__user__username", "summary")
     raw_id_fields = ("resume",)
-    date_hierarchy = "created_at"
-
-
-@admin.register(JobPosting)
-class JobPostingAdmin(admin.ModelAdmin):
-    list_display = (
-        "title", "company", "user", "status", "match_score",
-        "source_resume", "snapshot_taken_at", "updated_at",
-    )
-    list_filter = ("status", "created_at")
-    search_fields = ("title", "company", "user__username")
-    raw_id_fields = ("user", "source_resume")
-    # The snapshot is a record of what was sent; editing it would make the
-    # application describe something that never happened.
-    readonly_fields = ("snapshot_content", "snapshot_template", "snapshot_taken_at",
-                       "content_hash", "score_history")
     date_hierarchy = "created_at"
 
 

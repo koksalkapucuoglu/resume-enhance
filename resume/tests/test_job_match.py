@@ -7,11 +7,9 @@ question so the tests read as statements about a posting.
 import json
 from unittest.mock import patch
 
-from django.contrib.auth.models import User
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase
 
-from resume.models import JobPosting, Resume
-from resume.services import agent_tools, job_match, job_service
+from resume.services import job_match
 from resume.typesafe_engine import Answers, ChoiceResult, ScoreResult
 
 POSTING = """Backend Engineer at Acme
@@ -146,46 +144,6 @@ class AnalyzeTests(SimpleTestCase):
             self.assertIsNone(job_match.analyze(CONTENT, POSTING, "en"))
 
 
-class FallbackTests(SimpleTestCase):
-    def test_the_single_call_scorer_answers_when_jev_cannot(self):
-        llm = json.dumps({"score": 55, "matched_keywords": ["Python"], "missing_keywords": ["Go"],
-                          "title": "Backend", "company": "Acme", "verdict": "ok", "suggestions": []})
-        with patch(ASK, return_value=None), \
-             patch("resume.services.job_service.send_openai_message", return_value=llm):
-            result = job_service.analyze_snapshot(CONTENT, POSTING, "en")
-        self.assertEqual(result["score"], 55)
-        self.assertEqual(result["scoring_version"], "llm-v1")
-        self.assertEqual(result["requirements"], [])
-
-
-class StoredMatchTests(TestCase):
-    def setUp(self):
-        self.user = User.objects.create_user("matcher", password="x")
-        self.resume = Resume.objects.create(user=self.user, title="CV", content=CONTENT)
-        self.user.profile.tier = "pro"
-        self.user.profile.save()
-        self.ctx = {"lang": "en", "active_resume": self.resume}
-
-    def match(self):
-        with patch(ASK, side_effect=fake_ask), patch(OPENAI, return_value=PROSE):
-            return agent_tools.match_job(self.user, self.ctx, POSTING)
-
-    def test_the_measurement_is_stored_with_the_application(self):
-        result = self.match()
-        posting = JobPosting.objects.get(pk=result.data["job_id"])
-        self.assertEqual(posting.scoring_version, "jev-1")
-        self.assertEqual(len(posting.requirements), 3)
-        self.assertEqual(posting.score_history[-1]["version"], "jev-1")
-        self.assertEqual(result.ui[0]["requirements"][0]["status"], "covered")
-        self.assertIn("posting_contained_ai_instructions", result.data)
-
-    def test_a_change_of_scorer_is_not_reported_as_a_move(self):
-        posting = JobPosting.objects.create(user=self.user, title="Old")
-        posting.record_score(40)  # the single-call scorer
-        self.assertIsNone(posting.record_score(70, scoring_version="jev-1"))
-        self.assertEqual(posting.record_score(75, scoring_version="jev-1"), 70)
-
-
 class JobMatchLogsTests(SimpleTestCase):
     def test_logs_hold_counts_not_content(self):
         with patch(ASK, side_effect=fake_ask), patch(OPENAI, return_value="not json Ada"), \
@@ -197,102 +155,13 @@ class JobMatchLogsTests(SimpleTestCase):
             self.assertNotIn(secret, logged)
 
 
-class DetectPostingTests(TestCase):
-    def setUp(self):
-        self.user = User.objects.create_user("paster", password="x")
-        self.client.force_login(self.user)
+class DetectPostingTests(SimpleTestCase):
+    def test_a_posting_is_recognised_and_other_text_is_not(self):
+        with patch(ASK, return_value=Answers(nouls={"posting": 0.93})):
+            self.assertTrue(job_match.looks_like_posting(POSTING))
+        with patch(ASK, return_value=Answers(nouls={"posting": 0.1})):
+            self.assertFalse(job_match.looks_like_posting("Dear hiring manager"))
 
-    def post(self, text):
-        from django.urls import reverse
-
-        return self.client.post(
-            reverse("resume:detect_job_posting"),
-            data=json.dumps({"text": text}),
-            content_type="application/json",
-        )
-
-    def test_a_posting_is_recognised(self):
-        with patch("resume.services.job_match.typesafe_engine.ask",
-                   return_value=Answers(nouls={"posting": 0.93})):
-            response = self.post(POSTING * 3)
-        self.assertEqual(response.json(), {"is_posting": True})
-
-    def test_other_text_is_not(self):
-        with patch("resume.services.job_match.typesafe_engine.ask",
-                   return_value=Answers(nouls={"posting": 0.1})):
-            self.assertEqual(self.post("Dear hiring manager " * 20).json(), {"is_posting": False})
-
-    def test_short_text_is_not_sent_to_jev(self):
-        with patch("resume.services.job_match.typesafe_engine.ask") as ask:
-            self.assertEqual(self.post("Python, Django").json(), {"is_posting": False})
-        ask.assert_not_called()
-
-    def test_without_jev_nothing_is_offered(self):
-        with patch("resume.services.job_match.typesafe_engine.ask", return_value=None):
-            self.assertEqual(self.post(POSTING * 3).json(), {"is_posting": False})
-
-    def test_unverified_email_is_refused(self):
-        self.user.profile.email_verification_required = True
-        self.user.profile.save()
-        with patch("resume.services.job_match.typesafe_engine.ask") as ask:
-            self.assertEqual(self.post(POSTING * 3).status_code, 403)
-        ask.assert_not_called()
-
-
-class AgenticDashboardTests(TestCase):
-    def setUp(self):
-        self.user = User.objects.create_user("agentic", password="x")
-        self.user.profile.ui_mode = "agentic"
-        self.user.profile.ui_language = "tr"
-        self.user.profile.save()
-        Resume.objects.create(user=self.user, title="Main", content=CONTENT, language="tr")
-        self.client.force_login(self.user)
-
-    def test_the_application_score_entry_and_labels_are_rendered(self):
-        from django.urls import reverse
-
-        page = self.client.get(reverse("resume:dashboard")).content.decode()
-        self.assertIn('id="app-score-btn"', page)
-        self.assertIn('id="app-score-modal"', page)
-        self.assertIn("Başvuru Skoru", page)
-        # Job wording comes from the one server table, in the interface language.
-        self.assertIn('"chip_tailor": "Bu ilan i\\u00e7in CV', page)
-        self.assertIn('"name": "Main"', page)
-
-
-class TailorWithTableTests(TestCase):
-    def setUp(self):
-        self.user = User.objects.create_user("tailor", password="x")
-        self.resume = Resume.objects.create(user=self.user, title="Main", content=CONTENT)
-        self.ctx = {"lang": "en", "active_resume": self.resume}
-        self.posting = JobPosting.objects.create(
-            user=self.user, title="Backend", company="Acme", description=POSTING,
-            source_resume=self.resume, match_score=50, scoring_version="jev-1",
-            requirements=[
-                {"text": "Kafka", "status": "partial", "must_have": 0.9,
-                 "evidence": "Engineer at Initech: RabbitMQ consumers"},
-                {"text": "PCI-DSS", "status": "missing", "must_have": 0.9, "evidence": ""},
-            ],
-        )
-
-    def test_the_rewrite_is_pointed_at_partial_lines_and_told_not_to_claim_gaps(self):
-        from resume.services import job_service
-
-        rewritten = json.dumps({"resume": CONTENT, "changes_summary": "x"})
-        with patch("resume.services.job_service.send_openai_message", return_value=rewritten) as llm:
-            job_service.tailor_content(self.resume, POSTING, requirements=self.posting.requirements)
-        sent = llm.call_args.kwargs["user_message"]
-        self.assertIn("- Kafka [Engineer at Initech: RabbitMQ consumers]", sent)
-        self.assertIn("Do NOT add them or imply them: PCI-DSS", sent)
-
-    def test_the_tailored_copy_is_measured_in_the_same_turn(self):
-        rewritten = json.dumps({"resume": CONTENT, "changes_summary": "Surfaced Kafka-like work"})
-        with patch("resume.services.job_service.send_openai_message", return_value=rewritten), \
-             patch(ASK, side_effect=fake_ask), patch(OPENAI, return_value=PROSE):
-            result = agent_tools.get_tool("tailor_resume_for_job").handler(
-                self.user, self.ctx, job_id=self.posting.id)
-        self.assertEqual(result.data["score_before"], 50)
-        self.assertEqual(result.data["score_after"], 66)
-        self.posting.refresh_from_db()
-        self.assertEqual(self.posting.match_score, 66)
-        self.assertEqual(result.ui[0]["type"], "preview")
+    def test_without_jev_there_is_no_answer(self):
+        with patch(ASK, return_value=None):
+            self.assertIsNone(job_match.looks_like_posting(POSTING))

@@ -872,7 +872,7 @@ class StreamCopyOrderTest(TestCase):
         frame = next(f for f in body.split("\n\n") if "event: copy" in f)
         payload = json.loads(frame.split("data:", 1)[1].strip())
         self.assertEqual(payload["lang"], "tr")
-        self.assertEqual(payload["ui_copy"]["job"]["jobs_title"], "Başvurular")
+        self.assertEqual(payload["ui_copy"]["diff"]["restore"], "Geri yükle")
 
 
 class ConfirmationSettingTest(TestCase):
@@ -962,53 +962,3 @@ class UploadDoesNotClaimSuccessTest(TestCase):
             self.user, self.ctx, source="pdf"
         )
         self.assertEqual(result.ui[0]["type"], "request_upload")
-
-
-class StandingContextTest(TestCase):
-    """
-    What the assistant learned from a tool is gone by the next user message, so
-    anything it must refer back to has to be in the standing context.
-    """
-
-    def setUp(self):
-        from resume.models import JobPosting
-
-        self.user = User.objects.create_user("ada", password="x")
-        self.user.profile.tier = "pro"
-        self.user.profile.save()
-        self.resume = Resume.objects.create(user=self.user, title="CV", content=content())
-        self.posting = JobPosting.objects.create(
-            user=self.user, title="Senior Python Developer", company="Shakers",
-            description="advert", content_hash="hash", match_score=60,
-            source_resume=self.resume, snapshot_content=content(),
-        )
-        self.client.force_login(self.user)
-
-    def _sent_messages(self):
-        with patch(
-            "resume.services.agent_loop.send_openai_tool_turn",
-            return_value=(assistant("ok"), USAGE),
-        ) as llm:
-            self.client.post(
-                reverse("resume:agent_chat"),
-                json.dumps({"message": "tailor my cv for that job"}),
-                content_type="application/json",
-            )
-        return llm.call_args.args[0]
-
-    def test_the_application_id_is_available_without_re_pasting(self):
-        blob = " ".join(
-            m.get("content") or "" for m in self._sent_messages()
-            if m.get("role") == "system"
-        )
-        self.assertIn(str(self.posting.id), blob)
-        self.assertIn("Senior Python Developer", blob)
-
-    def test_free_users_do_not_get_the_application_block(self):
-        self.user.profile.tier = "free"
-        self.user.profile.save()
-        blob = " ".join(
-            m.get("content") or "" for m in self._sent_messages()
-            if m.get("role") == "system"
-        )
-        self.assertNotIn("Tracked applications", blob)

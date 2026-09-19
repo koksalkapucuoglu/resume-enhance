@@ -10,7 +10,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.authtoken.models import Token
 
-from resume.models import Feedback, JobPosting, Resume, ResumeRevision
+from resume.models import Feedback, Resume, ResumeRevision
 
 
 class AccountDeletionTests(TestCase):
@@ -19,7 +19,6 @@ class AccountDeletionTests(TestCase):
         self.resume = Resume.objects.create(user=self.user, title="CV", content={"user_info": {}})
         ResumeRevision.objects.create(resume=self.resume, content={})
         Resume.objects.create(user=self.user, title="CV (TR)", content={}, derived_from=self.resume)
-        JobPosting.objects.create(user=self.user, title="Backend role")
         Token.objects.create(user=self.user)
         self.feedback = Feedback.objects.create(user=self.user, message="Nice tool")
         self.url = reverse("delete_account")
@@ -42,7 +41,6 @@ class AccountDeletionTests(TestCase):
         self.assertFalse(User.objects.filter(pk=user_id).exists())
         self.assertFalse(Resume.objects.filter(user_id=user_id).exists())
         self.assertFalse(ResumeRevision.objects.exists())
-        self.assertFalse(JobPosting.objects.filter(user_id=user_id).exists())
         self.assertFalse(Token.objects.filter(user_id=user_id).exists())
 
     def test_feedback_is_kept_without_the_name(self):

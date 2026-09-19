@@ -105,8 +105,8 @@ def guard_suite():
     from django.contrib.auth.models import User
     from django.db import transaction
 
-    from resume.evals.guard_cases import APPLICATIONS, CASES, RESUMES
-    from resume.models import JobPosting, Resume
+    from resume.evals.guard_cases import CASES, RESUMES
+    from resume.models import Resume
     from resume.services import agent_guard, agent_tools
 
     rows = []
@@ -115,9 +115,6 @@ def guard_suite():
         resumes = {
             key: Resume.objects.create(user=user, title=r["title"], language=r["language"])
             for key, r in RESUMES.items()
-        }
-        jobs = {
-            key: JobPosting.objects.create(user=user, **j) for key, j in APPLICATIONS.items()
         }
         listed = [
             {"id": r.id, "display_name": r.display_name, "language": r.language}
@@ -128,8 +125,6 @@ def guard_suite():
             for key, value in case["arguments"].items():
                 if key in agent_guard.RESUME_ARGS:
                     value = resumes[value].id
-                elif key == "job_id":
-                    value = jobs[value].id
                 arguments[key] = value
             ctx = {"active_resume": resumes[case["active"]], "resumes": listed}
             messages = [{"role": role, "content": text} for role, text in case["conversation"]]

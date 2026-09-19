@@ -31,7 +31,7 @@ from resume.services.pdf_service import (
     PdfGenerationError,
     resume_pdf_service,
 )
-from resume.models import Feedback, JobPosting, Resume, ResumeRevision
+from resume.models import Feedback, Resume, ResumeRevision
 from resume.services import diff_service, resume_content, revision_service
 
 logger = logging.getLogger(__name__)
@@ -186,17 +186,6 @@ class DashboardView(LoginRequiredMixin, ListView):
             # localStorage entry — a deleted resume, or another account's on a
             # shared browser — would otherwise render "Resume not found".
             context["owned_resume_ids"] = json.dumps([r.pk for r in resumes])
-            # For the Application Score panel's resume picker.
-            context["resume_options"] = json.dumps(
-                [{"id": r.pk, "name": r.display_name, "language": r.language} for r in resumes]
-            )
-            # Job panel wording, in the interface language until a chat turn
-            # brings the conversation's (see adoptUiCopy).
-            from resume.services import job_service
-
-            context["job_copy"] = json.dumps(
-                job_service.copy(self.request.user.profile.ui_language or "en")
-            )
             # The template pane in agentic mode is the same picker the editor
             # uses, so it stays in step with the catalogue on its own.
             context.update(
@@ -327,26 +316,6 @@ def _import_review_context(request, resume):
             for name in review.get("dropped") or []
         ],
     }
-
-
-@login_required
-@require_http_methods(["POST"])
-def detect_job_posting(request):
-    """
-    Is the text just pasted into the chat a job posting? The dashboard uses
-    the answer to offer scoring it; it never sends anything on its own.
-    """
-    from resume.services import job_match
-
-    if _email_unverified(request):
-        return JsonResponse({"error": _ai_locked_message(request)}, status=403)
-    try:
-        text = json.loads(request.body or b"{}").get("text") or ""
-    except (ValueError, AttributeError):
-        return JsonResponse({"error": "Invalid request."}, status=400)
-    if len(text.strip()) < 200:
-        return JsonResponse({"is_posting": False})
-    return JsonResponse({"is_posting": bool(job_match.looks_like_posting(text))})
 
 
 @login_required
@@ -1889,252 +1858,6 @@ def payment_webhook(request):
     return HttpResponse(status=200)
 
 
-class JobListView(LoginRequiredMixin, ListView):
-    """
-    Application tracker for the standard dashboard.
-
-    The agentic mode reaches the same data through tools; this is the same
-    thing for people who would rather see a table.
-    """
-
-    model = JobPosting
-    context_object_name = "jobs"
-    template_name = "resume/jobs.html"
-
-    def get_queryset(self):
-        # SECURITY: scoped to the caller
-        return (
-            JobPosting.objects.filter(user=self.request.user)
-            .select_related("source_resume")
-            .order_by("-updated_at")
-        )
-
-    def get_context_data(self, **kwargs):
-        from resume.services import job_board, job_service
-
-        context = super().get_context_data(**kwargs)
-        context["settings"] = settings
-        profile = self.request.user.profile
-        context["is_pro"] = profile.is_pro()
-        context["at_cap"] = not profile.can_track_application()
-        context["application_limit"] = settings.FREE_TIER_LIMITS["application_count"]
-        context["status_choices"] = JobPosting.STATUS_CHOICES
-
-        status = self.request.GET.get("status") or ""
-        if status not in dict(JobPosting.STATUS_CHOICES):
-            status = ""
-        sort = self.request.GET.get("sort") if self.request.GET.get("sort") in job_board.SORTS else "recent"
-        context.update(job_board.board(self.request.user, status or None, sort))
-        context["status_filter"] = status
-        context["sort"] = sort
-        context["open_job"] = self.request.GET.get("open") or ""
-        context["resume_options"] = Resume.objects.filter(user=self.request.user).order_by("-updated_at")
-        # A posting that matched an existing application waits here for the
-        # person to say which they meant (see score_job_posting).
-        context["pending_choice"] = self.request.session.pop("job_choice", None)
-        context["J"] = job_service.copy(profile.ui_language or "en")
-        groups = job_service.resume_groups(self.request.user)
-        # Worth showing only when it answers something: with a single resume in
-        # play, every group names the same document.
-        context["groups"] = groups if len(groups) >= 2 else []
-        return context
-
-
-@login_required
-@require_http_methods(["POST"])
-def update_job_posting(request, pk):
-    """Change a tracked application's status or the resume attached to it."""
-    posting = JobPosting.objects.filter(pk=pk, user=request.user).first()
-    if not posting:
-        messages.error(request, "Application not found.")
-        return redirect("resume:jobs")
-
-    fields = []
-    status = request.POST.get("status")
-    if status and status in dict(JobPosting.STATUS_CHOICES):
-        fields += posting.set_status(status)
-    if "notes" in request.POST:
-        posting.notes = request.POST["notes"][:5000]
-        fields.append("notes")
-    if "url" in request.POST:
-        url = request.POST["url"].strip()
-        if url and not url.startswith(("http://", "https://")):
-            url = "https://" + url
-        posting.url = url[:200]
-        fields.append("url")
-    if "applied_at" in request.POST:
-        from django.utils.dateparse import parse_date
-
-        posting.applied_at = parse_date(request.POST["applied_at"] or "") or None
-        fields.append("applied_at")
-    if fields:
-        posting.save(update_fields=sorted(set(fields)) + ["updated_at"])
-
-    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
-        return JsonResponse({
-            "status": posting.status,
-            "applied_at": posting.applied_at.isoformat() if posting.applied_at else None,
-        })
-    return redirect(f"{reverse('resume:jobs')}?open={posting.pk}#job-{posting.pk}")
-
-
-@login_required
-@require_http_methods(["POST"])
-def score_job_posting(request):
-    """
-    Measure a pasted posting against a resume from the Applications page — the
-    standard-mode way in, alongside the assistant's match_job.
-    """
-    from resume.services import job_service
-
-    jobs_url = reverse("resume:jobs")
-    if _email_unverified(request):
-        messages.error(request, _ai_locked_message(request))
-        return redirect(jobs_url)
-
-    text = (request.POST.get("posting") or "").strip()
-    # SECURITY: scoped to the caller
-    resume = Resume.objects.filter(pk=request.POST.get("resume_id") or 0, user=request.user).first()
-    if not resume:
-        messages.error(request, "Choose one of your resumes to measure.")
-        return redirect(jobs_url)
-    if len(text) < 40:
-        messages.error(request, "Paste the full posting; that is too short to measure.")
-        return redirect(jobs_url)
-
-    lang = request.user.profile.ui_language or "en"
-    outcome = job_service.match_and_record(
-        request.user, resume, text, lang, apply_to=request.POST.get("apply_to") or None
-    )
-    if "error" in outcome:
-        messages.error(request, outcome["error"])
-        return redirect(jobs_url)
-    if outcome.get("capped"):
-        messages.error(request, "You are tracking as many applications as the free plan allows.")
-        return redirect(jobs_url)
-    if outcome.get("needs_choice"):
-        request.session["job_choice"] = {
-            "existing": outcome["existing"],
-            "posting": text[: job_service.MAX_DESCRIPTION_CHARS],
-            "resume_id": resume.pk,
-        }
-        return redirect(jobs_url)
-
-    posting = outcome["posting"]
-    return redirect(f"{jobs_url}?open={posting.pk}#job-{posting.pk}")
-
-
-@login_required
-@require_http_methods(["POST"])
-def rescore_job_posting(request, pk):
-    """Measure an application's stored copy again, line by line."""
-    from resume.services import job_service
-
-    jobs_url = reverse("resume:jobs")
-    posting = (
-        JobPosting.objects.filter(pk=pk, user=request.user).select_related("source_resume").first()
-    )
-    if not posting or not posting.description or not (posting.has_snapshot or posting.source_resume):
-        messages.error(request, "That application has nothing stored to measure.")
-        return redirect(jobs_url)
-    if _email_unverified(request):
-        messages.error(request, _ai_locked_message(request))
-        return redirect(jobs_url)
-
-    # The current resume while the application is unsent, the stored copy after.
-    result, _measured = job_service.remeasure(posting, request.user.profile.ui_language or "en")
-    if "error" in result:
-        messages.error(request, result["error"])
-        return redirect(jobs_url)
-    posting.record_score(
-        result["score"], posting.source_resume_id, result["missing_keywords"],
-        requirements=result.get("requirements"),
-        scoring_version=result.get("scoring_version", "llm-v1"),
-    )
-    posting.save()
-    return redirect(f"{jobs_url}?open={posting.pk}#job-{posting.pk}")
-
-
-@login_required
-@xframe_options_sameorigin
-@require_http_methods(["GET"])
-def application_snapshot(request, pk):
-    """
-    Render what an application actually sent.
-
-    Read-only by nature: it is a record of a document that was already sent, not
-    a document to work on.
-    """
-    posting = JobPosting.objects.filter(pk=pk, user=request.user).first()
-    if not posting or not posting.has_snapshot:
-        return HttpResponse("<p>No stored resume for this application.</p>", status=404)
-
-    context = resume_content.build_context(posting.snapshot_content)
-    design = resume_templates.get(posting.snapshot_template)
-    language = (
-        posting.source_resume.language
-        if posting.source_resume
-        else Resume.normalize_language(posting.snapshot_content.get("language"))
-    )
-    with resume_templates.rendering_language(language):
-        return render(
-            request,
-            design.template_file,
-            resume_templates.design_context(design.key, context, language),
-        )
-
-
-@login_required
-@require_http_methods(["POST"])
-def clone_application_snapshot(request, pk):
-    """
-    Copy an application's stored resume into an editable one.
-
-    The clone is a resume of its own and counts against the limit — the caller
-    is expected to have said so before getting here.
-    """
-    import copy as copy_module
-
-    posting = JobPosting.objects.filter(pk=pk, user=request.user).first()
-    if not posting or not posting.has_snapshot:
-        messages.error(request, "No stored resume for this application.")
-        return redirect("resume:jobs")
-
-    if not request.user.profile.can_create_resume():
-        messages.error(
-            request,
-            f"Resume limit reached. The free plan allows "
-            f"{settings.FREE_TIER_LIMITS['resume_count']} resumes, and the copy "
-            f"would be one of them.",
-        )
-        return redirect("resume:jobs")
-
-    clone = Resume.objects.create(
-        user=request.user,
-        title=f"{posting.title} — {posting.company}".strip(" —")[:255] or "Copy",
-        content=copy_module.deepcopy(posting.snapshot_content),
-        template_selector=posting.snapshot_template or "faangpath-simple",
-        language=(
-            posting.source_resume.language if posting.source_resume else "en"
-        ),
-    )
-    messages.success(
-        request, "Editable copy created. The application still shows what you sent."
-    )
-    return redirect("resume:resume_form_edit", pk=clone.pk)
-
-
-@login_required
-@require_http_methods(["POST"])
-def delete_job_posting(request, pk):
-    """Stop tracking an application."""
-    posting = JobPosting.objects.filter(pk=pk, user=request.user).first()
-    if posting:
-        posting.delete()
-        messages.success(request, "Application removed.")
-    return redirect("resume:jobs")
-
-
 @login_required
 @require_http_methods(["POST"])
 def agent_chat(request):
@@ -2224,8 +1947,6 @@ def _stream_agent(events, active_resume_id, user_message, lang="en", on_done=Non
     Progress is emitted as it happens so the panel fills in while the model is
     still working, instead of everything landing at once when the turn ends.
     """
-    from resume.services import job_service
-
     # Panels render from streamed effects, which arrive before the final frame.
     # Send their wording first or the first panel of a Turkish conversation
     # would be labelled in whatever the interface language happens to be.
@@ -2233,7 +1954,7 @@ def _stream_agent(events, active_resume_id, user_message, lang="en", on_done=Non
         "copy",
         {
             "lang": lang,
-            "ui_copy": {"diff": diff_service.copy(lang), "job": job_service.copy(lang)},
+            "ui_copy": {"diff": diff_service.copy(lang)},
         },
     )
     try:
@@ -2511,33 +2232,12 @@ def _agent_context(request, active_resume, message="", history=None):
         if message or history
         else (profile.ui_language or "en")
     )
-    # Tool results do not survive into the next user message, so anything the
-    # assistant must be able to refer back to — "the job I just saved" — has to
-    # be part of the standing context instead.
-    applications = []
-    if profile.is_pro():
-        applications = [
-            {
-                "id": p.id,
-                "title": p.title,
-                "company": p.company,
-                "status": p.status,
-                "score": p.match_score,
-                "source_resume_id": p.source_resume_id,
-                "has_stored_copy": p.has_snapshot,
-            }
-            for p in JobPosting.objects.filter(user=request.user).order_by(
-                "-updated_at"
-            )[:10]
-        ]
-
     return {
         "lang": lang,
         "confirm_destructive": profile.confirm_destructive,
         # Superusers get a trace of each turn in the chat (agent_loop._trace).
         "debug": [] if request.user.is_superuser else None,
         "active_resume": active_resume,
-        "applications": applications,
         "resumes": [
             {
                 "rank": idx + 1,
@@ -2628,13 +2328,10 @@ def _agent_response_with_lang(outcome, active_resume_id, user_message, lang):
     travel with it — otherwise they fall back to the interface language and a
     Turkish conversation grows English headings.
     """
-    from resume.services import job_service
-
     payload = _agent_response(outcome, active_resume_id, user_message)
     payload["lang"] = lang
     payload["ui_copy"] = {
         "diff": diff_service.copy(lang),
-        "job": job_service.copy(lang),
     }
     # Kept for older clients still reading the flat key
     payload["diff_copy"] = payload["ui_copy"]["diff"]

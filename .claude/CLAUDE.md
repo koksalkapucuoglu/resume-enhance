@@ -553,33 +553,19 @@ result = send_openai_message(user_message, meta_prompt, temperature=0.7, max_tok
 - Fail-open: Jev unavailable → allow. An approved (parked) call is not re-checked.
 - A new tool that writes or spends quota belongs in `GUARDED_TOOLS`. Thresholds come from `manage.py jev_eval guard` (`resume/evals/guard_cases.py`) — add the conversation there when a wrong block or a miss is reported.
 
-### Job match scoring (`resume/services/job_match.py`)
+### Job matching — being rebuilt (2026-09-19)
 
-- `job_service._analyze` tries Jev first and falls back to the single OpenAI call (`_analyze_llm`) when Jev is unavailable. `scoring_version` (`"jev-1"` / `"llm-v1"`) is stored on `JobPosting` and in each `score_history` entry; `record_score` does not report a "previous score" across versions.
-- Pipeline: code splits the posting into lines → Jev classifies each line (requirement / responsibility / heading / about / other), P(required), and P(instruction aimed at an AI) → Jev scores each requirement against the resume as numbered lines (`evidence_lines`), a 4-level `Score` plus a `Choice` of the evidence line → code computes `composite()` (requirement weight 1 + P(required), responsibility 1) → OpenAI writes only title, company, verdict, suggestions and short labels from that table.
-- Lines judged as instructions to an AI screener are dropped before scoring and before the OpenAI prompt; the result carries `notices: ["instructions_removed"]` and the agent is told to mention it.
-- `JobPosting.requirements` holds the table: `{id, text, label, kind, must_have, level, status (covered/partial/missing), confidence, uncertain, evidence}`. Evidence is a quoted resume line, never generated.
-- Skills listed only in the skills section score "partial" by design — the useful advice is to show them in a bullet.
-- Scores repeat within ±1 for the same input. Thresholds come from `manage.py jev_eval match` (`resume/evals/match_cases.py`).
-- **Agentic UI:** "Application Score" (first quick-action chip) opens a modal — posting + resume picker — and sends the posting to the assistant as an ordinary message (`UI.app_score_message`), so the similar-posting question, history and follow-ups keep working. Pasting ≥200 chars into the chat input asks `detect_job_posting` (a Jev `Noul`); if it is a posting, an offer bar appears — nothing is sent on its own.
-- The match panel (`renderJobMatch`) groups requirements into Required / Nice to have, each expandable to the posting line and the quoted resume evidence; estimated (`llm-v1`) matches fall back to keyword chips. One follow-up chip ("Tailor my resume for this job") sends a message back through the assistant, so approval and the guardrail apply. `tailor_resume_for_job` rewrites the application's copy (never the base resume) using the requirement table — partial lines with their evidence to surface, missing lines it must not claim — then re-measures the copy in the same turn (`score_before` / `score_after`).
-- **Re-measuring** (`job_service.remeasure`, used by `rescore_job` and the /jobs button): while an application is unsent (status `saved`) and its base resume changed after the copy was taken, the current resume is measured and becomes the copy — measuring the old copy is why edits "did not count". Once sent, the stored copy is measured. `rescore_job(resume_id=...)` measures a named resume.
+The job-posting feature (JobPosting model, /jobs page, agent and MCP job tools, match panel, tailoring into application copies) was removed on branch `job-matching-v2` to be rebuilt on a simpler model; see the architecture decision before adding anything back. What stays:
+
+- **The Jev scoring engine** `resume/services/job_match.py` — `split_posting`, `evidence_lines`, `_classify` (line kind, P(required), P(instruction aimed at an AI)), `_evidence` (4-level Score + evidence-line Choice), `composite`, `looks_like_posting`. It has no model dependency; `analyze(content, description, lang, prose=)` returns the requirement table.
+- Its labelled cases and `manage.py jev_eval match`.
+- Skills listed only in the skills section, or claims like "I have knowledge of X", score "partial" by design: the rubric rewards work shown, not claims.
+
+### Agent loop notes
+
 - **Paused turns:** when a destructive call stops for approval, the later tool calls of the same assistant turn are answered with `DEFERRED_RESULT` before parking. Every `tool_call_id` needs an answer or the resumed turn fails with OpenAI 400 ("tool_calls must be followed by tool messages").
 - **Superuser debug:** `_agent_context` sets `ctx["debug"] = []` for superusers; `agent_loop._trace` records model calls, guard verdicts (with Jev scores), tool errors and timings, and the done frame carries it to a collapsible block in their chat. Never logged server-side.
-- Agentic right panel: the match panel has a "Resume" button and the resume preview a "Match" button (`lastJobMatch`); the revision history modal (`resume/_history_modal.html`, shared with the editor) opens from the active-resume bar or the preview header.
-- Stream robustness: an effect that fails to render is logged and skipped, and a stream that drops mid-way keeps what arrived — either used to surface as "Error connecting to assistant". A stored copy opens in the preview panel via `loadSnapshotPanel` (iframe `context-iframe`, edit/download hidden).
-- Job panel wording lives only in `job_service.JOB_COPY` (both languages, same keys — a test checks); the dashboard seeds `JOB_LABELS` from it and each chat turn replaces it with the conversation language's.
-- Quick chips accept `{label, message}` and use listeners, not inline `onclick` strings: a Turkish apostrophe ("CV'yi") ended the JS string.
-- **One recorder:** `job_service.match_and_record` (same-text re-measure, similar-posting question, application cap, snapshot, score) serves both the agent's `match_job` and MCP's. Change the rules there, not in either caller.
-- **MCP** (`mcp_server/tools.py`): `match_job` (needs `title` and `company` from the client, `prose=False` — no OpenAI call, the client's model writes the advice), `list_jobs`, `get_job`, `update_job`. Same application cap and email-verification lock as the web. The surface test in `mcp_server/tests/test_tools.py` lists every tool on purpose; a new tool updates it, bumps `SERVER_INFO["version"]` and `server.json` together.
-
-### Applications page (`/jobs/`, `resume/services/job_board.py`)
-
-- Reads stored measurements only — no model calls on page load. Summary: status pipeline (links filter), average score, response rate (interview+offer over sent, shown from 3 sent), and "most often missing": required lines marked missing across postings, grouped case-insensitively.
-- One card per application: score ring, "x/y required shown", top gaps, a trend line from `score_history` entries of the *current* scorer only, and a details section with the requirement table (`_job_requirements.html`), notes, posting URL, applied date, the stored copy and removal.
-- Status changes go through `JobPosting.set_status()` (agent, MCP and web): it dates `status_changed_at` and sets `applied_at` the first time a sent status is reached. Use it instead of assigning `status`.
-- "Score a posting" posts to `score_job_posting` → `job_service.match_and_record`; a similar posting stores the choice in the session and the page asks. `rescore_job_posting` re-measures the stored copy — it is how estimated (`llm-v1`) applications get a requirement table.
-- UI strings with one `{placeholder}` use the `fill` filter (`{% load ui_text %}`); `get_item` reads a dict by a variable key.
+- Agentic right panel: the revision history modal (`resume/_history_modal.html`, shared with the editor) opens from the active-resume bar or the preview header.
 
 ### WeasyPrint (PDF Generation)
 

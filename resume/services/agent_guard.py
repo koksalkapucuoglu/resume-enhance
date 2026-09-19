@@ -32,7 +32,7 @@ import logging
 from dataclasses import dataclass
 
 from resume import typesafe_engine
-from resume.models import JobPosting, Resume
+from resume.models import Resume
 from resume.typesafe_engine import Choice, Noul
 
 logger = logging.getLogger(__name__)
@@ -41,9 +41,8 @@ logger = logging.getLogger(__name__)
 # analyze, compare...) are not worth the extra round trip.
 GUARDED_TOOLS = {
     "modify_resume", "switch_template", "translate_resume", "delete_resume",
-    "revert_last_change", "create_translated_copy", "tailor_resume_for_job",
-    "clone_application_resume", "duplicate_resume", "download_resume",
-    "update_job", "rescore_job", "create_blank_resume",
+    "revert_last_change", "create_translated_copy", "duplicate_resume",
+    "download_resume", "create_blank_resume",
 }
 
 RESUME_ARGS = ("resume_id", "resume_id_1", "resume_id_2")
@@ -111,8 +110,7 @@ def check(user, ctx, messages, tool, arguments):
                 "Is `proposed_action` something the user asked for or agreed to in "
                 "`conversation`? Yes if they requested it directly, if it is a step of "
                 "a larger request they made, if they accepted the assistant's offer "
-                "to do it, or if it records news they just shared (an application's "
-                "new status). No if they asked for something else, only asked a "
+                "to do it. No if they asked for something else, only asked a "
                 "question, or declined."
             ),
             criteria={
@@ -123,7 +121,7 @@ def check(user, ctx, messages, tool, arguments):
         "args": Noul(
             instructions=(
                 "Do the arguments of `proposed_action` match what the user said in "
-                "`conversation` — the template, language, status, wording or change "
+                "`conversation` — the template, language, wording or change "
                 "they named? Arguments the user left open, filled with a reasonable "
                 "choice, count as a match."
             ),
@@ -235,9 +233,6 @@ def _readable_arguments(user, arguments, target_name):
         if key in RESUME_ARGS and value:
             resume = Resume.objects.filter(pk=value, user=user).first()
             readable[key.replace("_id", "")] = _name(resume) or f"unknown ({value})"
-        elif key == "job_id" and value:
-            posting = JobPosting.objects.filter(pk=value, user=user).first()
-            readable["application"] = posting.label if posting else f"unknown ({value})"
         elif isinstance(value, str):
             readable[key] = value[:600]
         else:

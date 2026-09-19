@@ -30,13 +30,9 @@ class Resume(models.Model):
     template_selector = models.CharField(max_length=50, default="faangpath-simple")
     # The language the resume is WRITTEN in — unrelated to the interface language.
     language = models.CharField(max_length=5, choices=LANGUAGE_CHOICES, default="en")
-    # A derived resume is the same document in another form — another language,
-    # or tailored to one job. It hangs off a base resume and does not consume a
-    # resume slot: charging twice would penalise exactly the bilingual, many-
-    # applications user this is built for.
-    # A per-job version is no longer a resume of its own: it lives inside the
-    # application as a frozen snapshot, so the resume list does not grow with
-    # every posting applied to.
+    # A derived resume is the same document in another form — another
+    # language. It hangs off a base resume and does not consume a resume slot:
+    # charging twice would penalise exactly the bilingual user this is for.
     DERIVED_TRANSLATION = "translation"
     DERIVED_KIND_CHOICES = [
         (DERIVED_TRANSLATION, "Language version"),
@@ -130,175 +126,6 @@ class Resume(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.title}"
-
-
-class JobPosting(models.Model):
-    """
-    A job the user is tracking, and the resume they are using for it.
-
-    Tags are what group resumes by the kind of work they suit — "python" roles
-    go out with one CV, "c++" roles with another — so the assistant can answer
-    "which resume do I use for C++ jobs?" from real applications rather than a
-    label the user had to maintain by hand.
-    """
-
-    STATUS_SAVED = "saved"
-    STATUS_APPLIED = "applied"
-    STATUS_INTERVIEW = "interview"
-    STATUS_OFFER = "offer"
-    STATUS_REJECTED = "rejected"
-    STATUS_CHOICES = [
-        (STATUS_SAVED, "Saved"),
-        (STATUS_APPLIED, "Applied"),
-        (STATUS_INTERVIEW, "Interview"),
-        (STATUS_OFFER, "Offer"),
-        (STATUS_REJECTED, "Rejected"),
-    ]
-
-    user = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="job_postings"
-    )
-    title = models.CharField(max_length=255)
-    company = models.CharField(max_length=255, blank=True, default="")
-    url = models.URLField(blank=True, default="")
-    description = models.TextField(blank=True, default="")
-    # Fingerprint of the posting body, so pasting the same advert twice updates
-    # the application instead of opening a second one. Derived from the text
-    # rather than the title, which the model may summarise differently.
-    content_hash = models.CharField(max_length=64, blank=True, default="", db_index=True)
-    # What was actually sent, frozen. A live reference cannot answer "what did
-    # they receive": tailoring the same resume for a later posting would rewrite
-    # this application's record of itself.
-    snapshot_content = models.JSONField(default=dict, blank=True)
-    snapshot_template = models.CharField(max_length=50, blank=True, default="")
-    snapshot_taken_at = models.DateTimeField(null=True, blank=True)
-
-    # The base resume the snapshot came from. Only used to group applications
-    # ("which resume do I send for which kind of role"), so losing the resume
-    # does not invalidate the application.
-    source_resume = models.ForeignKey(
-        Resume,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="job_postings",
-    )
-    status = models.CharField(
-        max_length=20, choices=STATUS_CHOICES, default=STATUS_SAVED
-    )
-    # When it went out, and when the status last moved — "applied 12 days ago,
-    # no answer" is the question a tracker is for. Set through `set_status`.
-    applied_at = models.DateField(null=True, blank=True)
-    status_changed_at = models.DateTimeField(null=True, blank=True)
-    notes = models.TextField(blank=True, default="")
-    # The latest measurement. Every measurement is kept in score_history as
-    # {at, score, resume_id} so "did my edit help?" has an answer.
-    match_score = models.IntegerField(null=True, blank=True)
-    score_history = models.JSONField(default=list, blank=True)
-    missing_keywords = models.JSONField(default=list, blank=True)
-    # The line-by-line measurement behind match_score: each requirement of the
-    # posting, how strongly the resume evidences it and with which line. Empty
-    # for scores from the single-call estimator (services/job_match.py).
-    requirements = models.JSONField(default=list, blank=True)
-    # Which scorer produced match_score. Scores from different scorers are not
-    # comparable, so a change of scorer is not reported as the score moving.
-    scoring_version = models.CharField(max_length=20, blank=True, default="")
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ["-updated_at", "-id"]
-        indexes = [models.Index(fields=["user", "-updated_at"])]
-
-    @staticmethod
-    def fingerprint(description):
-        """Stable id for a posting body, insensitive to whitespace and case."""
-        import hashlib
-        import re
-
-        normalized = re.sub(r"\s+", " ", (description or "")).strip().lower()
-        return hashlib.sha256(normalized.encode()).hexdigest() if normalized else ""
-
-    # Statuses that mean the application was sent.
-    SENT_STATUSES = (STATUS_APPLIED, STATUS_INTERVIEW, STATUS_OFFER, STATUS_REJECTED)
-
-    def set_status(self, status):
-        """
-        Move to `status`, dating the change. Returns the fields to save.
-
-        The first move to any sent status records applied_at, so an application
-        that goes straight from saved to interview still has a date.
-        """
-        from django.utils import timezone
-
-        fields = []
-        if status != self.status:
-            self.status = status
-            self.status_changed_at = timezone.now()
-            fields += ["status", "status_changed_at"]
-        if status in self.SENT_STATUSES and self.applied_at is None:
-            self.applied_at = timezone.localdate()
-            fields.append("applied_at")
-        return fields
-
-    def take_snapshot(self, content, template_selector, source_resume=None):
-        """Freeze what would be sent for this application."""
-        import copy as copy_module
-
-        from django.utils import timezone
-
-        self.snapshot_content = copy_module.deepcopy(content or {})
-        self.snapshot_template = template_selector or "faangpath-simple"
-        self.snapshot_taken_at = timezone.now()
-        if source_resume is not None:
-            self.source_resume = source_resume
-
-    @property
-    def has_snapshot(self):
-        return bool(self.snapshot_content)
-
-    @property
-    def snapshot_name(self):
-        """A name for the frozen document, for previews and clone titles."""
-        full_name = (self.snapshot_content.get("user_info") or {}).get(
-            "full_name", ""
-        ).strip()
-        return f"{full_name} → {self.title}" if full_name else self.title
-
-    def record_score(self, score, resume_id=None, missing_keywords=None,
-                     requirements=None, scoring_version="llm-v1"):
-        """
-        Add a measurement and return the one before it, if any.
-
-        The previous score is only returned when the same scorer produced it;
-        otherwise "your score moved from X" would compare two different scales.
-        """
-        from django.utils import timezone
-
-        comparable = (self.scoring_version or "llm-v1") == scoring_version
-        previous = self.match_score if comparable else None
-        self.score_history = list(self.score_history or [])[-19:] + [
-            {
-                "at": timezone.now().isoformat(timespec="seconds"),
-                "score": score,
-                "resume_id": resume_id,
-                "version": scoring_version,
-            }
-        ]
-        self.match_score = score
-        self.scoring_version = scoring_version
-        if missing_keywords is not None:
-            self.missing_keywords = missing_keywords
-        if requirements is not None:
-            self.requirements = requirements
-        return previous
-
-    @property
-    def label(self):
-        return f"{self.title} · {self.company}" if self.company else self.title
-
-    def __str__(self):
-        return f"{self.label} ({self.status})"
 
 
 class ResumeRevision(models.Model):
@@ -494,27 +321,12 @@ class UserProfile(models.Model):
             self.agent_message_count < settings.FREE_TIER_LIMITS["agent_message_count"]
         )
 
-    def can_track_application(self):
-        """
-        Whether another application can be tracked.
-
-        Each one stores a resume snapshot, so the free allowance is bounded.
-        """
-        if self.is_pro():
-            return True
-        from django.conf import settings
-
-        return (
-            self.user.job_postings.count()
-            < settings.FREE_TIER_LIMITS["application_count"]
-        )
-
     def can_create_resume(self):
         """
         Check if user can create a new resume.
 
-        Only base resumes count. Derived ones — language versions and per-job
-        variants — are the same document in another form.
+        Only base resumes count. Derived ones — language versions — are the
+        same document in another form.
         """
         if self.is_pro():
             return True

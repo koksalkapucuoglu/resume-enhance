@@ -256,10 +256,6 @@ class SurfaceTests(ToolTestCase):
                 "set_template",
                 "render_pdf",
                 "check_quota",
-                "match_job",
-                "list_jobs",
-                "get_job",
-                "update_job",
             },
         )
 
