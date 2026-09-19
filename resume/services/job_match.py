@@ -115,6 +115,37 @@ def analyze(content, description, lang="en"):
     }
 
 
+POSTING_ABOVE = 0.7
+
+
+def looks_like_posting(text):
+    """
+    Whether pasted text is a job advert, for offering to score it.
+
+    True, False, or None when Jev could not be asked — the caller then offers
+    nothing and the message goes to the assistant as typed.
+    """
+    answers = typesafe_engine.ask(
+        {"pasted_text": (text or "")[:6000]},
+        {
+            "posting": Noul(
+                instructions=(
+                    "Is `pasted_text` a job posting or job description — an employer "
+                    "describing a role and what they look for in candidates?"
+                ),
+                criteria={
+                    "true": "A job advert or role description.",
+                    "false": "Something else: a resume, a cover letter, an email, notes.",
+                },
+            )
+        },
+        purpose="job_match.detect",
+    )
+    if answers is None:
+        return None
+    return answers.nouls["posting"] >= POSTING_ABOVE
+
+
 # --------------------------------------------------------------------------
 # Splitting
 # --------------------------------------------------------------------------

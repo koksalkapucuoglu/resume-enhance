@@ -174,6 +174,10 @@
 
             <!-- Quick Actions -->
             <div class="px-4 py-2 border-t border-slate-100 flex overflow-x-auto gap-2 scrollbar-hide">
+                <button type="button" onclick="openAppScore()" id="app-score-btn"
+                        class="px-3 py-1.5 rounded-full bg-primary/10 hover:bg-primary/20 text-xs font-semibold text-primary transition-colors flex items-center gap-1 flex-shrink-0">
+                    <span class="material-symbols-outlined !text-[14px]">fact_check</span>{{ UI.quick_app_score }}
+                </button>
                 <button onclick="sendQuickAction('list_resumes')"
                         class="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition-colors flex items-center gap-1 flex-shrink-0">
                     <span class="material-symbols-outlined !text-[14px]">list</span>{{ UI.quick_list }}
@@ -193,6 +197,17 @@
                 <button onclick="sendQuickAction('help')"
                         class="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition-colors flex items-center gap-1 flex-shrink-0">
                     <span class="material-symbols-outlined !text-[14px]">help</span>{{ UI.quick_help }}
+                </button>
+            </div>
+
+            <!-- Offered when a job posting is pasted into the input (never sent on its own) -->
+            <div id="paste-offer" hidden class="px-4 py-2 border-t border-amber-100 bg-amber-50 flex items-center gap-2 text-xs">
+                <span class="material-symbols-outlined !text-[16px] text-amber-700">work</span>
+                <span class="text-amber-900">{{ UI.paste_job_detected }}</span>
+                <button type="button" onclick="scorePastedPosting()"
+                        class="ml-auto px-3 py-1 rounded-full bg-primary text-white font-semibold hover:bg-primary-hover">{{ UI.paste_job_score }}</button>
+                <button type="button" onclick="hidePasteOffer()" class="text-amber-800 hover:text-amber-950" aria-label="{{ UI.app_score_cancel }}">
+                    <span class="material-symbols-outlined !text-[16px]">close</span>
                 </button>
             </div>
 
@@ -397,6 +412,11 @@ const PROACTIVE_SUGGESTIONS = {{ proactive_suggestions|default:"[]"|safe }};
 const BADGE_MODERN = "{{ UI.badge_modern }}";
 const BADGE_CLASSIC = "{{ UI.badge_classic }}";
 // Set when arriving via /dashboard/?resume=<pk> (e.g. handed over by the editor)
+const RESUME_OPTIONS = {{ resume_options|default:"[]"|safe }};
+const APP_SCORE_LABELS = {
+  message:   `{{ UI.app_score_message|escapejs }}`,
+  too_short: `{{ UI.app_score_too_short|escapejs }}`,
+};
 const CHAT_LANG = "{{ ui_lang }}";
 const STREAM_LABELS = {
   interrupted: `{{ UI.stream_interrupted|escapejs }}`,
@@ -529,25 +549,9 @@ let DIFF_LABELS = {
   title: `{{ UI.history_title|escapejs }}`,
 };
 let conversationLang = "{{ ui_lang }}";
-let JOB_LABELS = {
-  match_title:  `{{ UI.job_match_title|escapejs }}`,
-  match_score:  `{{ UI.job_match_score|escapejs }}`,
-  matched:      `{{ UI.job_matched|escapejs }}`,
-  missing:      `{{ UI.job_missing|escapejs }}`,
-  suggestions:  `{{ UI.job_suggestions|escapejs }}`,
-  none:         `{{ UI.job_none|escapejs }}`,
-  jobs_title:   `{{ UI.jobs_title|escapejs }}`,
-  jobs_empty:   `{{ UI.jobs_empty|escapejs }}`,
-  groups_title: `{{ UI.groups_title|escapejs }}`,
-  groups_empty: `{{ UI.groups_empty|escapejs }}`,
-  status: {
-    saved:     `{{ UI.job_status_saved|escapejs }}`,
-    applied:   `{{ UI.job_status_applied|escapejs }}`,
-    interview: `{{ UI.job_status_interview|escapejs }}`,
-    offer:     `{{ UI.job_status_offer|escapejs }}`,
-    rejected:  `{{ UI.job_status_rejected|escapejs }}`,
-  },
-};
+// Job panel wording (services/job_service.JOB_COPY), in the interface language
+// until a chat turn brings the conversation's.
+let JOB_LABELS = {{ job_copy|default:"{}"|safe }};
 
 // Inline "see what changed / undo" affordance under the bot's reply
 function appendChangeReviewBar(resumeId) {
@@ -846,6 +850,95 @@ function sendQuickAction(intentLabel) {
 }
 
 // ---------------------------------------------------------------------------
+// Application Score: the posting goes to the assistant as a normal message, so
+// the similar-posting question, history and follow-ups all keep working.
+// ---------------------------------------------------------------------------
+function openAppScore(prefill) {
+    const select = document.getElementById('app-score-resume');
+    select.innerHTML = RESUME_OPTIONS.map(r =>
+        `<option value="${r.id}">${escHtml(r.name)} (${escHtml(r.language)})</option>`).join('');
+    if (activeResumeId) select.value = String(activeResumeId);
+    document.getElementById('app-score-text').value = prefill || '';
+    document.getElementById('app-score-error').hidden = true;
+    document.getElementById('app-score-modal').hidden = false;
+    document.getElementById('app-score-text').focus();
+}
+
+function closeAppScore() {
+    document.getElementById('app-score-modal').hidden = true;
+}
+
+function submitAppScore() {
+    const text = document.getElementById('app-score-text').value.trim();
+    const error = document.getElementById('app-score-error');
+    if (text.length < 40) {
+        error.textContent = APP_SCORE_LABELS.too_short;
+        error.hidden = false;
+        return;
+    }
+    const picked = RESUME_OPTIONS.find(r => String(r.id) === document.getElementById('app-score-resume').value);
+    if (picked && picked.id !== activeResumeId) {
+        setActiveResume(picked.id, picked.name);
+        loadPreviewPanel(picked.id, picked.name);
+    }
+    closeAppScore();
+    sendMessage(`${APP_SCORE_LABELS.message}\n\n${text}`);
+}
+
+// A long paste is checked once; if it reads as a job posting the user is
+// offered scoring. Nothing is sent until they choose to.
+let pasteCheck = null;
+async function checkPastedText(text) {
+    hidePasteOffer();
+    if (!text || text.length < 200) return;
+    if (pasteCheck) pasteCheck.abort();
+    pasteCheck = new AbortController();
+    try {
+        const resp = await fetch('{% url "resume:detect_job_posting" %}', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN,
+                      'X-Requested-With': 'XMLHttpRequest'},
+            body: JSON.stringify({text}),
+            signal: pasteCheck.signal,
+        });
+        const body = await resp.json();
+        if (resp.ok && body.is_posting && document.getElementById('chat-input').value.trim()) {
+            document.getElementById('paste-offer').hidden = false;
+        }
+    } catch (e) { /* no offer; the message can still be sent as typed */ }
+}
+
+function hidePasteOffer() {
+    const offer = document.getElementById('paste-offer');
+    if (offer) offer.hidden = true;
+}
+
+function scorePastedPosting() {
+    const input = document.getElementById('chat-input');
+    const text = input.value.trim();
+    hidePasteOffer();
+    if (!text) return;
+    input.value = '';
+    autoResizeTextarea(input);
+    if (!RESUME_OPTIONS.length || activeResumeId) {
+        sendMessage(`${APP_SCORE_LABELS.message}\n\n${text}`);
+    } else {
+        openAppScore(text);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const input = document.getElementById('chat-input');
+    input.addEventListener('paste', event => {
+        const pasted = (event.clipboardData || window.clipboardData).getData('text');
+        // Read the whole box after the paste lands, not just the pasted part.
+        setTimeout(() => checkPastedText(pasted && pasted.length >= 200 ? input.value.trim() : ''), 0);
+    });
+    input.addEventListener('input', () => { if (!input.value.trim()) hidePasteOffer(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAppScore(); });
+});
+
+// ---------------------------------------------------------------------------
 // Job matching and application tracking
 // ---------------------------------------------------------------------------
 function scoreColour(score) {
@@ -868,33 +961,96 @@ function renderJobMatch(data) {
     panel.classList.add('flex');
     document.getElementById('context-job-title').textContent = data.job_label || JOB_LABELS.match_title;
 
+    const L = JOB_LABELS;
     const [bg, fg, bar] = scoreColour(data.score);
+    const requirements = data.requirements || [];
+    const method = requirements.length
+        ? (L.method_lines || '').replace('{n}', requirements.length)
+        : (L.method_estimate || '');
+    const notice = (data.notices || []).includes('instructions_removed') && L.notice_injection
+        ? `<div class="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900 flex gap-2">
+             <span class="material-symbols-outlined !text-[16px]">shield</span><span>${escHtml(L.notice_injection)}</span></div>` : '';
     const suggestions = (data.suggestions || []).map(sug =>
         `<li class="flex gap-2"><span class="material-symbols-outlined !text-[14px] text-primary flex-shrink-0 mt-0.5">lightbulb</span><span>${escHtml(sug)}</span></li>`
     ).join('');
 
+    // Measured line by line: the requirement table. Older, estimated scores
+    // only have keyword lists.
+    const body = requirements.length
+        ? requirementGroup(L.req_required, requirements.filter(r => r.must_have >= 0.5))
+          + requirementGroup(L.req_nice, requirements.filter(r => r.must_have < 0.5))
+        : `<div class="mb-4">
+             <p class="text-xs font-semibold text-slate-500 mb-1.5">${escHtml(L.matched)}</p>
+             ${keywordChips(data.matched_keywords, 'bg-green-100 text-green-700') ||
+               `<p class="text-xs text-slate-400">${escHtml(L.none)}</p>`}
+           </div>
+           <div class="mb-4">
+             <p class="text-xs font-semibold text-slate-500 mb-1.5">${escHtml(L.missing)}</p>
+             ${keywordChips(data.missing_keywords, 'bg-red-100 text-red-700') ||
+               `<p class="text-xs text-slate-400">${escHtml(L.none)}</p>`}
+           </div>`;
+
     document.getElementById('context-job-body').innerHTML = `
       <div class="${bg} rounded-xl p-4 text-center mb-4">
         <p class="text-4xl font-black ${fg}">${data.score}</p>
-        <p class="text-xs text-slate-500 mt-1">${escHtml(JOB_LABELS.match_score)}</p>
+        <p class="text-xs text-slate-500 mt-1">${escHtml(L.match_score)}</p>
         <div class="mt-3 h-1.5 bg-white/70 rounded-full overflow-hidden">
           <div class="h-full ${bar} rounded-full" style="width:${Math.max(0, Math.min(100, data.score))}%"></div>
         </div>
+        ${method ? `<p class="text-[11px] text-slate-500 mt-2">${escHtml(method)}</p>` : ''}
       </div>
-      <div class="mb-4">
-        <p class="text-xs font-semibold text-slate-500 mb-1.5">${escHtml(JOB_LABELS.matched)}</p>
-        ${keywordChips(data.matched_keywords, 'bg-green-100 text-green-700') ||
-          `<p class="text-xs text-slate-400">${escHtml(JOB_LABELS.none)}</p>`}
-      </div>
-      <div class="mb-4">
-        <p class="text-xs font-semibold text-slate-500 mb-1.5">${escHtml(JOB_LABELS.missing)}</p>
-        ${keywordChips(data.missing_keywords, 'bg-red-100 text-red-700') ||
-          `<p class="text-xs text-slate-400">${escHtml(JOB_LABELS.none)}</p>`}
-      </div>
+      ${notice}
+      ${body}
       ${suggestions ? `<div>
-        <p class="text-xs font-semibold text-slate-500 mb-1.5">${escHtml(JOB_LABELS.suggestions)}</p>
+        <p class="text-xs font-semibold text-slate-500 mb-1.5">${escHtml(L.suggestions)}</p>
         <ul class="space-y-1.5 text-xs text-slate-600">${suggestions}</ul>
       </div>` : ''}`;
+}
+
+const REQUIREMENT_STYLE = {
+    covered: ['check_circle', 'text-green-600', 'st_covered'],
+    partial: ['adjust', 'text-amber-500', 'st_partial'],
+    missing: ['cancel', 'text-red-500', 'st_missing'],
+};
+
+function requirementGroup(title, items) {
+    if (!items.length) return '';
+    const order = {missing: 0, partial: 1, covered: 2};
+    items = [...items].sort((a, b) => order[a.status] - order[b.status]);
+    const rows = items.map(r => {
+        const [icon, tone, key] = REQUIREMENT_STYLE[r.status] || REQUIREMENT_STYLE.missing;
+        const unsure = r.uncertain && JOB_LABELS.uncertain
+            ? ` <span class="text-[10px] text-slate-400">(${escHtml(JOB_LABELS.uncertain)})</span>` : '';
+        const evidence = r.evidence
+            ? `<p class="mt-1.5 text-[11px] text-slate-500"><span class="font-semibold">${escHtml(JOB_LABELS.evidence || '')}:</span> “${escHtml(r.evidence)}”</p>` : '';
+        return `<details class="group rounded-lg border border-slate-100 bg-white px-3 py-2">
+          <summary class="flex items-center gap-2 cursor-pointer list-none text-xs text-slate-700">
+            <span class="material-symbols-outlined !text-[16px] ${tone}" title="${escHtml(JOB_LABELS[key] || '')}">${icon}</span>
+            <span class="flex-1">${escHtml(r.label || r.text)}${unsure}</span>
+            <span class="material-symbols-outlined !text-[14px] text-slate-300 group-open:rotate-180 transition-transform">expand_more</span>
+          </summary>
+          <p class="mt-1.5 text-[11px] text-slate-500"><span class="font-semibold">${escHtml(JOB_LABELS.posting_line || '')}:</span> ${escHtml(r.text)}</p>
+          ${evidence}
+        </details>`;
+    }).join('');
+    return `<div class="mb-4">
+      <p class="text-xs font-semibold text-slate-500 mb-1.5">${escHtml(title || '')}</p>
+      <div class="space-y-1.5">${rows}</div>
+    </div>`;
+}
+
+// Next steps go back through the assistant, so they get the same approval,
+// guardrail and revision history as anything typed.
+function renderJobMatchChips(data) {
+    const L = JOB_LABELS;
+    if (!data.job_id || !L.chip_apply) return;
+    const job = data.job_label || '';
+    const chips = [];
+    if ((data.suggestions || []).length) {
+        chips.push({label: L.chip_apply, message: L.msg_apply.replace('{job}', job)});
+    }
+    chips.push({label: L.chip_tailor, message: L.msg_tailor.replace('{job}', job)});
+    renderQuickChips(chips);
 }
 
 function statusChip(status) {
@@ -1302,6 +1458,7 @@ function handleResponse(data) {
             appendMessage('bot', msg);
             renderJobMatch(data);
             showContextBadge();
+            renderJobMatchChips(data);
             break;
 
         case 'job_list':
@@ -1348,10 +1505,18 @@ function renderQuickChips(chips) {
     const container = document.getElementById('chat-messages');
     const div = document.createElement('div');
     div.className = 'flex flex-wrap gap-1.5 ml-9 mt-1.5 quick-chips';
-    div.innerHTML = chips.map(text =>
-        `<button onclick="sendMessage('${escHtml(text)}')"
-                class="px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors">${escHtml(text)}</button>`
-    ).join('');
+    // A chip is a label and the message it sends; a plain string is both.
+    // Listeners, not inline onclick: "CV'yi" would end the JS string early.
+    chips.forEach(chip => {
+        const label = typeof chip === 'string' ? chip : chip.label;
+        const message = typeof chip === 'string' ? chip : chip.message;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors';
+        button.textContent = label;
+        button.addEventListener('click', () => sendMessage(message));
+        div.appendChild(button);
+    });
     container.appendChild(div);
     scrollToBottom();
 }
@@ -2093,5 +2258,26 @@ function escHtml(str) {
               .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 </script>
+<!-- Application Score: paste a posting, pick a resume, the assistant scores it -->
+<div id="app-score-modal" hidden class="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4"
+     onclick="if (event.target === this) closeAppScore()">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg p-5" role="dialog" aria-modal="true" aria-labelledby="app-score-title">
+        <h2 id="app-score-title" class="text-base font-bold text-slate-900 flex items-center gap-2">
+            <span class="material-symbols-outlined text-primary">fact_check</span>{{ UI.app_score_title }}
+        </h2>
+        <p class="text-xs text-slate-500 mt-1">{{ UI.app_score_hint }}</p>
+        <textarea id="app-score-text" rows="10"
+                  class="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"></textarea>
+        <label for="app-score-resume" class="block text-xs font-semibold text-slate-600 mt-3 mb-1">{{ UI.app_score_resume }}</label>
+        <select id="app-score-resume" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"></select>
+        <p id="app-score-error" class="text-xs text-red-600 mt-2" hidden></p>
+        <div class="flex justify-end gap-2 mt-4">
+            <button type="button" onclick="closeAppScore()"
+                    class="px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50">{{ UI.app_score_cancel }}</button>
+            <button type="button" onclick="submitAppScore()"
+                    class="px-4 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary-hover">{{ UI.app_score_submit }}</button>
+        </div>
+    </div>
+</div>
 </body>
 </html>

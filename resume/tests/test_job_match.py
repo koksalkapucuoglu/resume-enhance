@@ -195,3 +195,66 @@ class JobMatchLogsTests(SimpleTestCase):
         self.assertIn("scored", logged)
         for secret in ("Ada", "Initech", "PostgreSQL", "gym"):
             self.assertNotIn(secret, logged)
+
+
+class DetectPostingTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("paster", password="x")
+        self.client.force_login(self.user)
+
+    def post(self, text):
+        from django.urls import reverse
+
+        return self.client.post(
+            reverse("resume:detect_job_posting"),
+            data=json.dumps({"text": text}),
+            content_type="application/json",
+        )
+
+    def test_a_posting_is_recognised(self):
+        with patch("resume.services.job_match.typesafe_engine.ask",
+                   return_value=Answers(nouls={"posting": 0.93})):
+            response = self.post(POSTING * 3)
+        self.assertEqual(response.json(), {"is_posting": True})
+
+    def test_other_text_is_not(self):
+        with patch("resume.services.job_match.typesafe_engine.ask",
+                   return_value=Answers(nouls={"posting": 0.1})):
+            self.assertEqual(self.post("Dear hiring manager " * 20).json(), {"is_posting": False})
+
+    def test_short_text_is_not_sent_to_jev(self):
+        with patch("resume.services.job_match.typesafe_engine.ask") as ask:
+            self.assertEqual(self.post("Python, Django").json(), {"is_posting": False})
+        ask.assert_not_called()
+
+    def test_without_jev_nothing_is_offered(self):
+        with patch("resume.services.job_match.typesafe_engine.ask", return_value=None):
+            self.assertEqual(self.post(POSTING * 3).json(), {"is_posting": False})
+
+    def test_unverified_email_is_refused(self):
+        self.user.profile.email_verification_required = True
+        self.user.profile.save()
+        with patch("resume.services.job_match.typesafe_engine.ask") as ask:
+            self.assertEqual(self.post(POSTING * 3).status_code, 403)
+        ask.assert_not_called()
+
+
+class AgenticDashboardTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("agentic", password="x")
+        self.user.profile.ui_mode = "agentic"
+        self.user.profile.ui_language = "tr"
+        self.user.profile.save()
+        Resume.objects.create(user=self.user, title="Main", content=CONTENT, language="tr")
+        self.client.force_login(self.user)
+
+    def test_the_application_score_entry_and_labels_are_rendered(self):
+        from django.urls import reverse
+
+        page = self.client.get(reverse("resume:dashboard")).content.decode()
+        self.assertIn('id="app-score-btn"', page)
+        self.assertIn('id="app-score-modal"', page)
+        self.assertIn("Başvuru Skoru", page)
+        # Job wording comes from the one server table, in the interface language.
+        self.assertIn('"chip_tailor": "Bu ilana g', page)
+        self.assertIn('"name": "Main"', page)

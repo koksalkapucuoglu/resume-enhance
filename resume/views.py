@@ -186,6 +186,17 @@ class DashboardView(LoginRequiredMixin, ListView):
             # localStorage entry — a deleted resume, or another account's on a
             # shared browser — would otherwise render "Resume not found".
             context["owned_resume_ids"] = json.dumps([r.pk for r in resumes])
+            # For the Application Score panel's resume picker.
+            context["resume_options"] = json.dumps(
+                [{"id": r.pk, "name": r.display_name, "language": r.language} for r in resumes]
+            )
+            # Job panel wording, in the interface language until a chat turn
+            # brings the conversation's (see adoptUiCopy).
+            from resume.services import job_service
+
+            context["job_copy"] = json.dumps(
+                job_service.copy(self.request.user.profile.ui_language or "en")
+            )
             # The template pane in agentic mode is the same picker the editor
             # uses, so it stays in step with the catalogue on its own.
             context.update(
@@ -316,6 +327,26 @@ def _import_review_context(request, resume):
             for name in review.get("dropped") or []
         ],
     }
+
+
+@login_required
+@require_http_methods(["POST"])
+def detect_job_posting(request):
+    """
+    Is the text just pasted into the chat a job posting? The dashboard uses
+    the answer to offer scoring it; it never sends anything on its own.
+    """
+    from resume.services import job_match
+
+    if _email_unverified(request):
+        return JsonResponse({"error": _ai_locked_message(request)}, status=403)
+    try:
+        text = json.loads(request.body or b"{}").get("text") or ""
+    except (ValueError, AttributeError):
+        return JsonResponse({"error": "Invalid request."}, status=400)
+    if len(text.strip()) < 200:
+        return JsonResponse({"is_posting": False})
+    return JsonResponse({"is_posting": bool(job_match.looks_like_posting(text))})
 
 
 @login_required

@@ -561,6 +561,10 @@ result = send_openai_message(user_message, meta_prompt, temperature=0.7, max_tok
 - `JobPosting.requirements` holds the table: `{id, text, label, kind, must_have, level, status (covered/partial/missing), confidence, uncertain, evidence}`. Evidence is a quoted resume line, never generated.
 - Skills listed only in the skills section score "partial" by design — the useful advice is to show them in a bullet.
 - Scores repeat within ±1 for the same input. Thresholds come from `manage.py jev_eval match` (`resume/evals/match_cases.py`).
+- **Agentic UI:** "Application Score" (first quick-action chip) opens a modal — posting + resume picker — and sends the posting to the assistant as an ordinary message (`UI.app_score_message`), so the similar-posting question, history and follow-ups keep working. Pasting ≥200 chars into the chat input asks `detect_job_posting` (a Jev `Noul`); if it is a posting, an offer bar appears — nothing is sent on its own.
+- The match panel (`renderJobMatch`) groups requirements into Required / Nice to have, each expandable to the posting line and the quoted resume evidence; estimated (`llm-v1`) matches fall back to keyword chips. Follow-up chips ("Apply the suggestions", "Tailor a copy") send messages back through the assistant, so approval and the guardrail apply.
+- Job panel wording lives only in `job_service.JOB_COPY` (both languages, same keys — a test checks); the dashboard seeds `JOB_LABELS` from it and each chat turn replaces it with the conversation language's.
+- Quick chips accept `{label, message}` and use listeners, not inline `onclick` strings: a Turkish apostrophe ("CV'yi") ended the JS string.
 
 ### WeasyPrint (PDF Generation)
 
