@@ -704,8 +704,7 @@ def update_job(user, job_id, status=None, resume_id=None, url=None, request=None
     if status:
         if status not in STATUS_VALUES:
             raise ToolError(f"status must be one of: {', '.join(STATUS_VALUES)}.")
-        posting.status = status
-        fields.append("status")
+        fields += posting.set_status(status) or ["status"]
     if resume_id:
         resume = _owned(user, resume_id)
         # Attaching a resume means "this is what I sent", so freeze it.

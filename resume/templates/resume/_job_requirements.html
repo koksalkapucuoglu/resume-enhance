@@ -1,0 +1,26 @@
+{% comment %}
+One group of a measured posting's requirements: status, the posting's words,
+and the resume line that evidences it (quoted, never generated).
+Expects `items` and `J` (job_service.JOB_COPY in the page language).
+{% endcomment %}
+<ul class="space-y-1.5">
+  {% for r in items %}
+    <li class="rounded-lg border border-slate-100 px-3 py-2">
+      <div class="flex items-start gap-2 text-xs">
+        {% if r.status == "covered" %}
+          <span class="material-symbols-outlined !text-[16px] text-green-600" title="{{ J.st_covered }}">check_circle</span>
+        {% elif r.status == "partial" %}
+          <span class="material-symbols-outlined !text-[16px] text-amber-500" title="{{ J.st_partial }}">adjust</span>
+        {% else %}
+          <span class="material-symbols-outlined !text-[16px] text-red-500" title="{{ J.st_missing }}">cancel</span>
+        {% endif %}
+        <div class="flex-1">
+          <p class="text-slate-800">{{ r.text }}{% if r.uncertain %} <span class="text-[10px] text-slate-400">({{ J.uncertain }})</span>{% endif %}</p>
+          {% if r.evidence %}
+            <p class="text-[11px] text-slate-500 mt-0.5"><span class="font-semibold">{{ J.evidence }}:</span> “{{ r.evidence }}”</p>
+          {% endif %}
+        </div>
+      </div>
+    </li>
+  {% endfor %}
+</ul>

@@ -568,6 +568,14 @@ result = send_openai_message(user_message, meta_prompt, temperature=0.7, max_tok
 - **One recorder:** `job_service.match_and_record` (same-text re-measure, similar-posting question, application cap, snapshot, score) serves both the agent's `match_job` and MCP's. Change the rules there, not in either caller.
 - **MCP** (`mcp_server/tools.py`): `match_job` (needs `title` and `company` from the client, `prose=False` — no OpenAI call, the client's model writes the advice), `list_jobs`, `get_job`, `update_job`. Same application cap and email-verification lock as the web. The surface test in `mcp_server/tests/test_tools.py` lists every tool on purpose; a new tool updates it, bumps `SERVER_INFO["version"]` and `server.json` together.
 
+### Applications page (`/jobs/`, `resume/services/job_board.py`)
+
+- Reads stored measurements only — no model calls on page load. Summary: status pipeline (links filter), average score, response rate (interview+offer over sent, shown from 3 sent), and "most often missing": required lines marked missing across postings, grouped case-insensitively.
+- One card per application: score ring, "x/y required shown", top gaps, a trend line from `score_history` entries of the *current* scorer only, and a details section with the requirement table (`_job_requirements.html`), notes, posting URL, applied date, the stored copy and removal.
+- Status changes go through `JobPosting.set_status()` (agent, MCP and web): it dates `status_changed_at` and sets `applied_at` the first time a sent status is reached. Use it instead of assigning `status`.
+- "Score a posting" posts to `score_job_posting` → `job_service.match_and_record`; a similar posting stores the choice in the session and the page asks. `rescore_job_posting` re-measures the stored copy — it is how estimated (`llm-v1`) applications get a requirement table.
+- UI strings with one `{placeholder}` use the `fill` filter (`{% load ui_text %}`); `get_item` reads a dict by a variable key.
+
 ### WeasyPrint (PDF Generation)
 
 - **No extra stylesheet.** Each layout carries its own `<style>` (`resume_templates/_styles.html`); `ResumePdfService` passes no CSS to WeasyPrint so the download matches the live preview of the same template. Fonts are always named explicitly — renderer defaults differ between WeasyPrint and the browser.

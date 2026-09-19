@@ -186,6 +186,11 @@ class JobPosting(models.Model):
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default=STATUS_SAVED
     )
+    # When it went out, and when the status last moved — "applied 12 days ago,
+    # no answer" is the question a tracker is for. Set through `set_status`.
+    applied_at = models.DateField(null=True, blank=True)
+    status_changed_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True, default="")
     # The latest measurement. Every measurement is kept in score_history as
     # {at, score, resume_id} so "did my edit help?" has an answer.
     match_score = models.IntegerField(null=True, blank=True)
@@ -213,6 +218,28 @@ class JobPosting(models.Model):
 
         normalized = re.sub(r"\s+", " ", (description or "")).strip().lower()
         return hashlib.sha256(normalized.encode()).hexdigest() if normalized else ""
+
+    # Statuses that mean the application was sent.
+    SENT_STATUSES = (STATUS_APPLIED, STATUS_INTERVIEW, STATUS_OFFER, STATUS_REJECTED)
+
+    def set_status(self, status):
+        """
+        Move to `status`, dating the change. Returns the fields to save.
+
+        The first move to any sent status records applied_at, so an application
+        that goes straight from saved to interview still has a date.
+        """
+        from django.utils import timezone
+
+        fields = []
+        if status != self.status:
+            self.status = status
+            self.status_changed_at = timezone.now()
+            fields += ["status", "status_changed_at"]
+        if status in self.SENT_STATUSES and self.applied_at is None:
+            self.applied_at = timezone.localdate()
+            fields.append("applied_at")
+        return fields
 
     def take_snapshot(self, content, template_selector, source_resume=None):
         """Freeze what would be sent for this application."""

@@ -1910,7 +1910,7 @@ class JobListView(LoginRequiredMixin, ListView):
         )
 
     def get_context_data(self, **kwargs):
-        from resume.services import job_service
+        from resume.services import job_board, job_service
 
         context = super().get_context_data(**kwargs)
         context["settings"] = settings
@@ -1919,6 +1919,20 @@ class JobListView(LoginRequiredMixin, ListView):
         context["at_cap"] = not profile.can_track_application()
         context["application_limit"] = settings.FREE_TIER_LIMITS["application_count"]
         context["status_choices"] = JobPosting.STATUS_CHOICES
+
+        status = self.request.GET.get("status") or ""
+        if status not in dict(JobPosting.STATUS_CHOICES):
+            status = ""
+        sort = self.request.GET.get("sort") if self.request.GET.get("sort") in job_board.SORTS else "recent"
+        context.update(job_board.board(self.request.user, status or None, sort))
+        context["status_filter"] = status
+        context["sort"] = sort
+        context["open_job"] = self.request.GET.get("open") or ""
+        context["resume_options"] = Resume.objects.filter(user=self.request.user).order_by("-updated_at")
+        # A posting that matched an existing application waits here for the
+        # person to say which they meant (see score_job_posting).
+        context["pending_choice"] = self.request.session.pop("job_choice", None)
+        context["J"] = job_service.copy(profile.ui_language or "en")
         groups = job_service.resume_groups(self.request.user)
         # Worth showing only when it answers something: with a single resume in
         # play, every group names the same document.
@@ -1935,11 +1949,111 @@ def update_job_posting(request, pk):
         messages.error(request, "Application not found.")
         return redirect("resume:jobs")
 
+    fields = []
     status = request.POST.get("status")
     if status and status in dict(JobPosting.STATUS_CHOICES):
-        posting.status = status
-        posting.save(update_fields=["status", "updated_at"])
-    return redirect("resume:jobs")
+        fields += posting.set_status(status)
+    if "notes" in request.POST:
+        posting.notes = request.POST["notes"][:5000]
+        fields.append("notes")
+    if "url" in request.POST:
+        url = request.POST["url"].strip()
+        if url and not url.startswith(("http://", "https://")):
+            url = "https://" + url
+        posting.url = url[:200]
+        fields.append("url")
+    if "applied_at" in request.POST:
+        from django.utils.dateparse import parse_date
+
+        posting.applied_at = parse_date(request.POST["applied_at"] or "") or None
+        fields.append("applied_at")
+    if fields:
+        posting.save(update_fields=sorted(set(fields)) + ["updated_at"])
+
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return JsonResponse({
+            "status": posting.status,
+            "applied_at": posting.applied_at.isoformat() if posting.applied_at else None,
+        })
+    return redirect(f"{reverse('resume:jobs')}?open={posting.pk}#job-{posting.pk}")
+
+
+@login_required
+@require_http_methods(["POST"])
+def score_job_posting(request):
+    """
+    Measure a pasted posting against a resume from the Applications page — the
+    standard-mode way in, alongside the assistant's match_job.
+    """
+    from resume.services import job_service
+
+    jobs_url = reverse("resume:jobs")
+    if _email_unverified(request):
+        messages.error(request, _ai_locked_message(request))
+        return redirect(jobs_url)
+
+    text = (request.POST.get("posting") or "").strip()
+    # SECURITY: scoped to the caller
+    resume = Resume.objects.filter(pk=request.POST.get("resume_id") or 0, user=request.user).first()
+    if not resume:
+        messages.error(request, "Choose one of your resumes to measure.")
+        return redirect(jobs_url)
+    if len(text) < 40:
+        messages.error(request, "Paste the full posting; that is too short to measure.")
+        return redirect(jobs_url)
+
+    lang = request.user.profile.ui_language or "en"
+    outcome = job_service.match_and_record(
+        request.user, resume, text, lang, apply_to=request.POST.get("apply_to") or None
+    )
+    if "error" in outcome:
+        messages.error(request, outcome["error"])
+        return redirect(jobs_url)
+    if outcome.get("capped"):
+        messages.error(request, "You are tracking as many applications as the free plan allows.")
+        return redirect(jobs_url)
+    if outcome.get("needs_choice"):
+        request.session["job_choice"] = {
+            "existing": outcome["existing"],
+            "posting": text[: job_service.MAX_DESCRIPTION_CHARS],
+            "resume_id": resume.pk,
+        }
+        return redirect(jobs_url)
+
+    posting = outcome["posting"]
+    return redirect(f"{jobs_url}?open={posting.pk}#job-{posting.pk}")
+
+
+@login_required
+@require_http_methods(["POST"])
+def rescore_job_posting(request, pk):
+    """Measure an application's stored copy again, line by line."""
+    from resume.services import job_service
+
+    jobs_url = reverse("resume:jobs")
+    posting = JobPosting.objects.filter(pk=pk, user=request.user).first()
+    if not posting or not posting.has_snapshot or not posting.description:
+        messages.error(request, "That application has nothing stored to measure.")
+        return redirect(jobs_url)
+    if _email_unverified(request):
+        messages.error(request, _ai_locked_message(request))
+        return redirect(jobs_url)
+
+    result = job_service.analyze_snapshot(
+        posting.snapshot_content, posting.description,
+        request.user.profile.ui_language or "en",
+    )
+    if "error" in result:
+        messages.error(request, result["error"])
+        return redirect(jobs_url)
+    posting.record_score(
+        result["score"], posting.source_resume_id, result["missing_keywords"],
+        requirements=result.get("requirements"),
+        scoring_version=result.get("scoring_version", "llm-v1"),
+    )
+    posting.save(update_fields=["match_score", "score_history", "missing_keywords",
+                                "requirements", "scoring_version", "updated_at"])
+    return redirect(f"{jobs_url}?open={posting.pk}#job-{posting.pk}")
 
 
 @login_required

@@ -27,6 +27,8 @@ urlpatterns = [
     path("webhooks/payments/", views.payment_webhook, name="payment_webhook"),
     path("jobs/", views.JobListView.as_view(), name="jobs"),
     path("jobs/<int:pk>/update/", views.update_job_posting, name="update_job_posting"),
+    path("jobs/score/", views.score_job_posting, name="score_job_posting"),
+    path("jobs/<int:pk>/rescore/", views.rescore_job_posting, name="rescore_job_posting"),
     path("jobs/<int:pk>/delete/", views.delete_job_posting, name="delete_job_posting"),
     path(
         "jobs/<int:pk>/snapshot/",

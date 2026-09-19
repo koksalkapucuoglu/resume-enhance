@@ -785,8 +785,7 @@ def update_job(user, ctx, job_id, status=None, resume_id=None):
             return ToolResult(
                 data={"error": f"Status must be one of: {', '.join(valid)}."}
             )
-        posting.status = status
-        fields.append("status")
+        fields += posting.set_status(status) or ["status"]
     if resume_id:
         resume = Resume.objects.filter(pk=resume_id, user=user).first()
         if not resume:
