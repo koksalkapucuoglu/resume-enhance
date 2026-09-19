@@ -31,11 +31,16 @@ class Resume(models.Model):
     # The language the resume is WRITTEN in — unrelated to the interface language.
     language = models.CharField(max_length=5, choices=LANGUAGE_CHOICES, default="en")
     # A derived resume is the same document in another form — another
-    # language. It hangs off a base resume and does not consume a resume slot:
-    # charging twice would penalise exactly the bilingual user this is for.
+    # language, or a branch worked on for one job posting. It hangs off a base
+    # resume and does not consume a resume slot: charging twice would penalise
+    # exactly the bilingual, many-postings user this is for.
     DERIVED_TRANSLATION = "translation"
+    # A job branch: a copy of the base resume improved for one posting, so the
+    # base stays as it is until the person chooses to replace it.
+    DERIVED_JOB = "job"
     DERIVED_KIND_CHOICES = [
         (DERIVED_TRANSLATION, "Language version"),
+        (DERIVED_JOB, "Job branch"),
     ]
 
     derived_from = models.ForeignKey(
@@ -47,6 +52,14 @@ class Resume(models.Model):
     )
     derived_kind = models.CharField(
         max_length=20, choices=DERIVED_KIND_CHOICES, blank=True, default=""
+    )
+    # For a job branch: the posting it is being improved for.
+    job_posting = models.ForeignKey(
+        "JobPosting",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="branches",
     )
     # What the import check found when this resume was read from a file:
     # values the file does not support, contact details corrected, keys the
@@ -120,12 +133,85 @@ class Resume(models.Model):
         return self.family(kind=self.DERIVED_TRANSLATION)
 
     @property
+    def is_job_branch(self):
+        return self.derived_kind == self.DERIVED_JOB
+
+    @property
     def owner_name(self):
         """Returns the full name from resume content."""
         return self.content.get("user_info", {}).get("full_name", "").strip()
 
     def __str__(self):
         return f"{self.user.username} - {self.title}"
+
+
+class JobPosting(models.Model):
+    """
+    A job posting the person measured a resume against.
+
+    Its requirements are decided once, when it is added (job_match.parse_posting),
+    and never re-parsed: every later measurement uses the same list, so a score
+    moves only when the resume does.
+    """
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="job_postings")
+    title = models.CharField(max_length=255, blank=True, default="")
+    company = models.CharField(max_length=255, blank=True, default="")
+    text = models.TextField()
+    # Same posting pasted again → same record, whatever the whitespace.
+    fingerprint = models.CharField(max_length=64, db_index=True)
+    # [{"id", "text", "kind", "must_have", "label"}]
+    requirements = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(fields=["user", "fingerprint"], name="one_posting_per_text")
+        ]
+
+    @staticmethod
+    def fingerprint_of(text):
+        import hashlib
+        import re
+
+        normalized = re.sub(r"\s+", " ", (text or "")).strip().lower()
+        return hashlib.sha256(normalized.encode()).hexdigest()
+
+    @property
+    def label(self):
+        if self.title and self.company:
+            return f"{self.title} · {self.company}"
+        return self.title or self.company or "Job posting"
+
+    def __str__(self):
+        return self.label
+
+
+class Evaluation(models.Model):
+    """
+    One measurement of a resume against a posting.
+
+    Keyed by the resume's content hash: while the content is unchanged the
+    latest evaluation is the answer, and an edit makes it stale. The few
+    before it are kept so a change can be shown row by row ("PCI-DSS: missing
+    → partial").
+    """
+
+    resume = models.ForeignKey(Resume, on_delete=models.CASCADE, related_name="evaluations")
+    posting = models.ForeignKey(JobPosting, on_delete=models.CASCADE, related_name="evaluations")
+    content_hash = models.CharField(max_length=64)
+    # The Jev model that measured it; scores from different models are not
+    # compared with each other.
+    scorer = models.CharField(max_length=40)
+    score = models.IntegerField()
+    # [{"id", "level", "status", "confidence", "uncertain", "evidence", "evidence_at"}]
+    rows = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [models.Index(fields=["resume", "posting", "-created_at"])]
 
 
 class ResumeRevision(models.Model):
@@ -145,12 +231,15 @@ class ResumeRevision(models.Model):
     # agent made: the history panel is where a user notices that something they
     # do not remember doing came in from an outside client.
     SOURCE_MCP = "mcp"
+    # The base resume replaced with one of its job branches.
+    SOURCE_BRANCH = "branch"
     SOURCE_CHOICES = [
         (SOURCE_MANUAL, "Manual edit"),
         (SOURCE_AGENT, "Agent"),
         (SOURCE_IMPORT, "Import"),
         (SOURCE_REVERT, "Revert"),
         (SOURCE_MCP, "MCP client"),
+        (SOURCE_BRANCH, "From a job branch"),
     ]
 
     resume = models.ForeignKey(
@@ -319,6 +408,17 @@ class UserProfile(models.Model):
 
         return (
             self.agent_message_count < settings.FREE_TIER_LIMITS["agent_message_count"]
+        )
+
+    def can_create_job_branch(self):
+        """Branches cost no resume slot, but the free plan keeps a few."""
+        if self.is_pro():
+            return True
+        from django.conf import settings
+
+        return (
+            self.user.resumes.filter(derived_kind=Resume.DERIVED_JOB).count()
+            < settings.FREE_TIER_LIMITS["job_branch_count"]
         )
 
     def can_create_resume(self):

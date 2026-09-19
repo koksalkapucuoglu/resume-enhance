@@ -120,6 +120,50 @@ def analyze(content, description, lang="en", prose=True):
     }
 
 
+def parse_posting(description):
+    """
+    A posting's requirements, decided once.
+
+    Returns [{"id", "text", "kind", "must_have"}] for the lines worth measuring
+    (requirements and responsibilities, minus anything addressed to an AI), or
+    None when Jev could not be asked. Stored with the posting and reused for
+    every later measurement, so the yardstick never moves between runs.
+    """
+    lines = split_posting(description)
+    if not lines:
+        return []
+    classified = _classify(description, lines)
+    if classified is None:
+        return None
+    return [
+        {"id": f"r{i}", "text": line, "kind": info["kind"], "must_have": info["must_have"]}
+        for i, (line, info) in enumerate(zip(lines, classified))
+        if info["kind"] in SCORED_KINDS and not info["injection"]
+    ]
+
+
+def measure(content, requirements):
+    """
+    Measure a resume against fixed requirements.
+
+    Returns {"score", "rows"} where each row is {"id", "level", "status",
+    "confidence", "uncertain", "evidence", "evidence_at"}, or None when Jev
+    could not be asked.
+    """
+    if not requirements:
+        return {"score": 0, "rows": []}
+    scored = [dict(r) for r in requirements]
+    index = evidence_index(content)
+    if not _evidence(scored, [line["text"] for line in index], [line["at"] for line in index]):
+        return None
+    rows = [
+        {key: item[key] for key in ("id", "level", "status", "confidence", "uncertain",
+                                    "evidence", "evidence_at")}
+        for item in scored
+    ]
+    return {"score": composite(scored), "rows": rows}
+
+
 POSTING_ABOVE = 0.7
 
 
@@ -180,36 +224,54 @@ def split_posting(description):
     return lines[:MAX_LINES]
 
 
-def evidence_lines(content):
-    """The resume as short, quotable lines, each carrying its context."""
+def evidence_index(content):
+    """
+    The resume as short, quotable lines, each with where it lives.
+
+    Returns [{"text", "at"}] where `at` is {"section", "entry", "bullet"} —
+    enough to point an improvement at the bullet that already comes closest,
+    rather than always at the latest job.
+    """
     content = content or {}
-    lines = []
+    out = []
+
+    def add(text, section, entry=None, bullet=None):
+        out.append({"text": text[:MAX_LINE_CHARS],
+                    "at": {"section": section, "entry": entry, "bullet": bullet}})
+
     info = content.get("user_info") or {}
     skills = [str(s) for s in info.get("skills") or [] if str(s).strip()]
     if skills:
-        lines.append("Skills: " + ", ".join(skills))
-    for job in content.get("experience") or []:
+        add("Skills: " + ", ".join(skills), "skills")
+    for e, job in enumerate(content.get("experience") or []):
         end = "present" if job.get("current_role") or not job.get("end_date") else job.get("end_date")
         head = f"{job.get('title') or '?'} at {job.get('company') or '?'} ({job.get('start_date') or '?'} – {end})"
         bullets = job.get("description") or []
         if isinstance(bullets, str):
             bullets = [bullets]
         if not bullets:
-            lines.append(head)
-        for bullet in bullets:
+            add(head, "experience", e)
+        for b, bullet in enumerate(bullets):
             if str(bullet).strip():
-                lines.append(f"{head}: {str(bullet).strip()}")
-    for edu in content.get("education") or []:
-        lines.append(
+                add(f"{head}: {str(bullet).strip()}", "experience", e, b)
+    for e, edu in enumerate(content.get("education") or []):
+        add(
             f"Education: {edu.get('degree') or ''} {edu.get('field_of_study') or ''}, "
-            f"{edu.get('school') or ''} ({edu.get('start_year') or '?'} – {edu.get('end_year') or '?'})"
+            f"{edu.get('school') or ''} ({edu.get('start_year') or '?'} – {edu.get('end_year') or '?'})",
+            "education", e,
         )
-    for project in content.get("projects_and_publications") or []:
-        lines.append(f"Project: {project.get('name') or ''} — {project.get('description') or ''}")
+    for e, project in enumerate(content.get("projects_and_publications") or []):
+        add(f"Project: {project.get('name') or ''} — {project.get('description') or ''}",
+            "projects_and_publications", e)
     focus = content.get("focus_areas") or {}
-    for item in (focus.get("items") if isinstance(focus, dict) else None) or []:
-        lines.append(f"Currently working on: {item}")
-    return [line[:MAX_LINE_CHARS] for line in lines][:MAX_RESUME_LINES]
+    for e, item in enumerate((focus.get("items") if isinstance(focus, dict) else None) or []):
+        add(f"Currently working on: {item}", "focus_areas", e)
+    return out[:MAX_RESUME_LINES]
+
+
+def evidence_lines(content):
+    """The resume as short, quotable lines, each carrying its context."""
+    return [line["text"] for line in evidence_index(content)]
 
 
 # --------------------------------------------------------------------------
@@ -251,7 +313,7 @@ def _classify(description, lines):
     ]
 
 
-def _evidence(scored, resume_lines):
+def _evidence(scored, resume_lines, locations=None):
     """Fill level, status, confidence and evidence into each scored line."""
     options = {f"e{j}": None for j in range(len(resume_lines))} | {
         NONE: "No line of the resume evidences it."
@@ -289,12 +351,14 @@ def _evidence(scored, resume_lines):
             else "missing"
         )
         item["uncertain"] = level.confidence < UNCERTAIN_BELOW
-        evidence = ""
+        evidence, at = "", None
         if pick.choice != NONE and level.fraction >= PARTIAL_FROM:
             index = int(pick.choice[1:])
             if index < len(resume_lines):
                 evidence = resume_lines[index]
+                at = locations[index] if locations else None
         item["evidence"] = evidence
+        item["evidence_at"] = at
     return True
 
 

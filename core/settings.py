@@ -410,6 +410,7 @@ FREE_TIER_LIMITS = {
     "enhance_count": 10,  # Monthly AI enhancements (experience + project combined)
     "download_count": 5,  # Monthly PDF downloads
     "resume_count": 3,  # Total resume count (not monthly)
+    "job_branch_count": 3,  # Resumes branched for a job posting (total)
     "agent_message_count": 10,  # Monthly agent chat messages
 }
 

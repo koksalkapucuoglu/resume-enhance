@@ -68,3 +68,19 @@ class AccountDeletionTests(TestCase):
     def test_the_profile_page_offers_it(self):
         body = self.client.get(reverse("profile")).content.decode()
         self.assertIn(self.url, body)
+
+
+class JobDataDeletionTests(TestCase):
+    def test_postings_evaluations_and_branches_go_with_the_account(self):
+        from resume.models import Evaluation, JobPosting
+
+        user = User.objects.create_user("leaver", password="pw-12345")
+        base = Resume.objects.create(user=user, title="Main", content={"user_info": {"full_name": "A"}})
+        posting = JobPosting.objects.create(user=user, text="x" * 50, fingerprint="f")
+        branch = Resume.objects.create(user=user, title="B", content=base.content, derived_from=base,
+                                       derived_kind=Resume.DERIVED_JOB, job_posting=posting)
+        Evaluation.objects.create(resume=branch, posting=posting, content_hash="h", scorer="s", score=1)
+        user.delete()
+        self.assertFalse(JobPosting.objects.exists())
+        self.assertFalse(Evaluation.objects.exists())
+        self.assertFalse(Resume.objects.filter(pk=branch.pk).exists())
