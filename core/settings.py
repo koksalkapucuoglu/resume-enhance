@@ -400,13 +400,16 @@ MCP_REGISTRY_AUTH = os.environ.get("MCP_REGISTRY_AUTH", "")
 # policy text, so each stored consent points at the words it agreed to.
 PRIVACY_POLICY_VERSION = "2026-09-19"
 
+# Restore points kept per resume, for every plan. Each is a full copy of the
+# content (a few KB), so a bound keeps the table from growing with every edit.
+REVISION_HISTORY_LIMIT = 10
+
 # Subscription Tier Limits
 FREE_TIER_LIMITS = {
     "import_count": 2,  # Monthly PDF imports
     "enhance_count": 10,  # Monthly AI enhancements (experience + project combined)
     "download_count": 5,  # Monthly PDF downloads
     "resume_count": 3,  # Total resume count (not monthly)
-    "revision_history": 5,  # Restore points kept per resume (not monthly)
     "agent_message_count": 10,  # Monthly agent chat messages
 }
 

@@ -5,7 +5,14 @@ Produces a flat list of change entries so the UI can render "before → after"
 rows without knowing the resume schema. List sections (experience, education,
 projects) are matched by identity rather than position, so reordering an entry
 is not reported as an edit of two unrelated ones.
+
+Multi-line fields (experience bullets, a project description) are compared line
+by line, the way `git diff` does: one added bullet is one "added" row, not the
+whole description shown twice. A reworded bullet is one "changed" row carrying
+word-level `words` segments for highlighting.
 """
+
+import difflib
 
 KIND_ADDED = "added"
 KIND_REMOVED = "removed"
@@ -125,6 +132,62 @@ def _change(section, item, field, kind, before="", after=""):
     }
 
 
+# Fields holding several lines, compared line by line.
+_LINE_FIELDS = {"description"}
+
+# Below this similarity two lines are a removal and an addition, not an edit.
+_SAME_LINE_RATIO = 0.45
+
+
+def _lines(value):
+    if isinstance(value, (list, tuple)):
+        items = value
+    else:
+        items = str(value or "").split("\n")
+    return [_as_text(v) for v in items if _as_text(v)]
+
+
+def word_segments(before, after):
+    """[[op, text], ...] with op in equal/delete/insert, for inline highlighting."""
+    old_words, new_words = before.split(" "), after.split(" ")
+    segments = []
+    matcher = difflib.SequenceMatcher(a=old_words, b=new_words, autojunk=False)
+    for op, i1, i2, j1, j2 in matcher.get_opcodes():
+        if op == "equal":
+            segments.append(["equal", " ".join(old_words[i1:i2])])
+            continue
+        if op in ("delete", "replace"):
+            segments.append(["delete", " ".join(old_words[i1:i2])])
+        if op in ("insert", "replace"):
+            segments.append(["insert", " ".join(new_words[j1:j2])])
+    return segments
+
+
+def _diff_lines(section, item, field, old_value, new_value):
+    """One change per added, removed or reworded line."""
+    old_lines, new_lines = _lines(old_value), _lines(new_value)
+    changes = []
+    matcher = difflib.SequenceMatcher(a=old_lines, b=new_lines, autojunk=False)
+    for op, i1, i2, j1, j2 in matcher.get_opcodes():
+        if op == "equal":
+            continue
+        removed, added = old_lines[i1:i2], new_lines[j1:j2]
+        # Pair reworded lines in order; what is left over was added or removed.
+        while removed and added:
+            old_line, new_line = removed[0], added[0]
+            ratio = difflib.SequenceMatcher(a=old_line, b=new_line, autojunk=False).ratio()
+            if ratio < _SAME_LINE_RATIO:
+                break
+            change = _change(section, item, field, KIND_CHANGED, before=old_line, after=new_line)
+            change["words"] = word_segments(old_line, new_line)
+            changes.append(change)
+            removed.pop(0)
+            added.pop(0)
+        changes.extend(_change(section, item, field, KIND_REMOVED, before=line) for line in removed)
+        changes.extend(_change(section, item, field, KIND_ADDED, after=line) for line in added)
+    return changes
+
+
 def _diff_user_info(before, after):
     changes = []
     old_info = before.get("user_info") or {}
@@ -186,6 +249,14 @@ def _diff_list_section(section_key, before, after):
         counterpart = bucket.pop(0)
         matched.add(id(counterpart))
         for field, field_label in fields:
+            if field in _LINE_FIELDS:
+                changes.extend(
+                    _diff_lines(
+                        label, _entry_label(entry, id_keys), field_label,
+                        counterpart.get(field), entry.get(field),
+                    )
+                )
+                continue
             old_val = _as_text(counterpart.get(field))
             new_val = _as_text(entry.get(field))
             if old_val != new_val:

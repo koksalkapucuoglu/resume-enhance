@@ -4,7 +4,7 @@ import json
 
 from django.conf import settings
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
 from resume.models import Resume, ResumeRevision
@@ -70,8 +70,8 @@ class RevisionServiceTest(TestCase):
         self.assertIsNone(revision_service.snapshot(blank, ResumeRevision.SOURCE_MANUAL))
         self.assertEqual(blank.revisions.count(), 0)
 
-    def test_free_retention_prunes_oldest(self):
-        limit = settings.FREE_TIER_LIMITS["revision_history"]
+    def test_retention_prunes_oldest(self):
+        limit = settings.REVISION_HISTORY_LIMIT
         for i in range(limit + 3):
             self.resume.content = content(name=f"Name {i}")
             revision_service.snapshot(self.resume, ResumeRevision.SOURCE_MANUAL)
@@ -81,14 +81,15 @@ class RevisionServiceTest(TestCase):
         names = [r.content["user_info"]["full_name"] for r in self.resume.revisions.all()]
         self.assertEqual(names[0], f"Name {limit + 2}")
 
-    def test_pro_retention_is_unlimited(self):
+    def test_pro_keeps_the_same_ten(self):
         self.user.profile.tier = "pro"
         self.user.profile.save()
-        limit = settings.FREE_TIER_LIMITS["revision_history"]
+        limit = settings.REVISION_HISTORY_LIMIT
+        self.assertEqual(limit, 10)
         for i in range(limit + 3):
             self.resume.content = content(name=f"Name {i}")
             revision_service.snapshot(self.resume, ResumeRevision.SOURCE_MANUAL)
-        self.assertEqual(self.resume.revisions.count(), limit + 3)
+        self.assertEqual(self.resume.revisions.count(), limit)
 
     def test_restore_rolls_back_content_and_template(self):
         revision = revision_service.snapshot(self.resume, ResumeRevision.SOURCE_AGENT)
@@ -215,7 +216,7 @@ class RevisionEndpointTest(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(len(body["revisions"]), 1)
         self.assertEqual(body["revisions"][0]["source"], "agent")
-        self.assertEqual(body["retention"], settings.FREE_TIER_LIMITS["revision_history"])
+        self.assertEqual(body["retention"], settings.REVISION_HISTORY_LIMIT)
 
     def test_diff_endpoint(self):
         revision = self._snapshot_and_change()
@@ -386,3 +387,43 @@ class DiffCopyTest(TestCase):
         self.assertEqual(
             set(diff_service.DIFF_COPY["en"]), set(diff_service.DIFF_COPY["tr"])
         )
+
+
+class LineDiffTests(SimpleTestCase):
+    """Bullets are compared line by line, the way git diff does."""
+
+    def job(self, bullets):
+        return {"experience": [{"title": "Engineer", "company": "Acme", "description": bullets}]}
+
+    def diff(self, before, after):
+        from resume.services.diff_service import diff_resume_content
+
+        return diff_resume_content(self.job(before), self.job(after))
+
+    def test_one_added_bullet_is_one_row(self):
+        changes = self.diff(["Built APIs", "Wrote tests"], ["Built APIs", "Wrote tests", "Added Celery queues"])
+        self.assertEqual([(c["kind"], c["after"]) for c in changes], [("added", "Added Celery queues")])
+
+    def test_a_reworded_bullet_carries_word_segments(self):
+        changes = self.diff(["Led a team of three"], ["Led a team of five engineers"])
+        self.assertEqual(len(changes), 1)
+        self.assertEqual(changes[0]["kind"], "changed")
+        self.assertEqual(
+            changes[0]["words"],
+            [["equal", "Led a team of"], ["delete", "three"], ["insert", "five engineers"]],
+        )
+
+    def test_an_unrelated_replacement_is_a_removal_and_an_addition(self):
+        changes = self.diff(["Built APIs"], ["Mentored two interns on Kubernetes"])
+        self.assertEqual(sorted(c["kind"] for c in changes), ["added", "removed"])
+
+    def test_unchanged_bullets_are_not_shown(self):
+        self.assertEqual(self.diff(["A", "B", "C"], ["A", "B", "C"]), [])
+
+    def test_a_project_description_is_split_into_lines(self):
+        from resume.services.diff_service import diff_resume_content
+
+        before = {"projects_and_publications": [{"name": "Tool", "description": "Line one\nLine two"}]}
+        after = {"projects_and_publications": [{"name": "Tool", "description": "Line one\nLine two\nLine three"}]}
+        changes = diff_resume_content(before, after)
+        self.assertEqual([(c["kind"], c["after"]) for c in changes], [("added", "Line three")])

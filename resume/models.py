@@ -134,7 +134,7 @@ class ResumeRevision(models.Model):
 
     Written immediately before any mutation of Resume.content or
     Resume.template_selector, so restoring a revision undoes exactly one step.
-    Free accounts keep a bounded number of these (see revision_service.prune).
+    Every resume keeps the newest few (see revision_service.prune).
     """
 
     SOURCE_MANUAL = "manual"

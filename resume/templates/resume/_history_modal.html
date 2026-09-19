@@ -128,7 +128,7 @@ function renderDiff(data) {
     rows.push(diffRow(HISTORY_LABELS.template, '', 'changed', data.template_before, data.template_after));
   }
   (data.changes || []).forEach(c => {
-    rows.push(diffRow([c.section, c.item].filter(Boolean).join(' - '), c.field, c.kind, c.before, c.after));
+    rows.push(diffRow([c.section, c.item].filter(Boolean).join(' - '), c.field, c.kind, c.before, c.after, c.words));
   });
   if (rows.length === 0) {
     return `<p class="text-slate-400 text-xs">${escapeHistoryHtml(HISTORY_LABELS.noChanges)}</p>`;
@@ -136,7 +136,17 @@ function renderDiff(data) {
   return `<p class="text-xs font-semibold text-slate-500 mb-2">${escapeHistoryHtml(data.summary)}</p>` + rows.join('');
 }
 
-function diffRow(heading, field, kind, before, after) {
+// A reworded line as one line: removed words struck through, added ones marked.
+function historyWordDiff(words) {
+  return words.map(([op, text]) => {
+    if (!text) return '';
+    if (op === 'delete') return `<del class="bg-red-100 text-red-700 rounded px-0.5">${escapeHistoryHtml(text)}</del>`;
+    if (op === 'insert') return `<ins class="bg-green-100 text-green-800 no-underline rounded px-0.5">${escapeHistoryHtml(text)}</ins>`;
+    return escapeHistoryHtml(text);
+  }).join(' ');
+}
+
+function diffRow(heading, field, kind, before, after, words) {
   const badge = {
     added:   ['bg-green-100 text-green-700', HISTORY_LABELS.added],
     removed: ['bg-red-100 text-red-700',     HISTORY_LABELS.removed],
@@ -161,7 +171,9 @@ function diffRow(heading, field, kind, before, after) {
         ${field ? `<span class="text-xs text-slate-400">${escapeHistoryHtml(field)}</span>` : ''}
         <span class="text-[10px] px-1.5 py-0.5 rounded-full ${badge[0]} font-medium">${escapeHistoryHtml(badge[1])}</span>
       </div>
-      <div class="flex gap-2">${beforeBlock}${afterBlock}</div>
+      ${words && words.length
+        ? `<p class="text-xs text-slate-700 bg-white border border-slate-100 rounded px-2 py-1 leading-relaxed break-words">${historyWordDiff(words)}</p>`
+        : `<div class="flex gap-2">${beforeBlock}${afterBlock}</div>`}
     </div>`;
 }
 

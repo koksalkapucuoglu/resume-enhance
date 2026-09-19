@@ -41,11 +41,8 @@ def snapshot(resume, source, summary="", tool_name=""):
 
 
 def prune(resume):
-    """Drop revisions beyond the account's retention limit. Pro keeps all."""
-    if resume.user.profile.is_pro():
-        return 0
-
-    limit = settings.FREE_TIER_LIMITS["revision_history"]
+    """Keep the newest REVISION_HISTORY_LIMIT restore points; drop the rest."""
+    limit = settings.REVISION_HISTORY_LIMIT
     stale_ids = list(
         ResumeRevision.objects.filter(resume=resume)
         .values_list("pk", flat=True)[limit:]

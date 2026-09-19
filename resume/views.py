@@ -2387,11 +2387,7 @@ def resume_revisions(request, pk):
             "resume_id": resume.pk,
             "resume_name": resume.display_name,
             "revisions": revisions,
-            "retention": (
-                None
-                if request.user.profile.is_pro()
-                else settings.FREE_TIER_LIMITS["revision_history"]
-            ),
+            "retention": settings.REVISION_HISTORY_LIMIT,
         }
     )
 
