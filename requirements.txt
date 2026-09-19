@@ -4,6 +4,7 @@ psycopg2-binary==2.9.7
 django-crispy-forms==2.3
 crispy-bootstrap4
 openai==1.55.3
+typesafe-sdk==0.7.0
 python-dotenv==1.0.1
 Jinja2==3.1.4
 PyPDF2==3.0.1

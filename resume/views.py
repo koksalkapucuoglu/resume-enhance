@@ -1201,7 +1201,7 @@ def upload_cv(request):
         cv_file = request.FILES.get("cv_file")
         if not cv_file:
             return JsonResponse({"error": "No file uploaded."}, status=400)
-        logger.info("CV file uploaded: %s", cv_file.name)
+        logger.info("CV file uploaded: %d bytes", cv_file.size)
 
         # Ensure the uploaded file is a PDF
         if not cv_file.name.endswith(".pdf"):
@@ -1313,7 +1313,7 @@ def upload_linkedin_cv(request):
             )
 
         linkedin_file = request.FILES["linkedin_file"]
-        logger.info("LinkedIn file uploaded: %s", linkedin_file.name)
+        logger.info("LinkedIn file uploaded: %d bytes", linkedin_file.size)
 
         if not linkedin_file.name.endswith(".pdf"):
             return JsonResponse({"error": "Only PDF files are allowed."}, status=400)

@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/4.1/ref/settings/
 """
 
 import os
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -321,6 +322,14 @@ LOGGING = {
             "level": "WARNING",
             "propagate": False,
         },
+        # The TypeSafe SDK logs request and response bodies at DEBUG — resume
+        # text and job postings. Pinned above that so a stray
+        # TYPESAFE_LOG_LEVEL=debug cannot put user content in the logs.
+        "typesafe_sdk": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
     },
     "root": {
         "handlers": ["console"],
@@ -333,6 +342,18 @@ CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap4"
 CRISPY_TEMPLATE_PACK = "bootstrap4"
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+
+# TypeSafe (Jev) answers the typed judgments — match scoring, import checks,
+# tool-call guardrails. Text generation stays with OpenAI. The model is pinned
+# to an exact release so stored scores do not drift when `jev-latest` moves;
+# bump it deliberately, after `manage.py jev_eval`.
+TYPESAFE_API_KEY = os.environ.get("TYPESAFE_API_KEY", "")
+# The test runner loads the same .env; without this a test that forgot to mock
+# Jev would quietly call the real API. Tests that need a key override it.
+if len(sys.argv) > 1 and sys.argv[1] == "test":
+    TYPESAFE_API_KEY = ""
+TYPESAFE_MODEL = os.environ.get("TYPESAFE_MODEL", "jev-1.13.0")
+TYPESAFE_TIMEOUT = float(os.environ.get("TYPESAFE_TIMEOUT", "15"))
 
 # TODO: Convert to template selector map (faangpath-simple: faangpath_simple_template.tex, cls)
 # LATEX_SETTINGS = {
@@ -377,7 +398,7 @@ MCP_REGISTRY_AUTH = os.environ.get("MCP_REGISTRY_AUTH", "")
 # The version of the privacy policy a new user consents to at sign-up — the
 # "Last updated" date on /privacy/ and /gizlilik/. Change it together with the
 # policy text, so each stored consent points at the words it agreed to.
-PRIVACY_POLICY_VERSION = "2026-09-13"
+PRIVACY_POLICY_VERSION = "2026-09-19"
 
 # Subscription Tier Limits
 FREE_TIER_LIMITS = {

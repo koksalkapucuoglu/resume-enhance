@@ -977,8 +977,11 @@ Respond in {"Turkish" if lang == "tr" else "English"}."""
                     ]
             return parsed
         except (ValueError, TypeError) as e:
+            # Length only: the result is the user's rewritten resume.
             logger.warning(
-                "modify_resume parse error: %s | result: %s", e, result[:200]
+                "modify_resume parse error: %s (%d chars)",
+                type(e).__name__,
+                len(result or ""),
             )
             return None
 

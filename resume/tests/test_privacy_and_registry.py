@@ -20,7 +20,7 @@ SERVER_JSON = Path(settings.BASE_DIR) / "server.json"
 DATA_CONTROLLER = "Köksal Kapucuoğlu"
 
 # Everyone who receives user data, in both language versions.
-PROCESSORS = ("OpenAI", "Hetzner", "Cloudflare", "Google", "cdn.tailwindcss.com", "unpkg.com")
+PROCESSORS = ("OpenAI", "TypeSafe", "Hetzner", "Cloudflare", "Google", "cdn.tailwindcss.com", "unpkg.com")
 
 
 class TurkishPrivacyPolicyTests(TestCase):

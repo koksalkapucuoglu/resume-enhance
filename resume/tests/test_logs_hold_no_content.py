@@ -49,3 +49,15 @@ class JobServiceLogsTests(TestCase):
         self.assert_logged_without_content(
             lambda: job_service.tailor_content(self.resume, POSTING)
         )
+
+
+class ModifyResumeLogsTests(TestCase):
+    def test_an_unparseable_rewrite_is_logged_by_length(self):
+        from resume.services.agent_service import AgentService
+
+        with self.assertLogs("resume.services.agent_service", level="WARNING") as captured:
+            parsed = AgentService()._validate_modify_result(f"not json: {SECRET}")
+        self.assertIsNone(parsed)
+        logged = "\n".join(captured.output)
+        self.assertIn("chars", logged)
+        self.assertNotIn("Ada", logged)

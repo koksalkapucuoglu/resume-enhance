@@ -9,7 +9,7 @@
 | **App Name** | ResuStack (formerly resume-enhance) |
 | **Tech Stack** | Django 4.2, DRF 3.15, HTMX, TailwindCSS (CDN), Vanilla JS |
 | **Database** | PostgreSQL 15 |
-| **AI** | OpenAI `gpt-4o-mini` via `resume/openai_engine.py` |
+| **AI** | OpenAI `gpt-4o-mini` via `resume/openai_engine.py` (writes text); TypeSafe Jev via `resume/typesafe_engine.py` (typed judgments) |
 | **PDF Engine** | WeasyPrint (HTML/CSS → PDF) |
 | **Auth** | Django built-in auth + custom `SignupView`, `ProfileView` |
 | **Deployment** | Dokploy (Dockerfile build, Traefik); every push to `main` deploys |
@@ -99,6 +99,7 @@ Django Views (resume/views.py)          ← HTTP request handling, form validati
 
 - One concern per file/module.
 - All OpenAI calls → `resume/openai_engine.py` (never scatter API calls across views).
+- All TypeSafe (Jev) calls → `resume/typesafe_engine.ask()`.
 - All PDF logic → `resume/services/pdf_service.py`.
 - Auth views → `core/views.py` (keep `resume/views.py` resume-focused).
 - New services go in `resume/services/<service_name>.py`.
@@ -523,6 +524,17 @@ result = send_openai_message(user_message, meta_prompt, is_json=True, temperatur
 # Enhancing text — creative, free-form
 result = send_openai_message(user_message, meta_prompt, temperature=0.7, max_tokens=1500)
 ```
+
+### TypeSafe Jev (`resume/typesafe_engine.py`)
+
+- **Division of labour:** OpenAI generates text; Jev answers typed questions about text (`Noul` = probability of yes, `Choice` = one of a set, `Score` = position on ordered levels) with probabilities. A decision the product acts on, or a number shown to the user, should come from Jev; prose stays with OpenAI.
+- **`ask(state, questions, purpose=...)` never raises.** It returns `Answers` or `None` (no key, timeout, API error). Every caller must have a path for `None`: fall back, skip the check, or let the user through. Nothing may depend on Jev being up.
+- **Model is pinned** (`settings.TYPESAFE_MODEL`, e.g. `jev-1.13.0`, not `jev-latest`) so stored scores do not drift. Bump it only after `python manage.py jev_eval` before/after.
+- **`jev_eval`** runs labelled, synthetic cases against the real API (paid; never part of `manage.py test`). A feature that adds Jev judgments adds a suite to `SUITES` and uses it to choose thresholds.
+- **Tests:** `TYPESAFE_API_KEY` is blanked when `manage.py test` runs, so an unmocked call returns `None` instead of reaching the API. Mock `typesafe_engine.ask` (or `_get_client`).
+- **Logs:** the SDK logs request/response bodies at DEBUG; the `typesafe_sdk` logger is pinned to WARNING in `LOGGING`. `ask` logs purpose, counts, latency and tokens only.
+- One request handled 200 questions in <1s; `ask` splits batches above `MAX_QUESTIONS_PER_REQUEST`. Questions in one call are independent — use a second call only when an answer is needed to build the next question.
+- TypeSafe is a named processor in both privacy policies and in the sign-up consent text.
 
 ### WeasyPrint (PDF Generation)
 
