@@ -82,6 +82,7 @@ STEP_COPY = {
         "_default": "Working...",
         "list_resumes": "Looking up your resumes...",
         "evaluate_posting": "Evaluating against the posting...",
+        "improve_for_posting": "Preparing the improvements...",
         "list_evaluations": "Looking up your evaluations...",
         "promote_branch": "Replacing the base resume...",
         "find_resume": "Searching your resumes...",
@@ -108,6 +109,7 @@ STEP_COPY = {
         "_default": "Çalışıyorum...",
         "list_resumes": "CV'lerinize bakıyorum...",
         "evaluate_posting": "İlana göre değerlendiriliyor...",
+        "improve_for_posting": "İyileştirmeler hazırlanıyor...",
         "list_evaluations": "Değerlendirmelerinize bakıyorum...",
         "promote_branch": "Ana CV değiştiriliyor...",
         "find_resume": "CV'lerinizde arıyorum...",
@@ -167,6 +169,10 @@ You help the user manage and improve their resumes by calling tools. Rules:
   branch is active, edits for that posting go to the branch (it is the active
   resume); never edit the base for a posting unless asked. The base changes
   only through promote_branch, when the user asks to make the branch main.
+- To improve the resume for a posting's gaps ("add the missing ones", "fix
+  Kafka and PCI-DSS"), call improve_for_posting with those requirement ids —
+  it asks the user what is needed and shows each change for approval. Use
+  modify_resume only for edits that are not about the posting's gaps.
 - Never add experience or skills the requirement table marks "missing"
   unless the user tells you they did it; then write what they did, in the
   experience where they did it. "Partial" means mentioned but not shown in

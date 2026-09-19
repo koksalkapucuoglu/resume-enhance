@@ -2353,6 +2353,112 @@ def resume_evaluation(request, pk, posting_id):
     return JsonResponse(evaluation_service.panel(resume, posting, evaluation, previous))
 
 
+def _improvement_subjects(request, data):
+    """The caller's resume, posting and latest evaluation, or an error response."""
+    from resume.services import evaluation_service
+
+    # SECURITY: both scoped to the caller
+    resume = Resume.objects.filter(pk=data.get("resume_id") or 0, user=request.user).first()
+    posting = JobPosting.objects.filter(pk=data.get("posting_id") or 0, user=request.user).first()
+    if resume is None or posting is None:
+        return None, JsonResponse({"error": "Not found."}, status=404)
+    try:
+        evaluation, _ = evaluation_service.evaluate(resume, posting)
+    except evaluation_service.EvaluationError as exc:
+        return None, JsonResponse({"error": str(exc)}, status=400)
+    return (resume, posting, evaluation), None
+
+
+@login_required
+@require_http_methods(["POST"])
+def improve_plan(request):
+    """
+    What can be done for the selected gaps: rewrites, and questions to ask.
+
+    JSON in:  {resume_id, posting_id, requirement_ids: [] (empty = every gap)}
+    """
+    from resume.services import improvement_service
+
+    locked = _evaluation_locked(request)
+    if locked:
+        return locked
+    data = _json_body(request) or {}
+    subjects, error = _improvement_subjects(request, data)
+    if error:
+        return error
+    resume, posting, evaluation = subjects
+    ids = [str(i) for i in data.get("requirement_ids") or []]
+    return JsonResponse(improvement_service.plan(resume, posting, evaluation, ids))
+
+
+@login_required
+@require_http_methods(["POST"])
+def improve_draft(request):
+    """
+    Write the changes for review; nothing is saved. One AI enhancement.
+
+    JSON in:  {resume_id, posting_id, rewrites: [...plan rewrites],
+               answers: [{req_id, entry, fact}]}
+    JSON out: {token, changes: [...]}
+    """
+    from resume.services import improvement_service
+
+    locked = _evaluation_locked(request)
+    if locked:
+        return locked
+    if not improvement_service.can_draft(request.user):
+        return JsonResponse(
+            {"error": f"You have used this month's {improvement_service.enhance_limit()} AI enhancements."},
+            status=403,
+        )
+    data = _json_body(request) or {}
+    subjects, error = _improvement_subjects(request, data)
+    if error:
+        return error
+    resume, posting, evaluation = subjects
+    # Rewrites are re-derived from the plan, never taken from the client:
+    # which bullet a rewrite replaces must come from the evaluation.
+    wanted = {str(r.get("req_id")) for r in data.get("rewrites") or [] if isinstance(r, dict)}
+    rewrites = [
+        r for r in improvement_service.plan(resume, posting, evaluation, list(wanted))["rewrites"]
+    ] if wanted else []
+    answers = [a for a in data.get("answers") or [] if isinstance(a, dict)]
+    try:
+        result = improvement_service.draft(
+            request.user, resume, posting, rewrites, answers,
+            request.user.profile.ui_language or "en",
+        )
+    except improvement_service.ImprovementError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    improvement_service.charge(request.user)
+    return JsonResponse(result)
+
+
+@login_required
+@require_http_methods(["POST"])
+def improve_apply(request):
+    """
+    Save the accepted changes (as edited), then measure again.
+
+    JSON in:  {resume_id, token, accepted: [{id, text}]}
+    JSON out: the evaluation panel, with what moved
+    """
+    from resume.services import evaluation_service, improvement_service
+
+    data = _json_body(request) or {}
+    # SECURITY: scoped to the caller
+    resume = Resume.objects.filter(pk=data.get("resume_id") or 0, user=request.user).first()
+    if resume is None:
+        return JsonResponse({"error": "Not found."}, status=404)
+    try:
+        evaluation, previous, posting = improvement_service.apply(
+            request.user, resume, data.get("token") or "", data.get("accepted")
+        )
+    except (improvement_service.ImprovementError, evaluation_service.EvaluationError) as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    return JsonResponse(evaluation_service.panel(resume, posting, evaluation, previous))
+
+
 @login_required
 @require_http_methods(["POST"])
 def promote_job_branch(request, pk):

@@ -491,6 +491,41 @@ def evaluate_posting(user, ctx, posting, target=None, resume_id=None):
 
 
 @tool(
+    name="improve_for_posting",
+    description=(
+        "Start improving the active resume for the active posting's gaps. Pass "
+        "the requirement ids (from the context) the user wants, or none for "
+        "every gap. Nothing changes yet: the user answers what is needed "
+        "(where they did something missing, in their own words) and approves "
+        "each change in a card. Never write those bullets yourself with "
+        "modify_resume."
+    ),
+    parameters={"requirement_ids": {"type": ["array", "null"], "items": {"type": "string"}}},
+)
+def improve_for_posting(user, ctx, requirement_ids=None):
+    resume = ctx.get("active_resume")
+    posting = ctx.get("active_posting")
+    if resume is None or posting is None:
+        return ToolResult(data={"error": "No evaluation is open. Evaluate a posting first."})
+    return ToolResult(
+        data={
+            "started": True,
+            "note": (
+                "Cards below walk the user through it. Reply with one short "
+                "sentence in the user's language; do not list the changes."
+            ),
+        },
+        ui=[{
+            "type": "improve_start",
+            "resume_id": resume.pk,
+            "posting_id": posting.pk,
+            "requirement_ids": requirement_ids or [],
+            "message": "",
+        }],
+    )
+
+
+@tool(
     name="list_evaluations",
     description=(
         "Postings evaluated for this resume and its job branches, with the "

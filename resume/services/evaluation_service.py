@@ -383,7 +383,7 @@ def context_summary(resume, posting):
         if at and at.get("section") == "experience":
             where = f" [closest evidence: experience #{at['entry']}, bullet #{at['bullet']}]"
         lines.append(
-            f"- {'REQUIRED' if row['required'] else 'nice to have'} · {row['status']} · "
-            f"{row['label']}: {row['text']}{where}"
+            f"- id={row['id']} · {'REQUIRED' if row['required'] else 'nice to have'} · "
+            f"{row['status']} · {row['label']}: {row['text']}{where}"
         )
     return "\n".join(lines)

@@ -566,6 +566,13 @@ Scope, on purpose: evaluate a resume against a posting, show strengths and gaps,
 - **Agentic UI:** the Application Score button, a pasted posting (Jev `looks_like_posting` → offer bar) and `evaluate_posting` all lead to one flow: add posting → card "branch (recommended) / base" → `evaluate_job_posting` → panel (`context-evaluation`) + context bar ("Main › Finly (dal) · İlan … · 62") + one chat line saved to history. These endpoints run no chat turn and cost no agent message. After `modify_resume` or a restore, `refreshEvaluation()` re-measures and writes what moved. The dashboard sends `active_posting_id`; the assistant's context carries `evaluation_service.context_summary` (rows with status and evidence location).
 - Skills listed only in the skills section, or claims like "I have knowledge of X", score "partial" by design: the rubric rewards work shown.
 
+### Improving for a posting's gaps (`resume/services/improvement_service.py`)
+
+- **plan** — a partial requirement whose evidence is an experience bullet is rewritten *in that bullet* (`evidence_at`); everything else becomes a question "where did you do this, what did you do?" with Jev's suggested role (or "I did not do this"). Rewrites can take an optional note in the person's words.
+- **draft** — OpenAI writes only from the current bullet and the person's words; with nothing new it returns the bullet unchanged (dropped, punctuation-only changes too). Jev checks each line against its sources and flags one that says more (`unsupported` → unticked in the card). One draft = one AI enhancement (`enhance_count`). Rewrite targets are re-derived server-side from the evaluation, never taken from the client.
+- **apply** — accepted (optionally edited) lines are written in one step with an agent restore point, then re-measured; the draft token is single-use and refused if the content changed since.
+- Agentic UI: gap checkboxes → "Improve selected / all" → question card → review card (word diff, tick, edit) → apply → panel shows what moved. The assistant's `improve_for_posting` starts the same cards; it never writes those bullets through `modify_resume`.
+
 ### Agent loop notes
 
 - **Paused turns:** when a destructive call stops for approval, the later tool calls of the same assistant turn are answered with `DEFERRED_RESULT` before parking. Every `tool_call_id` needs an answer or the resumed turn fails with OpenAI 400 ("tool_calls must be followed by tool messages").

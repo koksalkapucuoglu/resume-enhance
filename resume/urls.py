@@ -79,6 +79,9 @@ urlpatterns = [
     path("agent/detect-posting/", views.detect_job_posting, name="detect_job_posting"),
     path("agent/postings/", views.add_job_posting, name="add_job_posting"),
     path("agent/evaluate/", views.evaluate_job_posting, name="evaluate_job_posting"),
+    path("agent/improve/plan/", views.improve_plan, name="improve_plan"),
+    path("agent/improve/draft/", views.improve_draft, name="improve_draft"),
+    path("agent/improve/apply/", views.improve_apply, name="improve_apply"),
     path("resume/<int:pk>/evaluations/", views.resume_evaluations, name="resume_evaluations"),
     path(
         "resume/<int:pk>/evaluations/<int:posting_id>/",

@@ -461,6 +461,25 @@ const EVAL_LABELS = {
   stale: `{{ UI.eval_stale|escapejs }}`,
   rescored: `{{ UI.eval_rescored|escapejs }}`,
   pick_resume: `{{ UI.eval_pick_resume|escapejs }}`,
+  improve_selected: `{{ UI.eval_improve_selected|escapejs }}`,
+  improve_all: `{{ UI.eval_improve_all|escapejs }}`,
+  improve_user_msg: `{{ UI.improve_user_msg|escapejs }}`,
+  improve_rewrites: `{{ UI.improve_rewrites|escapejs }}`,
+  improve_questions: `{{ UI.improve_questions|escapejs }}`,
+  improve_did_not: `{{ UI.improve_did_not|escapejs }}`,
+  improve_fact_placeholder: `{{ UI.improve_fact_placeholder|escapejs }}`,
+  improve_draft: `{{ UI.improve_draft|escapejs }}`,
+  improve_writing: `{{ UI.improve_writing|escapejs }}`,
+  improve_review: `{{ UI.improve_review|escapejs }}`,
+  improve_new_bullet: `{{ UI.improve_new_bullet|escapejs }}`,
+  improve_unsupported: `{{ UI.improve_unsupported|escapejs }}`,
+  improve_edit: `{{ UI.improve_edit|escapejs }}`,
+  improve_apply: `{{ UI.improve_apply|escapejs }}`,
+  improve_cancel: `{{ UI.improve_cancel|escapejs }}`,
+  improve_applied: `{{ UI.improve_applied|escapejs }}`,
+  improve_skipped: `{{ UI.improve_skipped|escapejs }}`,
+  improve_cancelled: `{{ UI.improve_cancelled|escapejs }}`,
+  improve_note_placeholder: `{{ UI.improve_note_placeholder|escapejs }}`,
 };
 const CHAT_LANG = "{{ ui_lang }}";
 const STREAM_LABELS = {
@@ -1190,10 +1209,14 @@ const EVAL_ICON = {
 
 function evaluationRow(r) {
     const [icon, tone] = EVAL_ICON[r.status] || EVAL_ICON.missing;
+    const pick = r.status !== 'covered'
+        ? `<input type="checkbox" class="gap-check rounded border-slate-300 text-primary focus:ring-primary" value="${escHtml(r.id)}"
+                  onclick="event.stopPropagation(); syncImproveButton()" aria-label="${escHtml(r.label || r.text)}">` : '';
     const evidence = r.evidence && r.status !== 'missing'
         ? `<p class="text-[11px] text-slate-500 mt-1"><span class="font-semibold">${escHtml(EVAL_LABELS.evidence)}:</span> “${escHtml(r.evidence)}”</p>` : '';
     return `<details class="group rounded-lg border border-slate-100 bg-white px-3 py-2">
       <summary class="flex items-center gap-2 cursor-pointer list-none text-xs text-slate-700">
+        ${pick}
         <span class="material-symbols-outlined !text-[16px] ${tone}" title="${escHtml(EVAL_LABELS[r.status] || '')}">${icon}</span>
         <span class="flex-1">${escHtml(r.label || r.text)}</span>
         <span class="text-[10px] text-slate-400">${escHtml(r.required ? EVAL_LABELS.required : EVAL_LABELS.nice)}</span>
@@ -1235,7 +1258,13 @@ function renderEvaluation(data) {
         ${delta}
         ${moved ? `<ul class="text-[11px] text-slate-600 mt-1 space-y-0.5">${moved}</ul>` : ''}
       </div>
-      ${gaps.length ? `<p class="text-xs font-semibold text-slate-500 mb-1">${escHtml(EVAL_LABELS.gaps)}</p>
+      ${gaps.length ? `<div class="flex items-center gap-2 mb-1">
+          <p class="text-xs font-semibold text-slate-500 flex-1">${escHtml(EVAL_LABELS.gaps)}</p>
+          <button type="button" id="improve-selected-btn" disabled onclick="improveSelected()"
+                  class="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-primary text-white hover:bg-primary-hover disabled:opacity-40">${escHtml(EVAL_LABELS.improve_selected)}</button>
+          <button type="button" onclick="startImprovement([])"
+                  class="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-primary/10 text-primary hover:bg-primary/20">${escHtml(EVAL_LABELS.improve_all)}</button>
+        </div>
         <p class="text-[11px] text-slate-400 mb-1.5">${escHtml(EVAL_LABELS.partial_hint)}</p>
         <div class="space-y-1.5 mb-4">${gaps.map(evaluationRow).join('')}</div>` : ''}
       ${strengths.length ? `<p class="text-xs font-semibold text-slate-500 mb-1.5">${escHtml(EVAL_LABELS.strengths)}</p>
@@ -1268,6 +1297,220 @@ async function loadEvaluationSwitcher(resumeId) {
             refreshEvaluation(true);
         }));
     } catch (e) { bar.innerHTML = ''; }
+}
+
+// ---------------------------------------------------------------------------
+// Improving for the gaps: plan → (questions) → draft → review → apply
+// (services/improvement_service.py). Nothing is written until the person
+// approves the changes in the review card.
+// ---------------------------------------------------------------------------
+function syncImproveButton() {
+    const button = document.getElementById('improve-selected-btn');
+    if (button) button.disabled = !document.querySelector('.gap-check:checked');
+}
+
+function improveSelected() {
+    const ids = [...document.querySelectorAll('.gap-check:checked')].map(c => c.value);
+    if (ids.length) startImprovement(ids);
+}
+
+function lockCard(card) {
+    card.querySelectorAll('button, input, select, textarea').forEach(el => { el.disabled = true; });
+    card.classList.add('opacity-60');
+}
+
+// `announce` is false when the assistant started it: the user already said so.
+async function startImprovement(requirementIds, announce = true) {
+    const ev = lastEvaluation;
+    if (!ev) return;
+    const chosen = ev.rows.filter(r => r.status !== 'covered' && (!requirementIds.length || requirementIds.includes(r.id)));
+    if (!chosen.length) return;
+    if (announce) {
+        const line = fill(EVAL_LABELS.improve_user_msg, {job: ev.posting_short, items: chosen.map(r => r.label).join(', ')});
+        appendMessage('user', line);
+        rememberInHistory('user', line);
+    }
+    showTyping();
+    let plan;
+    try {
+        plan = await postJson('{% url "resume:improve_plan" %}',
+            {resume_id: ev.resume.id, posting_id: ev.posting_id, requirement_ids: requirementIds});
+    } catch (err) {
+        hideTyping();
+        appendMessage('bot', err.message, true);
+        return;
+    }
+    hideTyping();
+    // Always shown: rewrites can take the person's own words too, and the
+    // card is where they see what will happen before anything is written.
+    renderQuestionCard(ev, plan);
+}
+
+function renderQuestionCard(ev, plan) {
+    const container = document.getElementById('chat-messages');
+    const card = document.createElement('div');
+    card.className = 'ml-9 mt-1.5 p-3 rounded-xl border border-primary/20 bg-white shadow-sm max-w-xl';
+    const rewrites = plan.rewrites.length
+        ? `<p class="text-xs font-semibold text-slate-600 mb-1">${escHtml(EVAL_LABELS.improve_rewrites)}</p>
+           ${plan.rewrites.map(r => `
+             <div class="rewrite mb-3" data-req="${escHtml(r.req_id)}">
+               <p class="text-xs font-semibold text-slate-800">${escHtml(r.label)} <span class="font-normal text-slate-500">· ${escHtml(r.job)}</span></p>
+               <p class="text-[11px] text-slate-500 italic mb-1">“${escHtml(r.bullet_text)}”</p>
+               <textarea class="r-note w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs" rows="1"
+                         placeholder="${escHtml(EVAL_LABELS.improve_note_placeholder)}"></textarea>
+             </div>`).join('')}` : '';
+    const questions = plan.questions.map(q => `
+      <div class="question mb-3" data-req="${escHtml(q.req_id)}">
+        <p class="text-xs font-semibold text-slate-800">${escHtml(q.label)}</p>
+        <p class="text-[11px] text-slate-500 mb-1">${escHtml(q.text)}</p>
+        <select class="q-entry w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs">
+          ${q.jobs.map(j => `<option value="${j.entry}" ${j.entry === q.suggested_entry ? 'selected' : ''}>${escHtml(j.label)}</option>`).join('')}
+          <option value="" ${q.suggested_entry == null ? 'selected' : ''}>${escHtml(EVAL_LABELS.improve_did_not)}</option>
+        </select>
+        <textarea class="q-fact mt-1 w-full rounded-lg border border-slate-200 px-2 py-1.5 text-xs" rows="2"
+                  placeholder="${escHtml(EVAL_LABELS.improve_fact_placeholder)}"></textarea>
+      </div>`).join('');
+    card.innerHTML = `${rewrites}
+      ${plan.questions.length ? `<p class="text-xs font-semibold text-slate-600 mb-2">${escHtml(EVAL_LABELS.improve_questions)}</p>` : ''}
+      ${questions}
+      <div class="flex gap-2 justify-end">
+        <button type="button" data-act="cancel" class="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50">${escHtml(EVAL_LABELS.improve_cancel)}</button>
+        <button type="button" data-act="draft" class="px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary-hover">${escHtml(EVAL_LABELS.improve_draft)}</button>
+      </div>`;
+    // "I did not do this" needs no text; any role does.
+    card.querySelectorAll('.question').forEach(block => {
+        const select = block.querySelector('.q-entry');
+        const fact = block.querySelector('.q-fact');
+        const sync = () => { fact.hidden = select.value === ''; };
+        select.addEventListener('change', sync);
+        sync();
+    });
+    card.querySelector('[data-act="cancel"]').addEventListener('click', () => {
+        lockCard(card);
+        appendMessage('bot', EVAL_LABELS.improve_cancelled);
+    });
+    card.querySelector('[data-act="draft"]').addEventListener('click', () => {
+        const answers = [], skipped = [];
+        card.querySelectorAll('.rewrite').forEach(block => {
+            const note = block.querySelector('.r-note').value.trim();
+            if (note) answers.push({req_id: block.dataset.req, entry: null, fact: note});
+        });
+        card.querySelectorAll('.question').forEach(block => {
+            const entry = block.querySelector('.q-entry').value;
+            const fact = block.querySelector('.q-fact').value.trim();
+            const q = plan.questions.find(x => x.req_id === block.dataset.req);
+            if (entry === '' || !fact) skipped.push(q.label);
+            else answers.push({req_id: q.req_id, entry: Number(entry), fact});
+        });
+        lockCard(card);
+        draftImprovement(ev, plan.rewrites, answers, skipped);
+    });
+    container.appendChild(card);
+    scrollToBottom();
+}
+
+async function draftImprovement(ev, rewrites, answers, skipped) {
+    if (skipped.length) {
+        const line = fill(EVAL_LABELS.improve_skipped, {items: skipped.join(', ')});
+        appendMessage('bot', line);
+        rememberInHistory('assistant', line);
+    }
+    if (!rewrites.length && !answers.length) return;
+    showTyping();
+    showStepIndicator(EVAL_LABELS.improve_writing);
+    let draft;
+    try {
+        draft = await postJson('{% url "resume:improve_draft" %}', {
+            resume_id: ev.resume.id, posting_id: ev.posting_id,
+            rewrites: rewrites.map(r => ({req_id: r.req_id})), answers,
+        });
+    } catch (err) {
+        hideStepIndicator();
+        hideTyping();
+        appendMessage('bot', err.message, true);
+        return;
+    }
+    hideStepIndicator();
+    hideTyping();
+    renderDraftCard(ev, draft);
+}
+
+function renderDraftCard(ev, draft) {
+    const container = document.getElementById('chat-messages');
+    const card = document.createElement('div');
+    card.className = 'ml-9 mt-1.5 p-3 rounded-xl border border-amber-200 bg-amber-50/60 shadow-sm max-w-xl';
+    const rows = draft.changes.map(c => `
+      <div class="change bg-white rounded-lg border ${c.unsupported ? 'border-red-200' : 'border-slate-200'} p-2.5 mb-2" data-id="${escHtml(c.id)}">
+        <label class="flex items-start gap-2 cursor-pointer">
+          <input type="checkbox" class="c-accept mt-0.5 rounded border-slate-300 text-primary focus:ring-primary" ${c.unsupported ? '' : 'checked'}>
+          <span class="flex-1 min-w-0">
+            <span class="block text-[11px] text-slate-500">${escHtml(c.job)} · <strong>${escHtml(c.label)}</strong>${c.before ? '' : ` · <span class="text-green-700">${escHtml(EVAL_LABELS.improve_new_bullet)}</span>`}</span>
+            <span class="c-view block text-xs text-slate-800 mt-1 leading-relaxed">${c.words && c.words.length ? wordDiffHtml(c.words)
+                : `<ins class="bg-green-100 text-green-800 no-underline rounded px-0.5">${escHtml(c.after)}</ins>`}</span>
+          </span>
+        </label>
+        ${c.unsupported ? `<p class="text-[11px] text-red-600 mt-1.5 ml-6">${escHtml(EVAL_LABELS.improve_unsupported)}</p>` : ''}
+        <textarea class="c-text hidden mt-1.5 ml-6 w-[calc(100%-1.5rem)] rounded-lg border border-slate-200 px-2 py-1.5 text-xs" rows="2">${escHtml(c.after)}</textarea>
+        <button type="button" class="c-edit ml-6 mt-1 text-[11px] font-semibold text-primary hover:underline">${escHtml(EVAL_LABELS.improve_edit)}</button>
+      </div>`).join('');
+    const resumeName = ev.resume.is_branch ? `${ev.resume.name} (${EVAL_LABELS.branch})` : ev.resume.name;
+    card.innerHTML = `
+      <p class="text-xs font-semibold text-amber-900 mb-2">${escHtml(fill(EVAL_LABELS.improve_review, {resume: resumeName}))}</p>
+      ${rows}
+      <div class="flex gap-2 justify-end mt-1">
+        <button type="button" data-act="cancel" class="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50">${escHtml(EVAL_LABELS.improve_cancel)}</button>
+        <button type="button" data-act="apply" class="px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary-hover disabled:opacity-40"></button>
+      </div>`;
+    const applyButton = card.querySelector('[data-act="apply"]');
+    const syncCount = () => {
+        const n = card.querySelectorAll('.c-accept:checked').length;
+        applyButton.textContent = fill(EVAL_LABELS.improve_apply, {n});
+        applyButton.disabled = n === 0;
+    };
+    card.querySelectorAll('.change').forEach(block => {
+        const text = block.querySelector('.c-text');
+        block.querySelector('.c-edit').addEventListener('click', () => {
+            text.classList.toggle('hidden');
+            if (!text.classList.contains('hidden')) text.focus();
+        });
+        text.addEventListener('input', () => {
+            block.querySelector('.c-view').textContent = text.value;
+        });
+        block.querySelector('.c-accept').addEventListener('change', syncCount);
+    });
+    syncCount();
+    card.querySelector('[data-act="cancel"]').addEventListener('click', () => {
+        lockCard(card);
+        appendMessage('bot', EVAL_LABELS.improve_cancelled);
+    });
+    applyButton.addEventListener('click', async () => {
+        const accepted = [...card.querySelectorAll('.change')]
+            .filter(b => b.querySelector('.c-accept').checked)
+            .map(b => ({id: b.dataset.id, text: b.querySelector('.c-text').value.trim()}));
+        lockCard(card);
+        showTyping();
+        let data;
+        try {
+            data = await postJson('{% url "resume:improve_apply" %}',
+                                  {resume_id: ev.resume.id, token: draft.token, accepted});
+        } catch (err) {
+            hideTyping();
+            appendMessage('bot', err.message, true);
+            return;
+        }
+        hideTyping();
+        const before = ev.score;
+        lastEvaluation = data;
+        renderEvaluation(data);
+        const moved = (data.changes || []).map(c => `${c.label}: ${EVAL_LABELS[c.before] || c.before} → ${EVAL_LABELS[c.after] || c.after}`);
+        const line = fill(EVAL_LABELS.improve_applied, {resume: data.resume.name, before, after: data.score})
+            + (moved.length ? ` · ${moved.join(' · ')}` : '');
+        appendMessage('bot', line);
+        rememberInHistory('assistant', line);
+        appendChangeReviewBar(data.resume.id);
+    });
+    container.appendChild(card);
+    scrollToBottom();
 }
 
 async function promoteActiveBranch() {
@@ -1607,6 +1850,16 @@ function handleResponse(data) {
 
         case 'evaluation_target':
             renderTargetCard(data);
+            break;
+
+        case 'improve_start':
+            if (lastEvaluation && lastEvaluation.posting_id === data.posting_id
+                    && lastEvaluation.resume.id === data.resume_id) {
+                startImprovement(data.requirement_ids || [], false);
+            } else {
+                activePostingId = data.posting_id;
+                refreshEvaluation(true).then(() => startImprovement(data.requirement_ids || [], false));
+            }
             break;
 
         case 'branch_promoted':
