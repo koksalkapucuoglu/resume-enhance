@@ -14,6 +14,7 @@ could otherwise alter the arguments or the destructive flag.
 
 import json
 import logging
+import time
 import uuid
 
 from django.conf import settings
@@ -23,6 +24,15 @@ from resume.openai_engine import send_openai_tool_turn, stream_openai_tool_turn
 from resume.services import agent_guard, agent_tools
 
 logger = logging.getLogger(__name__)
+
+# What a call gets when an earlier call in the same turn stopped for approval.
+DEFERRED_RESULT = {
+    "not_run": True,
+    "note": (
+        "Not run: an earlier step in this turn is waiting for the user's "
+        "approval. Call this again afterwards if it is still needed."
+    ),
+}
 
 MAX_STEPS = 5
 MAX_TOOL_CALLS = 8
@@ -372,6 +382,12 @@ def _run_events(user, ctx, messages, effects, start_step, usage_totals, stream=F
         # Prose is only emitted once we know the turn ended in an answer rather
         # than a tool call — otherwise a model that "thinks out loud" before
         # calling a tool would leak that text into the chat.
+        _trace(
+            ctx, "llm_turn", step=step,
+            calls=[{"id": c["id"][-8:], "tool": c["name"], "arguments": (c["arguments"] or "")[:300]}
+                   for c in calls or []],
+            error=(error or None) and str(error)[:1000],
+        )
         if error:
             logger.warning("Agent loop LLM failure: %s", error)
             yield ("done", {"status": "error", "message": error, "effects": effects})
@@ -388,7 +404,7 @@ def _run_events(user, ctx, messages, effects, start_step, usage_totals, stream=F
 
         messages.append(_serialise_assistant(content, calls))
 
-        for call in calls:
+        for index, call in enumerate(calls):
             tool_calls_made += 1
             if tool_calls_made > MAX_TOOL_CALLS:
                 yield ("done", {"status": "budget", "message": "", "effects": effects})
@@ -402,6 +418,9 @@ def _run_events(user, ctx, messages, effects, start_step, usage_totals, stream=F
                 continue
 
             verdict = agent_guard.check(user, ctx, messages, tool, _call_arguments(call))
+            if tool.name in agent_guard.GUARDED_TOOLS:
+                _trace(ctx, "guard", tool=tool.name, action=verdict.action,
+                       reason=verdict.reason or None, scores=verdict.scores or None)
             if verdict.action == "block":
                 messages.append(_tool_message(call["id"], verdict.tool_message()))
                 continue
@@ -412,6 +431,13 @@ def _run_events(user, ctx, messages, effects, start_step, usage_totals, stream=F
                 ctx.get("confirm_destructive", True) or verdict.action == "warn"
             ):
                 lang = ctx.get("lang", "en")
+                # Every tool call in an assistant turn needs an answer before
+                # the model is called again. The ones after this call have not
+                # run; say so, or the resumed turn fails with a 400.
+                for later in calls[index + 1:]:
+                    messages.append(_tool_message(later["id"], DEFERRED_RESULT))
+                    _trace(ctx, "deferred", tool=later["name"])
+                _trace(ctx, "needs_approval", tool=tool.name)
                 token = _park(user, messages, call, effects, step, lang)
                 yield (
                     "done",
@@ -461,19 +487,40 @@ def _call_arguments(call):
     return {k: v for k, v in arguments.items() if v is not None}
 
 
+def _trace(ctx, kind, **detail):
+    """
+    Note a step for the superuser debug view.
+
+    `ctx["debug"]` is a list only for superusers; for everyone else this does
+    nothing. The trace goes back to that user's own browser in the done frame
+    and is never logged — it holds their conversation.
+    """
+    trace = ctx.get("debug")
+    if trace is not None:
+        trace.append({"kind": kind, **detail})
+
+
 def _invoke(tool, user, ctx, call):
     """Run a tool, turning any failure into a result the model can read."""
     arguments = _call_arguments(call)
+    started = time.monotonic()
     try:
-        return tool.handler(user, ctx, **arguments)
+        result = tool.handler(user, ctx, **arguments)
     except TypeError as exc:
         logger.warning("Tool %s called with bad arguments: %s", tool.name, exc)
-        return agent_tools.ToolResult(data={"error": f"Invalid arguments: {exc}"})
-    except Exception:
+        result = agent_tools.ToolResult(data={"error": f"Invalid arguments: {exc}"})
+    except Exception as exc:
         logger.exception("Tool %s failed", tool.name)
-        return agent_tools.ToolResult(
+        _trace(ctx, "tool_exception", tool=tool.name, error=f"{type(exc).__name__}: {exc}"[:500])
+        result = agent_tools.ToolResult(
             data={"error": "The tool failed unexpectedly. Tell the user to try again."}
         )
+    _trace(
+        ctx, "tool_result", tool=tool.name, seconds=round(time.monotonic() - started, 2),
+        error=str(result.data.get("error") or "")[:500] or None,
+        effects=[e.get("type") for e in result.ui],
+    )
+    return result
 
 
 def stream_turn(user, ctx, history, user_message):
@@ -486,6 +533,7 @@ def stream_turn(user, ctx, history, user_message):
         if event[0] == "done":
             outcome = dict(event[1])
             outcome["usage"] = usage_totals
+            outcome["debug"] = ctx.get("debug")
             yield ("done", outcome)
             return
         yield event
@@ -503,6 +551,7 @@ def stream_resume_turn(user, ctx, parked, approved):
         if event[0] == "done":
             outcome = dict(event[1])
             outcome["usage"] = usage_totals
+            outcome["debug"] = ctx.get("debug")
             yield ("done", outcome)
             return
         yield event
@@ -514,6 +563,7 @@ def run_turn(user, ctx, history, user_message):
     messages = _build_messages(ctx, history, user_message)
     outcome = _run(user, ctx, messages, [], 0, usage_totals)
     outcome["usage"] = usage_totals
+    outcome["debug"] = ctx.get("debug")
     return outcome
 
 
@@ -529,6 +579,7 @@ def resume_turn(user, ctx, parked, approved):
     messages, effects, _new = _prepare_resume(user, ctx, parked, approved)
     outcome = _run(user, ctx, messages, effects, parked["step"], usage_totals)
     outcome["usage"] = usage_totals
+    outcome["debug"] = ctx.get("debug")
     return outcome
 
 

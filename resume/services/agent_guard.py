@@ -68,6 +68,8 @@ class Verdict:
     reason: str = ""
     target_name: str = ""
     suggested_resume_id: int = None
+    # Jev's raw answers, for the superuser debug view.
+    scores: dict = None
 
     def tool_message(self):
         """What the model reads when its call was blocked."""
@@ -178,6 +180,10 @@ def check(user, ctx, messages, tool, arguments):
             verdict = Verdict("warn", reason="Unsure this matches the request.",
                               target_name=target_name)
 
+    verdict.scores = {
+        "asked": round(asked, 2), "args": round(args_ok, 2),
+        "target": f"{pick.choice}@{pick.confidence:.2f}" if pick else None,
+    }
     logger.info(
         "Agent guard %s: %s (asked=%.2f args=%.2f target=%s)",
         tool.name, verdict.action, asked, args_ok,

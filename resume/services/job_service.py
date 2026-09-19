@@ -220,6 +220,35 @@ def match_and_record(user, resume, description, lang="en", apply_to=None,
     return {"posting": posting, "previous": previous, "is_new": is_new, "result": result}
 
 
+def remeasure(posting, lang="en", resume=None, prose=True):
+    """
+    Measure an application again. Returns (result, measured) where `measured`
+    is "resume" or "stored_copy"; the caller records and saves.
+
+    Which document is measured follows what the person means by "my CV":
+      * `resume` given — that resume. If the application has not been sent,
+        it also becomes the stored copy.
+      * not sent yet, and the resume it came from changed after the copy was
+        taken — the resume, and the copy follows it. Until an application goes
+        out, its copy is only "what I would send", and measuring an older
+        version after they edited was why added lines did not count.
+      * otherwise — the stored copy, which records what was sent.
+    """
+    unsent = posting.status == JobPosting.STATUS_SAVED
+    source = posting.source_resume
+    if resume is None and unsent and source is not None and (
+        not posting.snapshot_taken_at or source.updated_at > posting.snapshot_taken_at
+    ):
+        resume = source
+
+    if resume is not None:
+        result = _analyze(resume.content, posting.description, lang, prose=prose)
+        if "error" not in result and unsent:
+            posting.take_snapshot(resume.content, resume.template_selector, resume)
+        return result, "resume"
+    return _analyze(posting.snapshot_content, posting.description, lang, prose=prose), "stored_copy"
+
+
 def _analyze(content, description, lang="en", prose=True):
     """
     Score how well a resume answers a posting.

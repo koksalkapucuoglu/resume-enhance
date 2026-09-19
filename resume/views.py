@@ -2031,18 +2031,18 @@ def rescore_job_posting(request, pk):
     from resume.services import job_service
 
     jobs_url = reverse("resume:jobs")
-    posting = JobPosting.objects.filter(pk=pk, user=request.user).first()
-    if not posting or not posting.has_snapshot or not posting.description:
+    posting = (
+        JobPosting.objects.filter(pk=pk, user=request.user).select_related("source_resume").first()
+    )
+    if not posting or not posting.description or not (posting.has_snapshot or posting.source_resume):
         messages.error(request, "That application has nothing stored to measure.")
         return redirect(jobs_url)
     if _email_unverified(request):
         messages.error(request, _ai_locked_message(request))
         return redirect(jobs_url)
 
-    result = job_service.analyze_snapshot(
-        posting.snapshot_content, posting.description,
-        request.user.profile.ui_language or "en",
-    )
+    # The current resume while the application is unsent, the stored copy after.
+    result, _measured = job_service.remeasure(posting, request.user.profile.ui_language or "en")
     if "error" in result:
         messages.error(request, result["error"])
         return redirect(jobs_url)
@@ -2051,8 +2051,7 @@ def rescore_job_posting(request, pk):
         requirements=result.get("requirements"),
         scoring_version=result.get("scoring_version", "llm-v1"),
     )
-    posting.save(update_fields=["match_score", "score_history", "missing_keywords",
-                                "requirements", "scoring_version", "updated_at"])
+    posting.save()
     return redirect(f"{jobs_url}?open={posting.pk}#job-{posting.pk}")
 
 
@@ -2535,6 +2534,8 @@ def _agent_context(request, active_resume, message="", history=None):
     return {
         "lang": lang,
         "confirm_destructive": profile.confirm_destructive,
+        # Superusers get a trace of each turn in the chat (agent_loop._trace).
+        "debug": [] if request.user.is_superuser else None,
         "active_resume": active_resume,
         "applications": applications,
         "resumes": [
@@ -2614,6 +2615,8 @@ def _agent_response(outcome, active_resume_id, user_message):
 
     if user_message:
         payload["user_message"] = user_message
+    if outcome.get("debug") is not None:
+        payload["debug"] = outcome["debug"]
     return payload
 
 

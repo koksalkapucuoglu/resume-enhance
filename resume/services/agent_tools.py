@@ -685,44 +685,58 @@ def clone_application_resume(user, ctx, job_id):
 @tool(
     name="rescore_job",
     description=(
-        "Re-measure a saved application against the resume currently attached "
-        "to it, and report the change. Use after editing or tailoring so the "
-        "user can see whether the score moved."
+        "Measure a saved application again and report how the score moved. "
+        "Use after the user edits their resume or tailors the copy. If the "
+        "application has not been sent yet, the user's current resume is "
+        "measured (their edits count) and becomes the stored copy; once sent, "
+        "the stored copy is measured. Pass resume_id to measure one particular "
+        "resume of theirs instead."
     ),
-    parameters={"job_id": {"type": "integer"}},
+    parameters={"job_id": {"type": "integer"}, "resume_id": INT_OR_NULL},
 )
-def rescore_job(user, ctx, job_id):
+def rescore_job(user, ctx, job_id, resume_id=None):
 
-    posting = JobPosting.objects.filter(pk=job_id, user=user).first()
+    posting = JobPosting.objects.filter(pk=job_id, user=user).select_related(
+        "source_resume"
+    ).first()
     if not posting:
         return ToolResult(data={"error": f"No saved job with id {job_id}."})
 
-    if not posting.has_snapshot:
+    resume = None
+    if resume_id:
+        resume = Resume.objects.filter(pk=resume_id, user=user).first()
+        if not resume:
+            return ToolResult(data={"error": f"No resume with id {resume_id}."})
+
+    if resume is None and not posting.has_snapshot and not posting.source_resume:
         return ToolResult(
             data={"error": "This application has no stored resume to measure yet."}
         )
 
     from resume.services import job_service
 
-    result = job_service.analyze_snapshot(
-        posting.snapshot_content, posting.description, ctx.get("lang", "en")
-    )
+    result, measured = job_service.remeasure(posting, ctx.get("lang", "en"), resume=resume)
     if "error" in result:
         return ToolResult(data=result)
 
+    measured_id = (resume or posting.source_resume).id if measured == "resume" else posting.source_resume_id
     previous = posting.record_score(
-        result["score"], posting.source_resume_id, result["missing_keywords"],
+        result["score"], measured_id, result["missing_keywords"],
         requirements=result.get("requirements"),
         scoring_version=result.get("scoring_version", "llm-v1"),
     )
-    posting.save(update_fields=["match_score", "score_history", "missing_keywords",
-                                "requirements", "scoring_version", "updated_at"])
+    posting.save()
 
     delta = None if previous is None else result["score"] - previous
+    measured_resume = resume or posting.source_resume
     return ToolResult(
         data={
             "job_id": posting.id,
             "source_resume_id": posting.source_resume_id,
+            "measured": (
+                "the user's current resume" if measured == "resume"
+                else "the stored copy of what was sent"
+            ),
             "score": result["score"],
             "previous_score": previous,
             "change": delta,
@@ -733,9 +747,12 @@ def rescore_job(user, ctx, job_id):
                 "type": "job_match",
                 "job_id": posting.id,
                 "job_label": posting.label,
-                "resume_id": None,
+                "resume_id": measured_resume.id if measured == "resume" and measured_resume else None,
                 "job_snapshot_id": posting.id,
-                "resume_name": posting.snapshot_name,
+                "resume_name": (
+                    measured_resume.display_name if measured == "resume" and measured_resume
+                    else posting.snapshot_name
+                ),
                 "preview_url": f"/jobs/{posting.id}/snapshot/",
                 "previous_score": previous,
                 **_match_panel(result),

@@ -165,8 +165,13 @@
                 <span class="material-symbols-outlined !text-[14px] text-primary">edit_note</span>
                 <span class="text-primary font-medium">{{ UI.active_resume_label }}</span>
                 <span id="active-resume-label" class="text-primary font-semibold truncate flex-1 max-w-[60vw] lg:max-w-none"></span>
+                <button type="button" onclick="openHistory()"
+                        class="ml-auto flex-shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-md text-primary font-semibold hover:bg-primary/10 transition-colors"
+                        title="{{ UI.history_title }}">
+                    <span class="material-symbols-outlined !text-[14px]">history</span>{{ UI.history }}
+                </button>
                 <button onclick="clearActiveResume()"
-                        class="text-slate-400 hover:text-slate-600 ml-auto flex-shrink-0 transition-colors"
+                        class="text-slate-400 hover:text-slate-600 flex-shrink-0 transition-colors"
                         title="Clear active resume">
                     <span class="material-symbols-outlined !text-[14px]">close</span>
                 </button>
@@ -263,7 +268,12 @@
             <div id="context-job-match" class="hidden flex-col flex-1 overflow-hidden">
                 <div class="px-4 py-3 border-b border-slate-200 bg-white flex items-center gap-2">
                     <span class="material-symbols-outlined text-slate-500">work</span>
-                    <h3 id="context-job-title" class="font-semibold text-slate-700 text-sm truncate">{{ UI.job_match_title }}</h3>
+                    <h3 id="context-job-title" class="font-semibold text-slate-700 text-sm truncate flex-1">{{ UI.job_match_title }}</h3>
+                    <!-- The resume stays one click away while a match is open -->
+                    <button type="button" onclick="showActiveResume()" id="job-show-resume-btn"
+                            class="px-2 py-1 rounded-md text-xs font-semibold text-primary hover:bg-primary/10 transition-colors flex items-center gap-1 flex-shrink-0">
+                        <span class="material-symbols-outlined !text-[16px]">description</span>{{ UI.context_show_resume }}
+                    </button>
                 </div>
                 <div id="context-job-body" class="flex-1 overflow-y-auto p-4 chat-scroll"></div>
             </div>
@@ -308,7 +318,16 @@
                         <span class="material-symbols-outlined text-slate-500">preview</span>
                         <h3 id="preview-title" class="font-semibold text-slate-700 text-sm truncate max-w-[160px]">{{ UI.context_preview_title }}</h3>
                     </div>
-                    <div class="flex gap-1">
+                    <div class="flex gap-1 items-center">
+                        <!-- Back to the last job match, when there is one -->
+                        <button type="button" id="preview-match-btn" hidden onclick="showLastJobMatch()"
+                                class="px-2 py-1 rounded-md text-xs font-semibold text-primary hover:bg-primary/10 transition-colors flex items-center gap-1">
+                            <span class="material-symbols-outlined !text-[16px]">fact_check</span>{{ UI.context_show_match }}
+                        </button>
+                        <button type="button" id="preview-history-btn" onclick="openHistory()"
+                                class="p-1.5 rounded-md text-slate-400 hover:text-primary hover:bg-primary/10 transition-colors" title="{{ UI.history_title }}">
+                            <span class="material-symbols-outlined !text-[16px]">history</span>
+                        </button>
                         <a id="preview-edit-btn" href="#" target="_blank"
                            class="p-1.5 rounded-md text-slate-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
                             <span class="material-symbols-outlined !text-[16px]">edit</span>
@@ -954,7 +973,27 @@ function keywordChips(words, tone) {
     ).join('')}</div>`;
 }
 
+// The last match shown, so the panel can switch back to it from the resume.
+let lastJobMatch = null;
+
+function showLastJobMatch() {
+    if (lastJobMatch) renderJobMatch(lastJobMatch);
+}
+
+function showActiveResume() {
+    if (activeResumeId) loadPreviewPanel(activeResumeId, activeResumeName);
+}
+
+// History modal hooks (resume/_history_modal.html)
+function historyResumeId() { return activeResumeId; }
+function onHistoryRestored() {
+    refreshPreviewAfterModify(activeResumeId, activeResumeName);
+    appendMessage('bot', `{{ UI.history_restored|escapejs }}`);
+}
+
 function renderJobMatch(data) {
+    lastJobMatch = data;
+    document.getElementById('job-show-resume-btn').hidden = !activeResumeId;
     hideAllContextPanels();
     const panel = document.getElementById('context-job-match');
     panel.classList.remove('hidden');
@@ -1173,6 +1212,7 @@ async function runAgentStream(url, body) {
 
     if (done) {
         done.streamedText = streamedText;
+        if (done.debug) renderDebugTrace(done.debug);
         return done;
     }
     // The stream ended without a final frame — a dropped connection. If the
@@ -1185,6 +1225,21 @@ async function runAgentStream(url, body) {
         is_error: !sawAnything,
         streamedText,
     };
+}
+
+// Superusers only: what the loop did this turn — model calls, guard verdicts,
+// tool errors. The server sends it only to them.
+function renderDebugTrace(trace) {
+    if (!trace || !trace.length) return;
+    const container = document.getElementById('chat-messages');
+    const details = document.createElement('details');
+    details.className = 'ml-9 mt-1.5 rounded-lg border border-slate-200 bg-slate-50 text-[11px] text-slate-600';
+    const hasError = trace.some(t => t.error);
+    details.innerHTML = `<summary class="px-3 py-1.5 cursor-pointer select-none font-mono ${hasError ? 'text-red-600' : ''}">debug · ${trace.length} steps${hasError ? ' · error' : ''}</summary>
+      <pre class="px-3 pb-2 whitespace-pre-wrap break-words font-mono max-h-80 overflow-y-auto"></pre>`;
+    details.querySelector('pre').textContent = trace.map(t => JSON.stringify(t)).join('\n');
+    container.appendChild(details);
+    scrollToBottom();
 }
 
 function parseSseFrame(frame) {
@@ -1650,6 +1705,8 @@ function loadSnapshotPanel(previewUrl, label) {
     // Edit and download act on a resume; a stored copy is neither.
     document.getElementById('preview-edit-btn').hidden = true;
     document.getElementById('preview-download-btn').hidden = true;
+    document.getElementById('preview-history-btn').hidden = true;
+    document.getElementById('preview-match-btn').hidden = !lastJobMatch;
     document.getElementById('context-iframe').src = previewUrl;
     if (mobileActiveTab === 'chat') showContextBadge();
 }
@@ -1668,8 +1725,11 @@ function loadPreviewPanel(resumeId, title) {
     dlBtn.href = `/resume/${resumeId}/download/`;
     dlBtn.download = `${(title || 'resume').replace(/\s+/g, '_')}_${resumeId}.pdf`;
 
+    document.getElementById('preview-history-btn').hidden = false;
+    document.getElementById('preview-match-btn').hidden = !lastJobMatch;
     const iframe = document.getElementById('context-iframe');
-    iframe.src = `/resume/${resumeId}/preview/`;
+    // Cache-busted: after an edit the same URL must show the new content.
+    iframe.src = `/resume/${resumeId}/preview/?t=${Date.now()}`;
 
     // Handle deleted resume (iframe error)
     iframe.onerror = () => { clearActiveResume(); };
@@ -2289,5 +2349,6 @@ function escHtml(str) {
         </div>
     </div>
 </div>
+{% include "resume/_history_modal.html" %}
 </body>
 </html>
