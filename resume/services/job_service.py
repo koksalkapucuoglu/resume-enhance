@@ -121,11 +121,110 @@ def analyze_snapshot(content, description, lang="en"):
     return _analyze(content, description, lang)
 
 
-def analyze_match(resume, description, lang="en"):
-    return _analyze(resume.content, description, lang)
+def analyze_match(resume, description, lang="en", prose=True):
+    return _analyze(resume.content, description, lang, prose=prose)
 
 
-def _analyze(content, description, lang="en"):
+def match_and_record(user, resume, description, lang="en", apply_to=None,
+                     prose=True, title=None, company=None):
+    """
+    Measure a posting against a resume and file it as an application.
+
+    Shared by the chat assistant and the MCP server. Returns one of:
+      {"error": ...}
+      {"needs_choice": True, "reason", "existing"}  — a posting for the same
+          role at the same company is already tracked; ask which one is meant
+          and call again with apply_to = its id or "new"
+      {"capped": True}  — the free plan's application limit
+      {"posting", "previous", "is_new", "result"}
+
+    `title` and `company`, when the caller knows them, take precedence over
+    what the measurement found — an MCP client passes them because the
+    server writes no prose for it (`prose=False`).
+    """
+    digest = JobPosting.fingerprint(description)
+
+    # Same text as something already tracked: re-measure it, no question needed.
+    posting = (
+        JobPosting.objects.filter(user=user, content_hash=digest).first()
+        if digest
+        else None
+    )
+
+    # The cache only exists so that answering our own question does not pay for
+    # a second look at the same text. It must not serve a re-measurement: the
+    # point of pasting a posting again is to see the score move.
+    result = cached_analysis(user.id, digest) if digest and apply_to else None
+    if result is None:
+        result = analyze_match(resume, description, lang, prose=prose)
+        if "error" in result:
+            return result
+    if title:
+        result["title"] = title.strip()[:255]
+    if company is not None and company.strip():
+        result["company"] = company.strip()[:255]
+
+    if posting is None and apply_to not in (None, "", "new"):
+        try:
+            target_id = int(apply_to)
+        except (TypeError, ValueError):
+            return {"error": "apply_to must be 'new' or an id."}
+        posting = JobPosting.objects.filter(pk=target_id, user=user).first()
+        if not posting:
+            return {"error": f"No saved job with id {target_id}."}
+        # Replacing the text the application tracks
+        posting.description = description[:MAX_DESCRIPTION_CHARS]
+        posting.content_hash = digest
+
+    if posting is None and apply_to is None:
+        # A posting for the same role at the same company, but not the same
+        # text. It could be a re-paste or a genuinely different opening, and
+        # guessing either way loses something — so ask.
+        similar = JobPosting.objects.filter(
+            user=user,
+            title__iexact=result["title"],
+            company__iexact=result["company"],
+        ).first()
+        if similar:
+            # Hold the analysis so their answer costs nothing extra.
+            if digest:
+                remember_analysis(user.id, digest, result)
+            return {
+                "needs_choice": True,
+                "reason": "An application for this role at this company already exists.",
+                "existing": {
+                    "job_id": similar.id,
+                    "title": similar.title,
+                    "company": similar.company,
+                    "score": similar.match_score,
+                    "status": similar.status,
+                },
+            }
+
+    is_new = posting is None
+    if is_new:
+        if not user.profile.can_track_application():
+            return {"capped": True}
+        posting = JobPosting(
+            user=user,
+            description=description[:MAX_DESCRIPTION_CHARS],
+            content_hash=digest,
+        )
+    posting.title = result["title"]
+    posting.company = result["company"]
+    # Freeze what would go out, so the application still knows what was sent
+    # after the base resume moves on.
+    posting.take_snapshot(resume.content, resume.template_selector, resume)
+    previous = posting.record_score(
+        result["score"], resume.id, result["missing_keywords"],
+        requirements=result.get("requirements"),
+        scoring_version=result.get("scoring_version", "llm-v1"),
+    )
+    posting.save()
+    return {"posting": posting, "previous": previous, "is_new": is_new, "result": result}
+
+
+def _analyze(content, description, lang="en", prose=True):
     """
     Score how well a resume answers a posting.
 
@@ -139,7 +238,7 @@ def _analyze(content, description, lang="en"):
 
     from resume.services import job_match
 
-    measured = job_match.analyze(content, description, lang)
+    measured = job_match.analyze(content, description, lang, prose=prose)
     if measured is not None:
         return measured
     return _analyze_llm(content, description, lang)

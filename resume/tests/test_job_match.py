@@ -55,7 +55,7 @@ def fake_ask(state, questions, *, purpose):
     for key, q in questions.items():
         line = _line(q.instructions)
         if key.startswith("k"):
-            choices[key] = ChoiceResult(KIND[line], 0.9, {})
+            choices[key] = ChoiceResult(KIND.get(line, "other"), 0.9, {})
         elif key.startswith("m"):
             nouls[key] = MUST.get(line, 0.1)
         elif key.startswith("x"):

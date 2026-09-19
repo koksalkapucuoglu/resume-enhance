@@ -63,8 +63,13 @@ EVIDENCE_LEVELS = [
 NONE = "none"
 
 
-def analyze(content, description, lang="en"):
-    """The match result, or None if Jev could not be asked."""
+def analyze(content, description, lang="en", prose=True):
+    """
+    The match result, or None if Jev could not be asked.
+
+    `prose=False` skips the OpenAI step: for an MCP client, whose own model
+    writes the words, the table is the answer.
+    """
     lines = split_posting(description)
     if not lines:
         return None
@@ -88,7 +93,7 @@ def analyze(content, description, lang="en"):
 
     score = composite(scored)
     clean_posting = "\n".join(line for line in lines if line not in injected)
-    prose = _prose(content, clean_posting, scored, lang)
+    prose = _prose(content, clean_posting, scored, lang) if prose else {}
 
     for requirement in scored:
         requirement["label"] = (

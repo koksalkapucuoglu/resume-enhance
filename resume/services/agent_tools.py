@@ -491,93 +491,28 @@ def match_job(user, ctx, description, resume_id=None, apply_to=None):
 
     from resume.services import job_service
 
-    digest = JobPosting.fingerprint(description)
-
-    # Same text as something already tracked: re-measure it, no question needed.
-    posting = (
-        JobPosting.objects.filter(user=user, content_hash=digest).first()
-        if digest
-        else None
+    outcome = job_service.match_and_record(
+        user, resume, description, ctx.get("lang", "en"), apply_to=apply_to
     )
-
-    # The cache only exists so that answering our own question does not pay for
-    # a second look at the same text. It must not serve a re-measurement: the
-    # point of pasting a posting again is to see the score move.
-    result = (
-        job_service.cached_analysis(user.id, digest)
-        if digest and apply_to
-        else None
-    )
-    if result is None:
-        result = job_service.analyze_match(resume, description, ctx.get("lang", "en"))
-        if "error" in result:
-            return ToolResult(data=result)
-
-    if posting is None and apply_to not in (None, "", "new"):
-        try:
-            target_id = int(apply_to)
-        except (TypeError, ValueError):
-            return ToolResult(data={"error": f"apply_to must be 'new' or an id."})
-        posting = JobPosting.objects.filter(pk=target_id, user=user).first()
-        if not posting:
-            return ToolResult(data={"error": f"No saved job with id {target_id}."})
-        # Replacing the text the application tracks
-        posting.description = description[: job_service.MAX_DESCRIPTION_CHARS]
-        posting.content_hash = digest
-
-    if posting is None and apply_to is None:
-        # A posting for the same role at the same company, but not the same
-        # text. It could be a re-paste or a genuinely different opening, and
-        # guessing either way loses something — so ask.
-        similar = JobPosting.objects.filter(
-            user=user,
-            title__iexact=result["title"],
-            company__iexact=result["company"],
-        ).first()
-        if similar:
-            # Hold the analysis so their answer costs nothing extra.
-            if digest:
-                job_service.remember_analysis(user.id, digest, result)
-            return ToolResult(
-                data={
-                    "needs_choice": True,
-                    "reason": "An application for this role at this company already exists.",
-                    "existing": {
-                        "job_id": similar.id,
-                        "title": similar.title,
-                        "company": similar.company,
-                        "score": similar.match_score,
-                        "status": similar.status,
-                    },
-                    "instruction": (
-                        "Ask whether to update that application or track this as "
-                        "a separate opening, then call match_job again with "
-                        "apply_to set to the id or to 'new'. Do not decide for them."
-                    ),
-                }
-            )
-
-    is_new = posting is None
-    if is_new:
-        capped = _application_cap_reached(user)
-        if capped:
-            return capped
-        posting = JobPosting(
-            user=user,
-            description=description[: job_service.MAX_DESCRIPTION_CHARS],
-            content_hash=digest,
+    if "error" in outcome:
+        return ToolResult(data=outcome)
+    if outcome.get("needs_choice"):
+        return ToolResult(
+            data={
+                **outcome,
+                "instruction": (
+                    "Ask whether to update that application or track this as "
+                    "a separate opening, then call match_job again with "
+                    "apply_to set to the id or to 'new'. Do not decide for them."
+                ),
+            }
         )
-    posting.title = result["title"]
-    posting.company = result["company"]
-    # Freeze what would go out, so the application still knows what was sent
-    # after the base resume moves on.
-    posting.take_snapshot(resume.content, resume.template_selector, resume)
-    previous = posting.record_score(
-        result["score"], resume.id, result["missing_keywords"],
-        requirements=result.get("requirements"),
-        scoring_version=result.get("scoring_version", "llm-v1"),
+    if outcome.get("capped"):
+        return _application_cap_reached(user)
+
+    posting, previous, is_new, result = (
+        outcome["posting"], outcome["previous"], outcome["is_new"], outcome["result"]
     )
-    posting.save()
 
     return ToolResult(
         data={

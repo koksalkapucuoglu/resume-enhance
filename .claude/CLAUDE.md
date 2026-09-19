@@ -565,6 +565,8 @@ result = send_openai_message(user_message, meta_prompt, temperature=0.7, max_tok
 - The match panel (`renderJobMatch`) groups requirements into Required / Nice to have, each expandable to the posting line and the quoted resume evidence; estimated (`llm-v1`) matches fall back to keyword chips. Follow-up chips ("Apply the suggestions", "Tailor a copy") send messages back through the assistant, so approval and the guardrail apply.
 - Job panel wording lives only in `job_service.JOB_COPY` (both languages, same keys — a test checks); the dashboard seeds `JOB_LABELS` from it and each chat turn replaces it with the conversation language's.
 - Quick chips accept `{label, message}` and use listeners, not inline `onclick` strings: a Turkish apostrophe ("CV'yi") ended the JS string.
+- **One recorder:** `job_service.match_and_record` (same-text re-measure, similar-posting question, application cap, snapshot, score) serves both the agent's `match_job` and MCP's. Change the rules there, not in either caller.
+- **MCP** (`mcp_server/tools.py`): `match_job` (needs `title` and `company` from the client, `prose=False` — no OpenAI call, the client's model writes the advice), `list_jobs`, `get_job`, `update_job`. Same application cap and email-verification lock as the web. The surface test in `mcp_server/tests/test_tools.py` lists every tool on purpose; a new tool updates it, bumps `SERVER_INFO["version"]` and `server.json` together.
 
 ### WeasyPrint (PDF Generation)
 

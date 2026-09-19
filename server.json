@@ -3,7 +3,7 @@
   "name": "com.resustackapp/resustack",
   "title": "ResuStack",
   "description": "Build, version and render resumes as PDFs from Claude or any MCP client.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "websiteUrl": "https://resustackapp.com",
   "repository": {
     "url": "https://github.com/koksalkapucuoglu/resume-enhance",
