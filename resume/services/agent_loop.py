@@ -20,7 +20,7 @@ from django.conf import settings
 from django.core.cache import cache
 
 from resume.openai_engine import send_openai_tool_turn, stream_openai_tool_turn
-from resume.services import agent_tools
+from resume.services import agent_guard, agent_tools
 
 logger = logging.getLogger(__name__)
 
@@ -395,15 +395,28 @@ def _run_events(user, ctx, messages, effects, start_step, usage_totals, stream=F
                 )
                 continue
 
-            if tool.destructive and ctx.get("confirm_destructive", True):
-                token = _park(user, messages, call, effects, step, ctx.get("lang", "en"))
+            verdict = agent_guard.check(user, ctx, messages, tool, _call_arguments(call))
+            if verdict.action == "block":
+                messages.append(_tool_message(call["id"], verdict.tool_message()))
+                continue
+
+            # A doubtful destructive call asks even when the user turned
+            # confirmations off: that setting trusts the assistant to be right.
+            if tool.destructive and (
+                ctx.get("confirm_destructive", True) or verdict.action == "warn"
+            ):
+                lang = ctx.get("lang", "en")
+                token = _park(user, messages, call, effects, step, lang)
                 yield (
                     "done",
                     {
                         "status": "needs_approval",
                         "token": token,
                         "tool": tool.name,
-                        "copy": approval_copy(ctx.get("lang", "en"), tool.name),
+                        "copy": {
+                            **approval_copy(lang, tool.name),
+                            **agent_guard.approval_extras(verdict, lang),
+                        },
                         "effects": effects,
                     },
                 )
@@ -434,12 +447,17 @@ def _safe_args(raw_arguments):
         return {}
 
 
-def _invoke(tool, user, ctx, call):
-    """Run a tool, turning any failure into a result the model can read."""
+def _call_arguments(call):
+    """The call's arguments, without the nulls strict mode fills in."""
     arguments = _safe_args(call["arguments"])
     # strict mode sends every property, nulls included — drop them so Python
     # defaults apply instead of overriding them with None.
-    arguments = {k: v for k, v in arguments.items() if v is not None}
+    return {k: v for k, v in arguments.items() if v is not None}
+
+
+def _invoke(tool, user, ctx, call):
+    """Run a tool, turning any failure into a result the model can read."""
+    arguments = _call_arguments(call)
     try:
         return tool.handler(user, ctx, **arguments)
     except TypeError as exc:

@@ -100,9 +100,61 @@ def import_suite():
     return rows
 
 
+def guard_suite():
+    """The tool-call guardrail blocks exactly the calls that do not match the user."""
+    from django.contrib.auth.models import User
+    from django.db import transaction
+
+    from resume.evals.guard_cases import APPLICATIONS, CASES, RESUMES
+    from resume.models import JobPosting, Resume
+    from resume.services import agent_guard, agent_tools
+
+    rows = []
+    with transaction.atomic():
+        user = User.objects.create_user("jev_eval_guard")
+        resumes = {
+            key: Resume.objects.create(user=user, title=r["title"], language=r["language"])
+            for key, r in RESUMES.items()
+        }
+        jobs = {
+            key: JobPosting.objects.create(user=user, **j) for key, j in APPLICATIONS.items()
+        }
+        listed = [
+            {"id": r.id, "display_name": r.display_name, "language": r.language}
+            for r in resumes.values()
+        ]
+        for case in CASES:
+            arguments = {}
+            for key, value in case["arguments"].items():
+                if key in agent_guard.RESUME_ARGS:
+                    value = resumes[value].id
+                elif key == "job_id":
+                    value = jobs[value].id
+                arguments[key] = value
+            ctx = {"active_resume": resumes[case["active"]], "resumes": listed}
+            messages = [{"role": role, "content": text} for role, text in case["conversation"]]
+            verdict = agent_guard.check(
+                user, ctx, messages, agent_tools.get_tool(case["tool"]), arguments
+            )
+            # "warn" stops a destructive call for approval and changes nothing
+            # for the others, so it only counts as caught on destructive tools.
+            tool = agent_tools.get_tool(case["tool"])
+            caught = verdict.action == "block" or (
+                verdict.action == "warn" and tool.destructive
+            )
+            rows.append((
+                case["name"][:40],
+                caught == (case["expect"] == "block"),
+                f"{verdict.action:<5} expected {case['expect']}",
+            ))
+        transaction.set_rollback(True)
+    return rows
+
+
 SUITES = {
     "smoke": smoke_suite,
     "import": import_suite,
+    "guard": guard_suite,
 }
 
 

@@ -545,6 +545,14 @@ result = send_openai_message(user_message, meta_prompt, temperature=0.7, max_tok
 - Flag paths are `experience[0].description[2]`-style and map to editor input ids via `_field_id` (`id_experience-0-description`). A new editor field for an imported value needs a mapping there.
 - Threshold chosen with `manage.py jev_eval import` (`resume/evals/import_cases.py`); add a case there when a false flag or a miss is reported.
 
+### Agent tool-call guardrail (`resume/services/agent_guard.py`)
+
+- In `agent_loop._run_events`, every call to a tool in `GUARDED_TOOLS` (anything that writes or spends quota) is judged by Jev before it runs: did the user ask for it, do the arguments match, which resume do they mean. One request, ~0.3s.
+- Verdicts: **block** → the tool does not run; the model gets a `guardrail_blocked` tool result and asks the user. **warn** → a destructive tool asks for approval *even when the user turned confirmations off*, and the card shows a warning. **allow** → as before.
+- The approval card now names the target resume (`copy.target`, "Name (language)" — language versions share a title).
+- Fail-open: Jev unavailable → allow. An approved (parked) call is not re-checked.
+- A new tool that writes or spends quota belongs in `GUARDED_TOOLS`. Thresholds come from `manage.py jev_eval guard` (`resume/evals/guard_cases.py`) — add the conversation there when a wrong block or a miss is reported.
+
 ### WeasyPrint (PDF Generation)
 
 - **No extra stylesheet.** Each layout carries its own `<style>` (`resume_templates/_styles.html`); `ResumePdfService` passes no CSS to WeasyPrint so the download matches the live preview of the same template. Fonts are always named explicitly — renderer defaults differ between WeasyPrint and the browser.
