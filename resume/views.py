@@ -301,6 +301,34 @@ def duplicate_resume(request, pk):
         return redirect("resume:dashboard")
 
 
+def _import_review_context(request, resume):
+    """What the editor shows about an imported resume's unchecked values."""
+    from resume.services import import_check
+
+    review = resume.import_review or {}
+    if not review:
+        return {}
+    lang = getattr(request.user.profile, "ui_language", None) or "en"
+    return {
+        "import_flags": import_check.open_flags(resume, lang),
+        "import_dropped": [
+            name.split(".")[-1].replace("[]", "").replace("_", " ")
+            for name in review.get("dropped") or []
+        ],
+    }
+
+
+@login_required
+@require_http_methods(["POST"])
+def dismiss_import_review(request, pk):
+    """The person has looked at the import check; stop showing it."""
+    # SECURITY: scoped to the caller
+    updated = Resume.objects.filter(pk=pk, user=request.user).update(import_review={})
+    if not updated:
+        return JsonResponse({"error": "Resume not found."}, status=404)
+    return JsonResponse({"status": "ok"})
+
+
 @login_required
 @require_http_methods(["POST"])
 def delete_resume(request, pk):
@@ -610,6 +638,7 @@ class ResumeFormView(TemplateView):
             context["saved_template"] = resume.template_selector
             context["saved_language"] = resume.language
             context["saved_title"] = resume.title
+            context.update(_import_review_context(request, resume))
         else:
             # Fallback for "Create New" flow without upload
             context = get_init_values_for_resume_form()
@@ -1262,27 +1291,46 @@ def upload_cv(request):
                     status=422,
                 )
 
-            # Save to Database instead of Session
-            resume = Resume.objects.create(
-                user=request.user,
-                title=_auto_title_from_content(extracted_json),
-                content=resume_content.normalize(extracted_json),
-                language=Resume.normalize_language(extracted_json.get("language")),
-            )
-
-            # QUOTA: Increment counters
-            profile = request.user.profile
-            profile.import_count += 1
-            profile.save()
-
-            # Return resume ID for frontend redirect (AJAX-friendly)
-            return JsonResponse({"status": "success", "resume_id": resume.pk})
+            return _save_import(request, extracted_json, extracted_text)
 
         except json.JSONDecodeError as e:
             logger.error("Failed to decode JSON: %s", e)
             return JsonResponse({"error": "Failed to parse extracted JSON"}, status=500)
 
     return redirect("resume:index")
+
+
+def _save_import(request, extracted_json, extracted_text, prefix=""):
+    """
+    Store an AI import once it has been held to our shape and checked against
+    the file it came from (services/import_check.py), then count it.
+    """
+    from resume.services import import_check
+
+    if not isinstance(extracted_json, dict):
+        return JsonResponse({"error": "Failed to parse extracted JSON"}, status=500)
+    content, review = import_check.run(extracted_json, extracted_text)
+    resume = Resume.objects.create(
+        user=request.user,
+        title=_auto_title_from_content(content, prefix=prefix),
+        content=content,
+        language=Resume.normalize_language(extracted_json.get("language")),
+        import_review=review,
+    )
+
+    # QUOTA: Increment import counter
+    profile = request.user.profile
+    profile.import_count += 1
+    profile.save()
+
+    # Return resume ID for frontend redirect (AJAX-friendly)
+    return JsonResponse(
+        {
+            "status": "success",
+            "resume_id": resume.pk,
+            "review": import_check.summary(review),
+        }
+    )
 
 
 @login_required
@@ -1361,21 +1409,9 @@ def upload_linkedin_cv(request):
         try:
             extracted_json = json.loads(extracted_json_string)
 
-            # Save to Database
-            resume = Resume.objects.create(
-                user=request.user,
-                title=_auto_title_from_content(extracted_json, prefix="LinkedIn"),
-                content=resume_content.normalize(extracted_json),
-                language=Resume.normalize_language(extracted_json.get("language")),
+            return _save_import(
+                request, extracted_json, extracted_text, prefix="LinkedIn"
             )
-
-            # QUOTA: Increment import counter
-            profile = request.user.profile
-            profile.import_count += 1
-            profile.save()
-
-            # Return resume ID for frontend redirect (AJAX-friendly)
-            return JsonResponse({"status": "success", "resume_id": resume.pk})
 
         except json.JSONDecodeError as e:
             logger.error("Failed to decode JSON: %s", e)

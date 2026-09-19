@@ -321,7 +321,6 @@ def extract_resume_data(user_message: str):
             "full_name": "extracted_full_name",
             "email": "extracted_email",
             "phone": "extracted_phone",
-            "address": "extracted_address",
             "linkedin": "extracted_linkedin_url",
             "github": "extracted_github_url",
             "skills": ["extracted_skill1", "extracted_skill2"]
@@ -444,7 +443,6 @@ def extract_linkedin_resume_data(user_message: str):
         “full_name”: “extracted_full_name”,
         “email”: “extracted_email”,
         “phone”: “extracted_phone”,
-        “address”: “extracted_address”,
         “linkedin”: “extracted_linkedin_url”,
         “github”: “extracted_github_url”,
         “skills”: [“extracted_skill1”, “extracted_skill2”]

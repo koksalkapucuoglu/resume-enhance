@@ -52,6 +52,10 @@ class Resume(models.Model):
     derived_kind = models.CharField(
         max_length=20, choices=DERIVED_KIND_CHOICES, blank=True, default=""
     )
+    # What the import check found when this resume was read from a file:
+    # values the file does not support, contact details corrected, keys the
+    # parser returned that we do not store. See services/import_check.py.
+    import_review = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

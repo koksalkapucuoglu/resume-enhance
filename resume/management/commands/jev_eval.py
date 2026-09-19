@@ -62,8 +62,47 @@ def smoke_suite():
     ]
 
 
+def import_suite():
+    """Each extracted value is flagged exactly when the source does not support it."""
+    from resume.evals.import_cases import CASES
+    from resume.services import import_check
+
+    rows = []
+    for case in CASES:
+        recorded = {}
+        real_ask = typesafe_engine.ask
+
+        def recording_ask(state, questions, *, purpose):
+            answers = real_ask(state, questions, purpose=purpose)
+            recorded["answers"] = answers
+            return answers
+
+        typesafe_engine.ask = recording_ask
+        try:
+            content, review = import_check.run(case["extracted"], case["source"])
+        finally:
+            typesafe_engine.ask = real_ask
+        if review["status"] != "checked":
+            rows.append((case["name"], False, "not checked"))
+            continue
+
+        flagged = {str(f["value"]) for f in review["flags"]}
+        nouls = recorded["answers"].nouls
+        for i, claim in enumerate(import_check._claims(content)):
+            value = str(claim["value"])
+            expected = value in case["unsupported"]
+            p = nouls.get(f"c{i}")
+            rows.append((
+                f"{claim['kind']}: {value[:38]}",
+                (value in flagged) == expected,
+                f"p={p:.2f} expected {'flag' if expected else 'pass'}",
+            ))
+    return rows
+
+
 SUITES = {
     "smoke": smoke_suite,
+    "import": import_suite,
 }
 
 

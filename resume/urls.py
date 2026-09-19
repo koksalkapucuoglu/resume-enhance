@@ -42,6 +42,11 @@ urlpatterns = [
     path("form/<int:pk>/", views.ResumeFormView.as_view(), name="resume_form_edit"),
     path("duplicate/<int:pk>/", views.duplicate_resume, name="duplicate_resume"),
     path("delete/<int:pk>/", views.delete_resume, name="delete_resume"),
+    path(
+        "resume/<int:pk>/import-review/dismiss/",
+        views.dismiss_import_review,
+        name="dismiss_import_review",
+    ),
     path("test-faangpath/", views.test_faangpath_template, name="test_faangpath"),
     path("enhance-project", views.enhance_project, name="enhance_project"),
     path("enhance-experience", views.enhance_experience, name="enhance_experience"),

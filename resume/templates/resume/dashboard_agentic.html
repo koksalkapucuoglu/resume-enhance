@@ -406,6 +406,7 @@ const UPLOAD_LABELS = {
   uploading: `{{ UI.upload_uploading|escapejs }}`,
   done:      `{{ UI.upload_done|escapejs }}`,
   failed:    `{{ UI.upload_failed|escapejs }}`,
+  flagged:   `{{ UI.upload_flagged|escapejs }}`,
 };
 const INITIAL_RESUME = {{ initial_resume|default:"null"|safe }};
 const OWNED_RESUME_IDS = new Set({{ owned_resume_ids|default:"[]"|safe }});
@@ -1751,6 +1752,8 @@ async function uploadResumeFile(input, button, data) {
             return;
         }
         appendMessage('bot', UPLOAD_LABELS.done);
+        const flagged = body.review && body.review.flagged;
+        if (flagged) appendMessage('bot', UPLOAD_LABELS.flagged.replace('{n}', flagged));
         setActiveResume(body.resume_id, null);
         loadPreviewPanel(body.resume_id, null);
     } catch (e) {

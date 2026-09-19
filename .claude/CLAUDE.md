@@ -536,6 +536,15 @@ result = send_openai_message(user_message, meta_prompt, temperature=0.7, max_tok
 - One request handled 200 questions in <1s; `ask` splits batches above `MAX_QUESTIONS_PER_REQUEST`. Questions in one call are independent — use a second call only when an answer is needed to build the next question.
 - TypeSafe is a named processor in both privacy policies and in the sign-up consent text.
 
+### Import check (`resume/services/import_check.py`)
+
+- Both PDF and LinkedIn imports go through `views._save_import` → `import_check.run(extracted, source_text)` before anything is stored.
+- **Shape:** `resume_content.conform` holds content to `resume_content.CONTENT_SCHEMA` (the same schema MCP publishes — `mcp_server.tools.CONTENT_SCHEMA` is an alias). Unknown keys are dropped and reported by *name* in `import_review["dropped"]`; wrong types are coerced.
+- **Evidence:** contact details (email, phone, URLs) are checked verbatim by code; everything else is one Jev `Noul` per value ("does the document support this?"). Below `SUPPORT_THRESHOLD` a value is flagged, never removed. A wrong contact value is replaced only when Jev picks the right one from regex candidates in the text (`status: "corrected"`).
+- Stored on `Resume.import_review`; the editor shows `open_flags()` — a flag disappears once its value is edited, so there is no resolved state to maintain. `dismiss_import_review` clears it.
+- Flag paths are `experience[0].description[2]`-style and map to editor input ids via `_field_id` (`id_experience-0-description`). A new editor field for an imported value needs a mapping there.
+- Threshold chosen with `manage.py jev_eval import` (`resume/evals/import_cases.py`); add a case there when a false flag or a miss is reported.
+
 ### WeasyPrint (PDF Generation)
 
 - **No extra stylesheet.** Each layout carries its own `<style>` (`resume_templates/_styles.html`); `ResumePdfService` passes no CSS to WeasyPrint so the download matches the live preview of the same template. Fonts are always named explicitly — renderer defaults differ between WeasyPrint and the browser.

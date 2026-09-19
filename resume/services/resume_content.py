@@ -78,6 +78,180 @@ def as_list(value):
     return [part.strip() for part in text.split(separator) if part.strip()]
 
 
+# The shape a resume is stored in. MCP publishes it as the tool input schema,
+# declared strictly so a calling model is told about a misspelled key by its own
+# validation; imports are held to it by `conform`.
+CONTENT_SCHEMA = {
+    "type": "object",
+    "description": "The full resume. Sections you omit are stored empty.",
+    "properties": {
+        "user_info": {
+            "type": "object",
+            "properties": {
+                "full_name": {"type": "string"},
+                "email": {"type": "string"},
+                "phone": {"type": "string"},
+                "github": {"type": "string"},
+                "linkedin": {"type": "string"},
+                "skills": {"type": "array", "items": {"type": "string"}},
+            },
+            "additionalProperties": False,
+        },
+        "experience": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "company": {"type": "string"},
+                    "location": {"type": "string"},
+                    "start_date": {
+                        "type": "string",
+                        "description": "YYYY-MM, e.g. 2022-03.",
+                    },
+                    "end_date": {
+                        "type": ["string", "null"],
+                        "description": "YYYY-MM, or null while still there.",
+                    },
+                    "current_role": {"type": "boolean"},
+                    "description": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "One bullet per item, not one blob.",
+                    },
+                },
+                "additionalProperties": False,
+            },
+        },
+        "education": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "school": {"type": "string"},
+                    "degree": {"type": "string"},
+                    "field_of_study": {"type": "string"},
+                    "start_year": {"type": "integer"},
+                    "end_year": {"type": "integer"},
+                },
+                "additionalProperties": False,
+            },
+        },
+        "projects_and_publications": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "description": {"type": "string"},
+                    "link": {"type": "string"},
+                },
+                "additionalProperties": False,
+            },
+        },
+        "focus_areas": {
+            "type": "object",
+            "description": (
+                "What the person is working on now, in their own terms — one "
+                "short line per area, written from what they have actually "
+                "been doing. Printed above Education, and only when `include` "
+                "is true: store the lines even when it is false, and let the "
+                "person decide in ResuStack whether the section appears."
+            ),
+            "properties": {
+                "include": {"type": "boolean"},
+                "items": {"type": "array", "items": {"type": "string"}},
+            },
+            "additionalProperties": False,
+        },
+    },
+    "additionalProperties": False,
+}
+
+
+# Keys kept at the top level besides the schema's sections: the language the
+# resume is written in travels with the content on import.
+_EXTRA_TOP_LEVEL = {"language": {"type": "string"}}
+
+# Dropped by `conform` but not lost: `normalize` has already folded them into
+# the years the schema keeps, so they are not worth reporting.
+_FOLDED = {"education[].start_date", "education[].end_date"}
+
+
+def conform(content):
+    """
+    Hold content to CONTENT_SCHEMA, returning (content, dropped).
+
+    For AI imports: the parser is asked for our shape but sometimes answers with
+    more — an address, a certifications section, a nested object where a string
+    belongs. Unknown keys are dropped and wrong types coerced, so nothing
+    downstream meets a shape it does not expect. `dropped` lists the dropped
+    keys as dotted paths without indices ("user_info.address"), never values.
+
+    Run after `normalize`, which folds education dates into the years the
+    schema keeps.
+    """
+    schema = dict(CONTENT_SCHEMA, properties={**CONTENT_SCHEMA["properties"], **_EXTRA_TOP_LEVEL})
+    dropped = set()
+    cleaned = _conform(content if isinstance(content, dict) else {}, schema, "", dropped)
+    return cleaned, sorted(dropped - _FOLDED)
+
+
+def _conform(value, schema, path, dropped):
+    kind = schema.get("type")
+    kinds = kind if isinstance(kind, list) else [kind]
+
+    if value is None:
+        return None if "null" in kinds else _empty(kinds[0])
+
+    if "object" in kinds:
+        if not isinstance(value, dict):
+            dropped.add(path or "(root)")
+            return {}
+        properties = schema.get("properties", {})
+        result = {}
+        for key, item in value.items():
+            child = f"{path}.{key}" if path else key
+            if key in properties:
+                result[key] = _conform(item, properties[key], child, dropped)
+            else:
+                dropped.add(child)
+        return result
+
+    if "array" in kinds:
+        items = schema.get("items", {})
+        if items.get("type") == "string":
+            return as_list(value)
+        if not isinstance(value, list):
+            value = [value] if isinstance(value, dict) else []
+        return [
+            _conform(item, items, f"{path}[]", dropped)
+            for item in value
+            if isinstance(item, dict) or items.get("type") != "object"
+        ]
+
+    if "boolean" in kinds:
+        if isinstance(value, str):
+            return value.strip().lower() in ("true", "yes", "1")
+        return bool(value)
+
+    if "integer" in kinds:
+        year = year_of(value) if not isinstance(value, bool) else None
+        return year if year is not None else None
+
+    # string
+    if isinstance(value, list):
+        return "\n".join(str(v).strip() for v in value if v is not None and str(v).strip())
+    if isinstance(value, dict):
+        dropped.add(path)
+        return ""
+    return str(value).strip()
+
+
+def _empty(kind):
+    return {"object": {}, "array": [], "boolean": False, "string": ""}.get(kind)
+
+
 def normalize(content):
     """
     Return content in the shape every reader expects.
