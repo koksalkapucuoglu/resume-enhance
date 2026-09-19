@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 GUARDED_TOOLS = {
     "modify_resume", "switch_template", "translate_resume", "delete_resume",
     "revert_last_change", "create_translated_copy", "duplicate_resume",
-    "download_resume", "create_blank_resume",
+    "download_resume", "create_blank_resume", "promote_branch",
 }
 
 RESUME_ARGS = ("resume_id", "resume_id_1", "resume_id_2")

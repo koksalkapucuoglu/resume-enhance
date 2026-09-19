@@ -233,7 +233,7 @@ def create_branch(resume, posting):
         raise EvaluationError(
             f"The free plan keeps {limit} job branches. Delete one, or evaluate on the base resume."
         )
-    name = posting.company or posting.title or "Job"
+    name = posting.short_label
     return Resume.objects.create(
         user=base.user,
         title=f"{base.display_name} › {name}"[:255],
@@ -266,3 +266,124 @@ def promote(branch):
     base.save(update_fields=["content", "updated_at"])
     logger.info("Resume %s replaced with branch %s", base.pk, branch.pk)
     return base
+
+
+# --------------------------------------------------------------------------
+# What the dashboard and the assistant are shown
+# --------------------------------------------------------------------------
+
+
+def resume_meta(resume):
+    """How a resume is named in the context bar: base, or base › branch."""
+    base = resume.root
+    meta = {
+        "id": resume.pk,
+        "name": resume.display_name,
+        "language": resume.language,
+        "base_id": base.pk,
+        "base_name": base.display_name,
+        "is_branch": resume.is_job_branch,
+        "posting_id": None,
+        "posting_label": "",
+        "posting_short": "",
+    }
+    if resume.is_job_branch and resume.job_posting_id:
+        meta["posting_id"] = resume.job_posting_id
+        meta["posting_label"] = resume.job_posting.label
+        meta["posting_short"] = resume.job_posting.short_label
+    return meta
+
+
+def panel(resume, posting, evaluation, previous=None):
+    """The evaluation panel's data (the dashboard renders it as-is)."""
+    rows = table(posting, evaluation)
+    required = [r for r in rows if r["required"]]
+    return {
+        "type": "evaluation",
+        "resume": resume_meta(resume),
+        "posting_id": posting.pk,
+        "posting_label": posting.label,
+        "posting_short": posting.short_label,
+        "score": evaluation.score,
+        "previous_score": previous.score if previous else None,
+        "required_total": len(required),
+        "required_covered": sum(1 for r in required if r["status"] == "covered"),
+        "rows": [
+            {key: row.get(key) for key in (
+                "id", "label", "text", "status", "required", "evidence", "evidence_at", "uncertain",
+            )}
+            for row in rows
+        ],
+        "changes": changes(posting, previous, evaluation),
+        "message": "",
+    }
+
+
+def postings_for(resume):
+    """
+    Every posting evaluated in this resume's family (the base and its
+    branches), with the latest score and whether the resume changed since.
+    """
+    base = resume.root
+    family = list(Resume.objects.filter(pk=base.pk)) + list(
+        Resume.objects.filter(derived_from=base, derived_kind=Resume.DERIVED_JOB)
+    )
+    seen, out = set(), []
+    for evaluation in (
+        Evaluation.objects.filter(resume__in=family, scorer=scorer())
+        .select_related("resume", "posting")
+        .order_by("-created_at")
+    ):
+        key = (evaluation.resume_id, evaluation.posting_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({
+            "posting_id": evaluation.posting_id,
+            "posting_label": evaluation.posting.label,
+            "resume_id": evaluation.resume_id,
+            "resume_name": evaluation.resume.display_name,
+            "is_branch": evaluation.resume.is_job_branch,
+            "score": evaluation.score,
+            "stale": evaluation.content_hash != content_hash(evaluation.resume.content),
+        })
+    return out
+
+
+def context_summary(resume, posting):
+    """
+    What the assistant needs to talk about the active evaluation, from the
+    latest stored measurement (no new one is made to answer a chat message).
+    """
+    evaluation = (
+        Evaluation.objects.filter(resume=resume, posting=posting, scorer=scorer()).first()
+        if resume else None
+    )
+    lines = [
+        f"Active job posting: {posting.label} (posting_id={posting.pk}).",
+    ]
+    if resume and resume.is_job_branch:
+        lines.append(
+            f"The active resume id={resume.pk} is the job branch for this posting, "
+            f"copied from the base resume id={resume.derived_from_id}. Improvements for "
+            "this posting go here; the base is untouched until the user replaces it "
+            "(promote_branch)."
+        )
+    if evaluation is None:
+        lines.append("It has not been evaluated against the active resume yet.")
+        return "\n".join(lines)
+    stale = evaluation.content_hash != content_hash(resume.content)
+    lines.append(
+        f"Latest evaluation of resume id={resume.pk}: score {evaluation.score}"
+        + (" (the resume changed since; it will be re-measured)" if stale else "") + "."
+    )
+    for row in table(posting, evaluation):
+        where = ""
+        at = row.get("evidence_at")
+        if at and at.get("section") == "experience":
+            where = f" [closest evidence: experience #{at['entry']}, bullet #{at['bullet']}]"
+        lines.append(
+            f"- {'REQUIRED' if row['required'] else 'nice to have'} · {row['status']} · "
+            f"{row['label']}: {row['text']}{where}"
+        )
+    return "\n".join(lines)

@@ -553,13 +553,18 @@ result = send_openai_message(user_message, meta_prompt, temperature=0.7, max_tok
 - Fail-open: Jev unavailable → allow. An approved (parked) call is not re-checked.
 - A new tool that writes or spends quota belongs in `GUARDED_TOOLS`. Thresholds come from `manage.py jev_eval guard` (`resume/evals/guard_cases.py`) — add the conversation there when a wrong block or a miss is reported.
 
-### Job matching — being rebuilt (2026-09-19)
+### Job posting evaluation (`resume/services/evaluation_service.py`)
 
-The job-posting feature (JobPosting model, /jobs page, agent and MCP job tools, match panel, tailoring into application copies) was removed on branch `job-matching-v2` to be rebuilt on a simpler model; see the architecture decision before adding anything back. What stays:
+Scope, on purpose: evaluate a resume against a posting, show strengths and gaps, and improve the resume. No application tracking (statuses, dates) — that is what job sites do.
 
-- **The Jev scoring engine** `resume/services/job_match.py` — `split_posting`, `evidence_lines`, `_classify` (line kind, P(required), P(instruction aimed at an AI)), `_evidence` (4-level Score + evidence-line Choice), `composite`, `looks_like_posting`. It has no model dependency; `analyze(content, description, lang, prose=)` returns the requirement table.
-- Its labelled cases and `manage.py jev_eval match`.
-- Skills listed only in the skills section, or claims like "I have knowledge of X", score "partial" by design: the rubric rewards work shown, not claims.
+- **JobPosting** — text, title, company and `requirements`, parsed **once** when added (`job_match.parse_posting`) and never again; the same posting pasted again (any whitespace) is the same record (`fingerprint`, unique per user). Title/company/labels come from one OpenAI call at add time.
+- **Evaluation** — one measurement of a resume's content against a posting (`job_match.measure`): score + rows `{id, level, status, evidence, evidence_at}`. Cached by `content_hash`; an edit makes it stale and the next `evaluate()` measures again. Last 10 kept per (resume, posting) so `changes()` can show "Kafka: partial → covered". `scorer` = Jev model + rubric tag; bump `RUBRIC` when weights or levels change.
+- **Job branch** — a `Resume` with `derived_kind="job"`, `derived_from=<base>`, `job_posting=<posting>`: a copy of the base kept for one posting. No resume slot; free plan keeps `job_branch_count` (3). One branch per (base, posting). Edits for a posting go to its branch, so one posting cannot move another's score.
+- **promote** — the base's content is *replaced* by the branch's (no merge); the base gets a `SOURCE_BRANCH` restore point. The branch stays.
+- `evidence_at` (`{section, entry, bullet}`) says where the closest evidence lives — improvements go there, often not the latest job.
+- No Jev → no posting and no evaluation (`EvaluationError`); a guessed score would break "same yardstick every time".
+- **Agentic UI:** the Application Score button, a pasted posting (Jev `looks_like_posting` → offer bar) and `evaluate_posting` all lead to one flow: add posting → card "branch (recommended) / base" → `evaluate_job_posting` → panel (`context-evaluation`) + context bar ("Main › Finly (dal) · İlan … · 62") + one chat line saved to history. These endpoints run no chat turn and cost no agent message. After `modify_resume` or a restore, `refreshEvaluation()` re-measures and writes what moved. The dashboard sends `active_posting_id`; the assistant's context carries `evaluation_service.context_summary` (rows with status and evidence location).
+- Skills listed only in the skills section, or claims like "I have knowledge of X", score "partial" by design: the rubric rewards work shown.
 
 ### Agent loop notes
 

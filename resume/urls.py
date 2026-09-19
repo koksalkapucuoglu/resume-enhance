@@ -76,6 +76,16 @@ urlpatterns = [
         name="revert_resume",
     ),
     path("agent/chat/", views.agent_chat, name="agent_chat"),
+    path("agent/detect-posting/", views.detect_job_posting, name="detect_job_posting"),
+    path("agent/postings/", views.add_job_posting, name="add_job_posting"),
+    path("agent/evaluate/", views.evaluate_job_posting, name="evaluate_job_posting"),
+    path("resume/<int:pk>/evaluations/", views.resume_evaluations, name="resume_evaluations"),
+    path(
+        "resume/<int:pk>/evaluations/<int:posting_id>/",
+        views.resume_evaluation,
+        name="resume_evaluation",
+    ),
+    path("resume/<int:pk>/promote/", views.promote_job_branch, name="promote_job_branch"),
     path("agent/chat/stream/", views.agent_chat_stream, name="agent_chat_stream"),
     path(
         "agent/approve/stream/",

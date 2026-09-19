@@ -56,6 +56,7 @@ APPROVAL_COPY = {
 DESTRUCTIVE_COPY = {
     "en": {
         "modify_resume": "Edit the resume's content",
+        "promote_branch": "Replace the base resume with this branch",
         "switch_template": "Change the resume's template",
         "translate_resume": "Translate the whole resume",
         "delete_resume": "Delete the resume permanently",
@@ -64,6 +65,7 @@ DESTRUCTIVE_COPY = {
     },
     "tr": {
         "modify_resume": "CV içeriğini düzenle",
+        "promote_branch": "Ana CV'yi bu dalla değiştir",
         "switch_template": "CV şablonunu değiştir",
         "translate_resume": "CV'nin tamamını çevir",
         "delete_resume": "CV'yi kalıcı olarak sil",
@@ -79,6 +81,9 @@ STEP_COPY = {
     "en": {
         "_default": "Working...",
         "list_resumes": "Looking up your resumes...",
+        "evaluate_posting": "Evaluating against the posting...",
+        "list_evaluations": "Looking up your evaluations...",
+        "promote_branch": "Replacing the base resume...",
         "find_resume": "Searching your resumes...",
         "get_resume_details": "Reading the resume...",
         "preview_resume": "Preparing the preview...",
@@ -102,6 +107,9 @@ STEP_COPY = {
     "tr": {
         "_default": "Çalışıyorum...",
         "list_resumes": "CV'lerinize bakıyorum...",
+        "evaluate_posting": "İlana göre değerlendiriliyor...",
+        "list_evaluations": "Değerlendirmelerinize bakıyorum...",
+        "promote_branch": "Ana CV değiştiriliyor...",
         "find_resume": "CV'lerinizde arıyorum...",
         "get_resume_details": "CV'yi okuyorum...",
         "preview_resume": "Önizleme hazırlanıyor...",
@@ -148,7 +156,23 @@ You help the user manage and improve their resumes by calling tools. Rules:
   the user is chatting in English.
 - To give the user the same resume in a second language, use
   create_translated_copy — it keeps the original. translate_resume overwrites.
-- Language versions do not count against the resume limit.
+- When the user pastes a job posting, call evaluate_posting. Leave target
+  null unless they said "branch" or "main/base": a card asks them. The side
+  panel shows the score and every requirement — do not list them again;
+  reply in two sentences: the score and the one or two required gaps that
+  matter most.
+- Words the interface uses, in Turkish: a job branch is "dal" (never "şube"),
+  the base resume is "ana CV", a job posting is "ilan".
+- A job branch is a copy of the base resume kept for one posting. While a
+  branch is active, edits for that posting go to the branch (it is the active
+  resume); never edit the base for a posting unless asked. The base changes
+  only through promote_branch, when the user asks to make the branch main.
+- Never add experience or skills the requirement table marks "missing"
+  unless the user tells you they did it; then write what they did, in the
+  experience where they did it. "Partial" means mentioned but not shown in
+  work: improve the bullet where the evidence already is, which is often not
+  the latest job.
+- Language versions and job branches do not count against the resume limit.
 - Prefer acting over asking. If the user's intent is clear, call the tool.
 - Never narrate an action instead of performing it. "I'll save that now" with no
   tool call is a failure; call the tool in the same turn.
@@ -188,6 +212,11 @@ def _context_block(ctx):
         )
     else:
         lines.append("No resume is currently active.")
+    posting = ctx.get("active_posting")
+    if posting is not None:
+        from resume.services import evaluation_service
+
+        lines.append(evaluation_service.context_summary(active, posting))
     lines.append(f"Quota: {json.dumps(ctx['quota'], ensure_ascii=False)}")
     return "\n".join(lines)
 

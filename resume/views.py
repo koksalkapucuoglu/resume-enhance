@@ -31,7 +31,7 @@ from resume.services.pdf_service import (
     PdfGenerationError,
     resume_pdf_service,
 )
-from resume.models import Feedback, Resume, ResumeRevision
+from resume.models import Feedback, JobPosting, Resume, ResumeRevision
 from resume.services import diff_service, resume_content, revision_service
 
 logger = logging.getLogger(__name__)
@@ -159,7 +159,11 @@ class DashboardView(LoginRequiredMixin, ListView):
         return ["resume/dashboard.html"]
 
     def get_queryset(self):
-        return Resume.objects.filter(user=self.request.user).order_by("-updated_at")
+        return (
+            Resume.objects.filter(user=self.request.user)
+            .select_related("derived_from", "job_posting")
+            .order_by("-updated_at")
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -186,6 +190,13 @@ class DashboardView(LoginRequiredMixin, ListView):
             # localStorage entry — a deleted resume, or another account's on a
             # shared browser — would otherwise render "Resume not found".
             context["owned_resume_ids"] = json.dumps([r.pk for r in resumes])
+            # Base or branch, and the posting a branch is for: the context bar
+            # names what the conversation is about.
+            from resume.services import evaluation_service
+
+            context["resume_meta"] = json.dumps(
+                {r.pk: evaluation_service.resume_meta(r) for r in resumes}
+            )
             # The template pane in agentic mode is the same picker the editor
             # uses, so it stays in step with the catalogue on its own.
             context.update(
@@ -1915,7 +1926,7 @@ def agent_chat(request):
         profile.save(update_fields=["agent_message_count"])
         return JsonResponse({**result, "user_message": message})
 
-    ctx = _agent_context(request, active_resume, message, data.get("history"))
+    ctx = _agent_context(request, active_resume, message, data.get("history"), data.get("active_posting_id"))
     outcome = agent_loop.run_turn(
         request.user, ctx, data.get("history"), message
     )
@@ -2044,7 +2055,7 @@ def agent_chat_stream(request):
         if active_resume_id
         else None
     )
-    ctx = _agent_context(request, active_resume, message, data.get("history"))
+    ctx = _agent_context(request, active_resume, message, data.get("history"), data.get("active_posting_id"))
     profile = request.user.profile
 
     def charge(outcome):
@@ -2095,7 +2106,7 @@ def agent_approve_stream(request):
         if active_resume_id
         else None
     )
-    ctx = _agent_context(request, active_resume)
+    ctx = _agent_context(request, active_resume, posting_id=data.get("active_posting_id"))
     ctx["lang"] = parked.get("lang", ctx["lang"])
     events = agent_loop.stream_resume_turn(
         request.user, ctx, parked, approved=bool(data.get("approved"))
@@ -2176,7 +2187,7 @@ def agent_approve(request):
         if active_resume_id
         else None
     )
-    ctx = _agent_context(request, active_resume, data.get("message", ""), data.get("history"))
+    ctx = _agent_context(request, active_resume, data.get("message", ""), data.get("history"), data.get("active_posting_id"))
     ctx["lang"] = parked.get("lang", ctx["lang"])
     outcome = agent_loop.resume_turn(
         request.user, ctx, parked, approved=bool(data.get("approved"))
@@ -2184,6 +2195,176 @@ def agent_approve(request):
     return JsonResponse(
         _agent_response_with_lang(outcome, active_resume_id, "", ctx["lang"])
     )
+
+
+# ---------------------------------------------------------------------------
+# Job posting evaluation (services/evaluation_service.py)
+#
+# Deterministic endpoints the dashboard calls directly: adding a posting,
+# evaluating it, switching between evaluations and replacing a base resume
+# with its branch. None of them runs a chat turn, so none costs an agent
+# message; the assistant reaches the same service through its tools.
+# ---------------------------------------------------------------------------
+
+
+def _json_body(request):
+    try:
+        data = json.loads(request.body or b"{}")
+    except ValueError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _evaluation_locked(request):
+    """AI entry points: rate limit and email verification, in that order."""
+    limited = _agent_rate_limited(request)
+    if limited:
+        return limited
+    if _email_unverified(request):
+        return JsonResponse({"error": _ai_locked_message(request)}, status=403)
+    return None
+
+
+@login_required
+@require_http_methods(["POST"])
+def detect_job_posting(request):
+    """Is the text just pasted into the chat a job posting? Only offers; never sends."""
+    from resume.services import job_match
+
+    locked = _evaluation_locked(request)
+    if locked:
+        return locked
+    data = _json_body(request)
+    text = (data or {}).get("text") or ""
+    if len(text.strip()) < 200:
+        return JsonResponse({"is_posting": False})
+    return JsonResponse({"is_posting": bool(job_match.looks_like_posting(text))})
+
+
+@login_required
+@require_http_methods(["POST"])
+def add_job_posting(request):
+    """
+    Add (or find) a posting and say where it can be evaluated.
+
+    JSON in:  {text, resume_id}
+    JSON out: {posting_id, posting_label, requirements, branch: {id, name}|null}
+    """
+    from resume.services import evaluation_service
+
+    locked = _evaluation_locked(request)
+    if locked:
+        return locked
+    data = _json_body(request)
+    if data is None:
+        return JsonResponse({"error": "Invalid request."}, status=400)
+    # SECURITY: scoped to the caller
+    resume = Resume.objects.filter(pk=data.get("resume_id") or 0, user=request.user).first()
+    if resume is None:
+        return JsonResponse({"error": "Choose one of your resumes first."}, status=400)
+    try:
+        posting = evaluation_service.add_posting(
+            request.user, data.get("text") or "", request.user.profile.ui_language or "en"
+        )
+    except evaluation_service.EvaluationError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+
+    base = resume.root
+    branch = Resume.objects.filter(
+        user=request.user, derived_from=base, derived_kind=Resume.DERIVED_JOB, job_posting=posting
+    ).first()
+    return JsonResponse({
+        "posting_id": posting.pk,
+        "posting_label": posting.label,
+        "requirements": len(posting.requirements),
+        "base": {"id": base.pk, "name": base.display_name},
+        "branch": {"id": branch.pk, "name": branch.display_name} if branch else None,
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def evaluate_job_posting(request):
+    """
+    Evaluate a posting on the base resume or on its job branch.
+
+    JSON in:  {posting_id, resume_id, target: "branch"|"base"}
+    JSON out: the evaluation panel (evaluation_service.panel)
+    """
+    from resume.services import evaluation_service
+
+    locked = _evaluation_locked(request)
+    if locked:
+        return locked
+    data = _json_body(request) or {}
+    # SECURITY: both scoped to the caller
+    resume = Resume.objects.filter(pk=data.get("resume_id") or 0, user=request.user).first()
+    posting = JobPosting.objects.filter(pk=data.get("posting_id") or 0, user=request.user).first()
+    if resume is None or posting is None:
+        return JsonResponse({"error": "Not found."}, status=404)
+    try:
+        if data.get("target") == "branch":
+            resume = evaluation_service.create_branch(resume, posting)
+        elif resume.is_job_branch and resume.job_posting_id != posting.pk:
+            # A branch belongs to one posting; another posting goes on the base.
+            resume = resume.root
+        evaluation, previous = evaluation_service.evaluate(resume, posting)
+    except evaluation_service.EvaluationError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    return JsonResponse(evaluation_service.panel(resume, posting, evaluation, previous))
+
+
+@login_required
+@require_http_methods(["GET"])
+def resume_evaluations(request, pk):
+    """Postings evaluated in this resume's family, latest score each."""
+    from resume.services import evaluation_service
+
+    # SECURITY: scoped to the caller
+    resume = Resume.objects.filter(pk=pk, user=request.user).first()
+    if resume is None:
+        return JsonResponse({"error": "Not found."}, status=404)
+    return JsonResponse({
+        "resume": evaluation_service.resume_meta(resume),
+        "evaluations": evaluation_service.postings_for(resume),
+    })
+
+
+@login_required
+@require_http_methods(["GET"])
+def resume_evaluation(request, pk, posting_id):
+    """
+    The evaluation of a resume against a posting, measured again if the
+    resume changed since the last one.
+    """
+    from resume.services import evaluation_service
+
+    # SECURITY: both scoped to the caller
+    resume = Resume.objects.filter(pk=pk, user=request.user).first()
+    posting = JobPosting.objects.filter(pk=posting_id, user=request.user).first()
+    if resume is None or posting is None:
+        return JsonResponse({"error": "Not found."}, status=404)
+    if _email_unverified(request):
+        return JsonResponse({"error": _ai_locked_message(request)}, status=403)
+    try:
+        evaluation, previous = evaluation_service.evaluate(resume, posting)
+    except evaluation_service.EvaluationError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    return JsonResponse(evaluation_service.panel(resume, posting, evaluation, previous))
+
+
+@login_required
+@require_http_methods(["POST"])
+def promote_job_branch(request, pk):
+    """Replace a base resume with its job branch; the base keeps a restore point."""
+    from resume.services import evaluation_service
+
+    # SECURITY: scoped to the caller
+    branch = Resume.objects.filter(pk=pk, user=request.user).first()
+    if branch is None or not branch.is_job_branch:
+        return JsonResponse({"error": "Not a job branch."}, status=400)
+    base = evaluation_service.promote(branch)
+    return JsonResponse({"base": evaluation_service.resume_meta(base)})
 
 
 def _agent_rate_limited(request):
@@ -2218,8 +2399,8 @@ def _agent_quota_exceeded(request, message):
     return JsonResponse({"type": "chat", "message": msg, "quota_exceeded": True})
 
 
-def _agent_context(request, active_resume, message="", history=None):
-    """Facts handed to the loop: the user's resumes, quota and active resume."""
+def _agent_context(request, active_resume, message="", history=None, posting_id=None):
+    """Facts handed to the loop: the user's resumes, quota, active resume and posting."""
     from resume.services.agent_service import agent_service
 
     profile = request.user.profile
@@ -2232,8 +2413,18 @@ def _agent_context(request, active_resume, message="", history=None):
         if message or history
         else (profile.ui_language or "en")
     )
+    # The posting being worked on: a job branch's own, else the one the
+    # dashboard says is open (evaluated on a base resume).
+    active_posting = None
+    if active_resume is not None and active_resume.is_job_branch:
+        active_posting = active_resume.job_posting
+    elif posting_id:
+        # SECURITY: scoped to the caller
+        active_posting = JobPosting.objects.filter(pk=posting_id, user=request.user).first()
+
     return {
         "lang": lang,
+        "active_posting": active_posting,
         "confirm_destructive": profile.confirm_destructive,
         # Superusers get a trace of each turn in the chat (agent_loop._trace).
         "debug": [] if request.user.is_superuser else None,

@@ -398,8 +398,145 @@ def duplicate_resume(user, ctx, resume_id=None):
 
 
 # ---------------------------------------------------------------------------
+# Job postings — evaluate a resume against one, in a branch or on the base
+# ---------------------------------------------------------------------------
+
+
+@tool(
+    name="evaluate_posting",
+    description=(
+        "Evaluate a resume against a job posting the user pasted: score, and "
+        "which requirements the resume shows, shows partly or lacks. Pass the "
+        "posting text verbatim. `target`: 'branch' works in a copy of the "
+        "resume kept for this posting (the base stays as it is), 'base' "
+        "evaluates the base resume itself. Leave target null unless the user "
+        "said which: they are then asked with a card, and you should not ask "
+        "again in text. The side panel shows the full table."
+    ),
+    parameters={
+        "posting": {"type": "string"},
+        "target": {"type": ["string", "null"], "enum": ["branch", "base", None]},
+        "resume_id": INT_OR_NULL,
+    },
+)
+def evaluate_posting(user, ctx, posting, target=None, resume_id=None):
+    from resume.services import evaluation_service
+
+    resume, error = _resume_or_error(user, resume_id, ctx)
+    if error:
+        return error
+    try:
+        job = evaluation_service.add_posting(user, posting, ctx.get("lang", "en"))
+    except evaluation_service.EvaluationError as exc:
+        return ToolResult(data={"error": str(exc)})
+
+    base = resume.root
+    branch = Resume.objects.filter(
+        user=user, derived_from=base, derived_kind=Resume.DERIVED_JOB, job_posting=job
+    ).first()
+    if branch is not None:
+        resume = branch  # this posting already has its branch: keep working there
+    elif target is None:
+        return ToolResult(
+            data={
+                "asked_user": True,
+                "evaluated": False,
+                "posting_id": job.pk,
+                "posting": job.label,
+                "note": (
+                    "The posting is saved but NOT evaluated yet. A card below your "
+                    "reply asks the user: a branch for this posting, or the base "
+                    "resume. Reply with ONE short sentence, in the user's language, "
+                    "that points to the card below. Do not ask the question yourself "
+                    "and do not describe the options."
+                ),
+            },
+            ui=[{
+                "type": "evaluation_target",
+                "posting_id": job.pk,
+                "posting_label": job.label,
+                "resume_id": base.pk,
+                "resume_name": base.display_name,
+                "message": "",
+            }],
+        )
+    else:
+        try:
+            resume = (
+                evaluation_service.create_branch(base, job) if target == "branch" else base
+            )
+        except evaluation_service.EvaluationError as exc:
+            return ToolResult(data={"error": str(exc)})
+
+    try:
+        evaluation, previous = evaluation_service.evaluate(resume, job)
+    except evaluation_service.EvaluationError as exc:
+        return ToolResult(data={"error": str(exc)})
+    panel = evaluation_service.panel(resume, job, evaluation, previous)
+    return ToolResult(
+        data={
+            "posting_id": job.pk,
+            "posting": job.label,
+            "evaluated_resume_id": resume.pk,
+            "is_branch": resume.is_job_branch,
+            "score": evaluation.score,
+            "requirements": [
+                {"label": r["label"], "required": r["required"], "status": r["status"],
+                 "evidence": (r.get("evidence") or "")[:160]}
+                for r in panel["rows"]
+            ],
+        },
+        ui=[panel],
+    )
+
+
+@tool(
+    name="list_evaluations",
+    description=(
+        "Postings evaluated for this resume and its job branches, with the "
+        "latest score of each and whether the resume changed since."
+    ),
+    parameters={"resume_id": INT_OR_NULL},
+)
+def list_evaluations(user, ctx, resume_id=None):
+    from resume.services import evaluation_service
+
+    resume, error = _resume_or_error(user, resume_id, ctx)
+    if error:
+        return error
+    return ToolResult(data={"evaluations": evaluation_service.postings_for(resume)})
+
+
+# ---------------------------------------------------------------------------
 # Destructive tools — the loop pauses for approval before these run
 # ---------------------------------------------------------------------------
+
+
+@tool(
+    name="promote_branch",
+    description=(
+        "Replace the base resume with one of its job branches: the base's "
+        "content becomes the branch's, with no merge. The base keeps a restore "
+        "point, so this can be undone from its history. Only when the user "
+        "asks to make the branch their main resume."
+    ),
+    parameters={"resume_id": INT_OR_NULL},
+    destructive=True,
+)
+def promote_branch(user, ctx, resume_id=None):
+    from resume.services import evaluation_service
+
+    branch, error = _resume_or_error(user, resume_id, ctx)
+    if error:
+        return error
+    if not branch.is_job_branch:
+        return ToolResult(data={"error": "That resume is not a job branch."})
+    base = evaluation_service.promote(branch)
+    return ToolResult(
+        data={"ok": True, "base_resume_id": base.pk, "branch_resume_id": branch.pk},
+        ui=[{"type": "branch_promoted", "base": evaluation_service.resume_meta(base),
+             "branch_id": branch.pk, "message": ""}],
+    )
 
 
 @tool(

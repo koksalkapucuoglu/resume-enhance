@@ -179,6 +179,11 @@ class JobPosting(models.Model):
         return hashlib.sha256(normalized.encode()).hexdigest()
 
     @property
+    def short_label(self):
+        """What a branch is called after: the company, else the title."""
+        return self.company or self.title or "Job posting"
+
+    @property
     def label(self):
         if self.title and self.company:
             return f"{self.title} · {self.company}"

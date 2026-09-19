@@ -164,7 +164,15 @@
             <div id="active-resume-bar" class="hidden px-4 py-2 bg-primary/5 border-t border-primary/20 flex items-center gap-2 text-xs">
                 <span class="material-symbols-outlined !text-[14px] text-primary">edit_note</span>
                 <span class="text-primary font-medium">{{ UI.active_resume_label }}</span>
-                <span id="active-resume-label" class="text-primary font-semibold truncate flex-1 max-w-[60vw] lg:max-w-none"></span>
+                <span id="active-resume-label" class="text-primary font-semibold truncate max-w-[40vw] lg:max-w-none"></span>
+                <!-- The posting this conversation is about, when there is one -->
+                <button type="button" id="active-posting-chip" hidden onclick="showEvaluation()"
+                        class="min-w-0 truncate px-2 py-0.5 rounded-full bg-white border border-primary/20 text-slate-700 hover:border-primary">
+                    <span class="text-slate-400">{{ UI.eval_posting }}:</span>
+                    <span id="active-posting-label" class="font-semibold"></span>
+                    <span id="active-posting-score" class="ml-1 font-bold"></span>
+                </button>
+                <span class="flex-1"></span>
                 <button type="button" onclick="openHistory()"
                         class="ml-auto flex-shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-md text-primary font-semibold hover:bg-primary/10 transition-colors"
                         title="{{ UI.history_title }}">
@@ -179,6 +187,10 @@
 
             <!-- Quick Actions -->
             <div class="px-4 py-2 border-t border-slate-100 flex overflow-x-auto gap-2 scrollbar-hide">
+                <button type="button" onclick="openEvaluateModal()" id="evaluate-btn"
+                        class="px-3 py-1.5 rounded-full bg-primary/10 hover:bg-primary/20 text-xs font-semibold text-primary transition-colors flex items-center gap-1 flex-shrink-0">
+                    <span class="material-symbols-outlined !text-[14px]">fact_check</span>{{ UI.quick_evaluate }}
+                </button>
                 <button onclick="sendQuickAction('list_resumes')"
                         class="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition-colors flex items-center gap-1 flex-shrink-0">
                     <span class="material-symbols-outlined !text-[14px]">list</span>{{ UI.quick_list }}
@@ -198,6 +210,17 @@
                 <button onclick="sendQuickAction('help')"
                         class="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition-colors flex items-center gap-1 flex-shrink-0">
                     <span class="material-symbols-outlined !text-[14px]">help</span>{{ UI.quick_help }}
+                </button>
+            </div>
+
+            <!-- Offered when a job posting is pasted into the input; nothing is sent on its own -->
+            <div id="paste-offer" hidden class="px-4 py-2 border-t border-amber-100 bg-amber-50 flex items-center gap-2 text-xs">
+                <span class="material-symbols-outlined !text-[16px] text-amber-700">work</span>
+                <span class="text-amber-900">{{ UI.paste_job_detected }}</span>
+                <button type="button" onclick="evaluatePastedPosting()"
+                        class="ml-auto px-3 py-1 rounded-full bg-primary text-white font-semibold hover:bg-primary-hover">{{ UI.paste_job_score }}</button>
+                <button type="button" onclick="hidePasteOffer()" class="text-amber-800 hover:text-amber-950" aria-label="{{ UI.eval_cancel }}">
+                    <span class="material-symbols-outlined !text-[16px]">close</span>
                 </button>
             </div>
 
@@ -273,6 +296,22 @@
                 <div id="resume-list-content" class="flex-1 overflow-y-auto p-4 space-y-2 chat-scroll"></div>
             </div>
 
+            <!-- Evaluation Panel: one resume against one posting -->
+            <div id="context-evaluation" class="hidden flex-col flex-1 overflow-hidden">
+                <div class="px-4 py-3 border-b border-slate-200 bg-white">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined text-slate-500">fact_check</span>
+                        <h3 id="evaluation-title" class="font-semibold text-slate-700 text-sm truncate flex-1"></h3>
+                        <button type="button" onclick="showActiveResume()"
+                                class="px-2 py-1 rounded-md text-xs font-semibold text-primary hover:bg-primary/10 flex items-center gap-1 flex-shrink-0">
+                            <span class="material-symbols-outlined !text-[16px]">description</span>{{ UI.context_show_resume }}
+                        </button>
+                    </div>
+                    <div id="evaluation-switcher" class="mt-2 flex gap-1.5 overflow-x-auto scrollbar-hide"></div>
+                </div>
+                <div id="evaluation-body" class="flex-1 overflow-y-auto p-4 chat-scroll"></div>
+            </div>
+
             <!-- Preview Panel -->
             <div id="context-preview" class="hidden flex-col flex-1 overflow-hidden">
                 <div class="px-4 py-3 border-b border-slate-200 bg-white flex items-center justify-between">
@@ -281,6 +320,10 @@
                         <h3 id="preview-title" class="font-semibold text-slate-700 text-sm truncate max-w-[160px]">{{ UI.context_preview_title }}</h3>
                     </div>
                     <div class="flex gap-1 items-center">
+                        <button type="button" id="preview-eval-btn" hidden onclick="showEvaluation()"
+                                class="px-2 py-1 rounded-md text-xs font-semibold text-primary hover:bg-primary/10 transition-colors flex items-center gap-1">
+                            <span class="material-symbols-outlined !text-[16px]">fact_check</span>{{ UI.eval_show_eval }}
+                        </button>
                         <button type="button" id="preview-history-btn" onclick="openHistory()"
                                 class="p-1.5 rounded-md text-slate-400 hover:text-primary hover:bg-primary/10 transition-colors" title="{{ UI.history_title }}">
                             <span class="material-symbols-outlined !text-[16px]">history</span>
@@ -388,6 +431,37 @@ const PROACTIVE_SUGGESTIONS = {{ proactive_suggestions|default:"[]"|safe }};
 const BADGE_MODERN = "{{ UI.badge_modern }}";
 const BADGE_CLASSIC = "{{ UI.badge_classic }}";
 // Set when arriving via /dashboard/?resume=<pk> (e.g. handed over by the editor)
+// Base or branch, and the posting a branch is for (evaluation_service.resume_meta).
+const RESUME_META = {{ resume_meta|default:"{}"|safe }};
+const EVAL_LABELS = {
+  modal_too_short: `{{ UI.eval_too_short|escapejs }}`,
+  reading: `{{ UI.eval_reading|escapejs }}`,
+  target_question: `{{ UI.eval_target_question|escapejs }}`,
+  target_branch: `{{ UI.eval_target_branch|escapejs }}`,
+  target_branch_hint: `{{ UI.eval_target_branch_hint|escapejs }}`,
+  target_base: `{{ UI.eval_target_base|escapejs }}`,
+  user_msg: `{{ UI.eval_user_msg|escapejs }}`,
+  summary: `{{ UI.eval_summary|escapejs }}`,
+  summary_gaps: `{{ UI.eval_summary_gaps|escapejs }}`,
+  required_met: `{{ UI.eval_required_met|escapejs }}`,
+  gaps: `{{ UI.eval_gaps|escapejs }}`,
+  strengths: `{{ UI.eval_strengths|escapejs }}`,
+  required: `{{ UI.eval_required|escapejs }}`,
+  nice: `{{ UI.eval_nice|escapejs }}`,
+  covered: `{{ UI.eval_status_covered|escapejs }}`,
+  partial: `{{ UI.eval_status_partial|escapejs }}`,
+  missing: `{{ UI.eval_status_missing|escapejs }}`,
+  partial_hint: `{{ UI.eval_partial_hint|escapejs }}`,
+  evidence: `{{ UI.eval_evidence|escapejs }}`,
+  changed: `{{ UI.eval_changed|escapejs }}`,
+  promote: `{{ UI.eval_promote|escapejs }}`,
+  promote_confirm: `{{ UI.eval_promote_confirm|escapejs }}`,
+  promoted: `{{ UI.eval_promoted|escapejs }}`,
+  branch: `{{ UI.eval_branch|escapejs }}`,
+  stale: `{{ UI.eval_stale|escapejs }}`,
+  rescored: `{{ UI.eval_rescored|escapejs }}`,
+  pick_resume: `{{ UI.eval_pick_resume|escapejs }}`,
+};
 const CHAT_LANG = "{{ ui_lang }}";
 const STREAM_LABELS = {
   interrupted: `{{ UI.stream_interrupted|escapejs }}`,
@@ -734,8 +808,19 @@ function setActiveResume(id, name) {
     persistActiveResume();
     const bar = document.getElementById('active-resume-bar');
     const label = document.getElementById('active-resume-label');
+    const meta = RESUME_META[id];
+    // A branch carries its posting; moving to another resume leaves it.
+    if (meta && meta.is_branch) {
+        activePostingId = meta.posting_id;
+    } else if (!id || (lastEvaluation && lastEvaluation.resume.id !== Number(id))) {
+        activePostingId = null;
+    }
+    persistActivePosting();
+    renderPostingChip();
     if (id) {
-        label.textContent = name || `Resume ${id}`;
+        label.textContent = meta && meta.is_branch
+            ? `${meta.name} (${EVAL_LABELS.branch})`
+            : (name || `Resume ${id}`);
         bar.classList.remove('hidden');
         bar.classList.add('flex');
         document.querySelectorAll('.resume-mini-card').forEach(el => {
@@ -790,6 +875,7 @@ async function sendMessage(text) {
         const body = {message: msg, history: conversationHistory};
         if (builderState) body.builder_state = builderState;
         if (activeResumeId) body.active_resume_id = activeResumeId;
+        if (activePostingId) body.active_posting_id = activePostingId;
 
         const data = await runAgentStream('{% url "resume:agent_chat_stream" %}', body);
 
@@ -836,6 +922,366 @@ function historyResumeId() { return activeResumeId; }
 function onHistoryRestored() {
     refreshPreviewAfterModify(activeResumeId, activeResumeName);
     appendMessage('bot', `{{ UI.history_restored|escapejs }}`);
+    refreshEvaluation();
+}
+
+// ---------------------------------------------------------------------------
+// Job posting evaluation (services/evaluation_service.py)
+//
+// Adding, evaluating and switching postings go to deterministic endpoints —
+// no chat turn, no agent message. What happened is written into the chat and
+// its history, so the assistant can talk about it afterwards.
+// ---------------------------------------------------------------------------
+const LS_POSTING = 'resustack_active_posting';
+let activePostingId = null;
+let lastEvaluation = null;
+try { activePostingId = Number(localStorage.getItem(LS_POSTING)) || null; } catch (e) {}
+
+function fill(text, values) {
+    return Object.entries(values).reduce((t, [k, v]) => t.split(`{${k}}`).join(v), text || '');
+}
+
+function persistActivePosting() {
+    try {
+        if (activePostingId) localStorage.setItem(LS_POSTING, String(activePostingId));
+        else localStorage.removeItem(LS_POSTING);
+    } catch (e) {}
+}
+
+function renderPostingChip() {
+    const chip = document.getElementById('active-posting-chip');
+    if (!chip) return;
+    const ev = lastEvaluation && lastEvaluation.posting_id === activePostingId ? lastEvaluation : null;
+    const meta = RESUME_META[activeResumeId];
+    const label = ev ? ev.posting_label : (meta && meta.is_branch ? meta.posting_label : '');
+    document.getElementById('active-posting-chip').title = label || '';
+    chip.hidden = !(activePostingId && label);
+    document.getElementById('active-posting-label').textContent = label || '';
+    document.getElementById('active-posting-score').textContent = ev ? `· ${ev.score}` : '';
+}
+
+async function postJson(url, body) {
+    const resp = await fetch(url, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN,
+                  'X-Requested-With': 'XMLHttpRequest'},
+        body: JSON.stringify(body || {}),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || data.error) throw new Error(data.error || data.message || 'Error');
+    return data;
+}
+
+function rememberInHistory(role, content) {
+    conversationHistory.push({role, content, timestamp: new Date().toISOString()});
+    persistChat();
+}
+
+// --- Entry points: the button, and a pasted posting -------------------------
+function openEvaluateModal(prefill) {
+    const select = document.getElementById('evaluate-resume');
+    const bases = Object.values(RESUME_META).filter(m => !m.is_branch);
+    select.innerHTML = bases.map(m => `<option value="${m.id}">${escHtml(m.name)} (${escHtml(m.language)})</option>`).join('');
+    // With a resume open, that is the one; the picker is for when none is.
+    document.getElementById('evaluate-resume-row').hidden = Boolean(activeResumeId);
+    document.getElementById('evaluate-text').value = prefill || '';
+    document.getElementById('evaluate-error').hidden = true;
+    document.getElementById('evaluate-modal').hidden = false;
+    document.getElementById('evaluate-text').focus();
+}
+
+function closeEvaluateModal() {
+    document.getElementById('evaluate-modal').hidden = true;
+}
+
+function submitEvaluateModal() {
+    const text = document.getElementById('evaluate-text').value.trim();
+    const error = document.getElementById('evaluate-error');
+    if (text.length < 40) {
+        error.textContent = EVAL_LABELS.modal_too_short;
+        error.hidden = false;
+        return;
+    }
+    const resumeId = activeResumeId || Number(document.getElementById('evaluate-resume').value);
+    if (!resumeId) {
+        error.textContent = EVAL_LABELS.pick_resume;
+        error.hidden = false;
+        return;
+    }
+    closeEvaluateModal();
+    startEvaluation(text, resumeId);
+}
+
+let pasteCheck = null;
+async function checkPastedText(text) {
+    hidePasteOffer();
+    if (!text || text.length < 200) return;
+    if (pasteCheck) pasteCheck.abort();
+    pasteCheck = new AbortController();
+    try {
+        const resp = await fetch('{% url "resume:detect_job_posting" %}', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN,
+                      'X-Requested-With': 'XMLHttpRequest'},
+            body: JSON.stringify({text}),
+            signal: pasteCheck.signal,
+        });
+        const body = await resp.json();
+        if (resp.ok && body.is_posting && document.getElementById('chat-input').value.trim()) {
+            document.getElementById('paste-offer').hidden = false;
+        }
+    } catch (e) { /* no offer; the message can still be sent as typed */ }
+}
+
+function hidePasteOffer() {
+    const offer = document.getElementById('paste-offer');
+    if (offer) offer.hidden = true;
+}
+
+function evaluatePastedPosting() {
+    const input = document.getElementById('chat-input');
+    const text = input.value.trim();
+    hidePasteOffer();
+    if (!text) return;
+    input.value = '';
+    autoResizeTextarea(input);
+    if (activeResumeId) startEvaluation(text, activeResumeId);
+    else openEvaluateModal(text);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const input = document.getElementById('chat-input');
+    input.addEventListener('paste', event => {
+        const pasted = (event.clipboardData || window.clipboardData).getData('text');
+        setTimeout(() => checkPastedText(pasted && pasted.length >= 200 ? input.value.trim() : ''), 0);
+    });
+    input.addEventListener('input', () => { if (!input.value.trim()) hidePasteOffer(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeEvaluateModal(); });
+});
+
+// --- The flow: add → (branch or base?) → evaluate ----------------------------
+async function startEvaluation(text, resumeId) {
+    showTyping();
+    showStepIndicator(EVAL_LABELS.reading);
+    let posting;
+    try {
+        posting = await postJson('{% url "resume:add_job_posting" %}', {text, resume_id: resumeId});
+    } catch (err) {
+        hideStepIndicator();
+        hideTyping();
+        appendMessage('bot', err.message, true);
+        return;
+    }
+    hideStepIndicator();
+    hideTyping();
+    const userLine = fill(EVAL_LABELS.user_msg, {job: posting.posting_label});
+    appendMessage('user', userLine);
+    rememberInHistory('user', userLine);
+    if (posting.branch) {
+        // This posting already has its branch: keep working there.
+        evaluateOn(posting.posting_id, posting.branch.id, 'existing');
+    } else {
+        renderTargetCard({posting_id: posting.posting_id, posting_label: posting.posting_label,
+                          resume_id: posting.base.id, resume_name: posting.base.name});
+    }
+}
+
+function renderTargetCard(data) {
+    const container = document.getElementById('chat-messages');
+    const card = document.createElement('div');
+    card.className = 'ml-9 mt-1.5 p-3 rounded-xl border border-primary/20 bg-white shadow-sm max-w-md';
+    card.innerHTML = `
+      <p class="text-sm font-semibold text-slate-800 mb-2">${escHtml(fill(EVAL_LABELS.target_question, {job: data.posting_label}))}</p>
+      <button type="button" data-target="branch"
+              class="w-full text-left px-3 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary-hover">
+        ${escHtml(EVAL_LABELS.target_branch)}
+        <span class="block text-[11px] font-normal text-white/80">${escHtml(fill(EVAL_LABELS.target_branch_hint, {resume: data.resume_name}))}</span>
+      </button>
+      <button type="button" data-target="base"
+              class="w-full text-left mt-1.5 px-3 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-50">
+        ${escHtml(fill(EVAL_LABELS.target_base, {resume: data.resume_name}))}
+      </button>`;
+    card.querySelectorAll('button').forEach(button => button.addEventListener('click', () => {
+        card.querySelectorAll('button').forEach(b => {
+            b.disabled = true;
+            if (b !== button) b.classList.add('opacity-40');
+        });
+        evaluateOn(data.posting_id, data.resume_id, button.dataset.target);
+    }));
+    container.appendChild(card);
+    scrollToBottom();
+}
+
+async function evaluateOn(postingId, resumeId, target) {
+    showTyping();
+    let data;
+    try {
+        data = await postJson('{% url "resume:evaluate_job_posting" %}',
+                              {posting_id: postingId, resume_id: resumeId, target});
+    } catch (err) {
+        hideTyping();
+        appendMessage('bot', err.message, true);
+        return;
+    }
+    hideTyping();
+    RESUME_META[data.resume.id] = data.resume;
+    OWNED_RESUME_IDS.add(Number(data.resume.id));
+    showEvaluationResult(data, true);
+}
+
+// Panel, context bar, and one line in the chat that the assistant can see.
+function showEvaluationResult(data, announce) {
+    lastEvaluation = data;
+    activePostingId = data.posting_id;
+    persistActivePosting();
+    setActiveResume(data.resume.id, data.resume.name);
+    renderEvaluation(data);
+    if (!announce) return;
+    const gaps = data.rows.filter(r => r.required && r.status === 'missing').map(r => r.label);
+    const resumeName = data.resume.is_branch
+        ? `${data.resume.name} (${EVAL_LABELS.branch})` : data.resume.name;
+    let line = fill(EVAL_LABELS.summary, {resume: resumeName, score: data.score, job: data.posting_short});
+    if (gaps.length) line += ' ' + fill(EVAL_LABELS.summary_gaps, {gaps: gaps.slice(0, 4).join(', ')});
+    appendMessage('bot', line);
+    rememberInHistory('assistant', line);
+}
+
+function showEvaluation() {
+    if (lastEvaluation && lastEvaluation.resume.id === Number(activeResumeId)
+            && lastEvaluation.posting_id === activePostingId) {
+        renderEvaluation(lastEvaluation);
+    } else {
+        refreshEvaluation(true);
+    }
+}
+
+// After an edit, restore or template change: measure again (only if the
+// content changed) and say what moved.
+async function refreshEvaluation(open) {
+    if (!activeResumeId || !activePostingId) return;
+    let data;
+    try {
+        const resp = await fetch(`/resume/${activeResumeId}/evaluations/${activePostingId}/`);
+        data = await resp.json();
+        if (!resp.ok || data.error) return;
+    } catch (e) { return; }
+    const before = lastEvaluation && lastEvaluation.posting_id === data.posting_id
+        && lastEvaluation.resume.id === data.resume.id ? lastEvaluation.score : null;
+    lastEvaluation = data;
+    renderPostingChip();
+    if (before !== null && before !== data.score) {
+        const moved = (data.changes || []).map(c => `${c.label}: ${EVAL_LABELS[c.before] || c.before} → ${EVAL_LABELS[c.after] || c.after}`);
+        const line = fill(EVAL_LABELS.rescored, {job: data.posting_short, before, after: data.score})
+            + (moved.length ? ` · ${moved.join(' · ')}` : '');
+        appendMessage('bot', line);
+        rememberInHistory('assistant', line);
+    }
+    const panelOpen = !document.getElementById('context-evaluation').classList.contains('hidden');
+    if (open || panelOpen) renderEvaluation(data);
+    else document.getElementById('preview-eval-btn').hidden = false;
+}
+
+// --- The panel ---------------------------------------------------------------
+const EVAL_ICON = {
+    covered: ['check_circle', 'text-green-600'],
+    partial: ['adjust', 'text-amber-500'],
+    missing: ['cancel', 'text-red-500'],
+};
+
+function evaluationRow(r) {
+    const [icon, tone] = EVAL_ICON[r.status] || EVAL_ICON.missing;
+    const evidence = r.evidence && r.status !== 'missing'
+        ? `<p class="text-[11px] text-slate-500 mt-1"><span class="font-semibold">${escHtml(EVAL_LABELS.evidence)}:</span> “${escHtml(r.evidence)}”</p>` : '';
+    return `<details class="group rounded-lg border border-slate-100 bg-white px-3 py-2">
+      <summary class="flex items-center gap-2 cursor-pointer list-none text-xs text-slate-700">
+        <span class="material-symbols-outlined !text-[16px] ${tone}" title="${escHtml(EVAL_LABELS[r.status] || '')}">${icon}</span>
+        <span class="flex-1">${escHtml(r.label || r.text)}</span>
+        <span class="text-[10px] text-slate-400">${escHtml(r.required ? EVAL_LABELS.required : EVAL_LABELS.nice)}</span>
+      </summary>
+      <p class="text-[11px] text-slate-500 mt-1.5">${escHtml(r.text)}</p>
+      ${evidence}
+    </details>`;
+}
+
+function renderEvaluation(data) {
+    hideAllContextPanels();
+    const panel = document.getElementById('context-evaluation');
+    panel.classList.remove('hidden');
+    panel.classList.add('flex');
+    const resume = data.resume;
+    document.getElementById('evaluation-title').textContent = data.posting_label;
+
+    const tone = data.score >= 75 ? ['bg-green-50', 'text-green-700', 'bg-green-500']
+        : data.score >= 50 ? ['bg-amber-50', 'text-amber-700', 'bg-amber-500']
+        : ['bg-red-50', 'text-red-700', 'bg-red-500'];
+    const gaps = data.rows.filter(r => r.status !== 'covered');
+    const strengths = data.rows.filter(r => r.status === 'covered');
+    const moved = (data.changes || []).map(c =>
+        `<li>${escHtml(c.label)}: ${escHtml(EVAL_LABELS[c.before] || c.before)} → <strong>${escHtml(EVAL_LABELS[c.after] || c.after)}</strong></li>`).join('');
+    const delta = data.previous_score != null && data.previous_score !== data.score
+        ? `<p class="text-xs text-slate-600 mt-2">${escHtml(EVAL_LABELS.changed)}: ${data.previous_score} → <strong>${data.score}</strong></p>` : '';
+    const resumeChip = resume.is_branch
+        ? `${escHtml(resume.base_name)} › <strong>${escHtml(data.posting_short)}</strong> <span class="px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-semibold">${escHtml(EVAL_LABELS.branch)}</span>`
+        : `<strong>${escHtml(resume.name)}</strong>`;
+
+    document.getElementById('evaluation-body').innerHTML = `
+      <p class="text-xs text-slate-500 mb-2">${resumeChip}</p>
+      <div class="${tone[0]} rounded-xl p-4 text-center mb-4">
+        <p class="text-4xl font-black ${tone[1]}">${data.score}</p>
+        <p class="text-xs text-slate-500 mt-1">${escHtml(fill(EVAL_LABELS.required_met, {n: `${data.required_covered}/${data.required_total}`}))}</p>
+        <div class="mt-3 h-1.5 bg-white/70 rounded-full overflow-hidden">
+          <div class="h-full ${tone[2]} rounded-full" style="width:${Math.max(0, Math.min(100, data.score))}%"></div>
+        </div>
+        ${delta}
+        ${moved ? `<ul class="text-[11px] text-slate-600 mt-1 space-y-0.5">${moved}</ul>` : ''}
+      </div>
+      ${gaps.length ? `<p class="text-xs font-semibold text-slate-500 mb-1">${escHtml(EVAL_LABELS.gaps)}</p>
+        <p class="text-[11px] text-slate-400 mb-1.5">${escHtml(EVAL_LABELS.partial_hint)}</p>
+        <div class="space-y-1.5 mb-4">${gaps.map(evaluationRow).join('')}</div>` : ''}
+      ${strengths.length ? `<p class="text-xs font-semibold text-slate-500 mb-1.5">${escHtml(EVAL_LABELS.strengths)}</p>
+        <div class="space-y-1.5 mb-4">${strengths.map(evaluationRow).join('')}</div>` : ''}
+      ${resume.is_branch ? `<button type="button" onclick="promoteActiveBranch()"
+          class="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm font-semibold text-slate-700 hover:bg-slate-50 flex items-center justify-center gap-1.5">
+          <span class="material-symbols-outlined !text-[18px]">upgrade</span>${escHtml(EVAL_LABELS.promote)}</button>` : ''}`;
+    renderPostingChip();
+    loadEvaluationSwitcher(resume.id);
+    if (mobileActiveTab === 'chat') showContextBadge();
+}
+
+// Other postings evaluated for this resume and its branches, one tap away.
+async function loadEvaluationSwitcher(resumeId) {
+    const bar = document.getElementById('evaluation-switcher');
+    try {
+        const data = await (await fetch(`/resume/${resumeId}/evaluations/`)).json();
+        const items = (data.evaluations || []);
+        bar.innerHTML = items.length > 1 ? items.map(e => {
+            const current = lastEvaluation && e.posting_id === lastEvaluation.posting_id && e.resume_id === lastEvaluation.resume.id;
+            return `<button type="button" data-resume="${e.resume_id}" data-posting="${e.posting_id}"
+                class="flex-shrink-0 px-2.5 py-1 rounded-full text-[11px] font-semibold border ${current ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200 hover:border-primary'}">
+                ${escHtml(e.posting_label)} · ${e.score}${e.stale ? ' *' : ''}</button>`;
+        }).join('') : '';
+        bar.querySelectorAll('button').forEach(b => b.addEventListener('click', async () => {
+            activePostingId = Number(b.dataset.posting);
+            setActiveResume(Number(b.dataset.resume), (RESUME_META[b.dataset.resume] || {}).name);
+            activePostingId = Number(b.dataset.posting);
+            persistActivePosting();
+            refreshEvaluation(true);
+        }));
+    } catch (e) { bar.innerHTML = ''; }
+}
+
+async function promoteActiveBranch() {
+    const meta = RESUME_META[activeResumeId];
+    if (!meta || !meta.is_branch) return;
+    if (!confirm(fill(EVAL_LABELS.promote_confirm, {base: meta.base_name}))) return;
+    try {
+        const data = await postJson(`/resume/${activeResumeId}/promote/`, {});
+        const line = fill(EVAL_LABELS.promoted, {base: data.base.name});
+        appendMessage('bot', line);
+        rememberInHistory('assistant', line);
+    } catch (err) {
+        appendMessage('bot', err.message, true);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1097,6 +1543,7 @@ async function resolveApproval(promptEl, token, approved) {
     try {
         const body = {token, approved};
         if (activeResumeId) body.active_resume_id = activeResumeId;
+        if (activePostingId) body.active_posting_id = activePostingId;
         const data = await runAgentStream('{% url "resume:agent_approve_stream" %}', body);
         hideTyping();
         if (data.error) {
@@ -1149,6 +1596,21 @@ function handleResponse(data) {
             refreshPreviewAfterModify(data.resume_id, data.resume_name);
             appendChangeReviewBar(data.resume_id);
             showContextBadge();
+            refreshEvaluation();
+            break;
+
+        case 'evaluation':
+            RESUME_META[data.resume.id] = data.resume;
+            OWNED_RESUME_IDS.add(Number(data.resume.id));
+            showEvaluationResult(data, false);
+            break;
+
+        case 'evaluation_target':
+            renderTargetCard(data);
+            break;
+
+        case 'branch_promoted':
+            RESUME_META[data.base.id] = data.base;
             break;
 
         case 'switch_template':
@@ -1260,7 +1722,7 @@ function showContextDefault() {
 
 function hideAllContextPanels() {
     ['context-default','context-empty','context-resume-list','context-preview',
-     'context-quota','context-confirm','context-analysis','context-diff'].forEach(id => {
+     'context-quota','context-confirm','context-analysis','context-diff','context-evaluation'].forEach(id => {
         const el = document.getElementById(id);
         el.classList.add('hidden');
         el.classList.remove('flex');
@@ -1369,6 +1831,8 @@ function loadPreviewPanel(resumeId, title) {
     dlBtn.download = `${(title || 'resume').replace(/\s+/g, '_')}_${resumeId}.pdf`;
 
     document.getElementById('preview-history-btn').hidden = false;
+    document.getElementById('preview-eval-btn').hidden = !(activePostingId
+        && (Number(resumeId) === Number(activeResumeId)));
     const iframe = document.getElementById('context-iframe');
     // Cache-busted: after an edit the same URL must show the new content.
     iframe.src = `/resume/${resumeId}/preview/?t=${Date.now()}`;
@@ -1970,6 +2434,29 @@ function escHtml(str) {
               .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 </script>
+<!-- Evaluate a posting: the text, and which resume when none is active -->
+<div id="evaluate-modal" hidden class="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4"
+     onclick="if (event.target === this) closeEvaluateModal()">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg p-5" role="dialog" aria-modal="true" aria-labelledby="evaluate-title">
+        <h2 id="evaluate-title" class="text-base font-bold text-slate-900 flex items-center gap-2">
+            <span class="material-symbols-outlined text-primary">fact_check</span>{{ UI.eval_modal_title }}
+        </h2>
+        <p class="text-xs text-slate-500 mt-1">{{ UI.eval_modal_hint }}</p>
+        <textarea id="evaluate-text" rows="10"
+                  class="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"></textarea>
+        <div id="evaluate-resume-row">
+            <label for="evaluate-resume" class="block text-xs font-semibold text-slate-600 mt-3 mb-1">{{ UI.eval_modal_resume }}</label>
+            <select id="evaluate-resume" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"></select>
+        </div>
+        <p id="evaluate-error" class="text-xs text-red-600 mt-2" hidden></p>
+        <div class="flex justify-end gap-2 mt-4">
+            <button type="button" onclick="closeEvaluateModal()"
+                    class="px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50">{{ UI.eval_cancel }}</button>
+            <button type="button" onclick="submitEvaluateModal()"
+                    class="px-4 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary-hover">{{ UI.eval_submit }}</button>
+        </div>
+    </div>
+</div>
 {% include "resume/_history_modal.html" %}
 </body>
 </html>
