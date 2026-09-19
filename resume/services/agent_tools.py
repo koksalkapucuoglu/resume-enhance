@@ -425,6 +425,49 @@ def _application_cap_reached(user):
     )
 
 
+def _match_facts(result):
+    """What the model reads about a match: the measured table, compactly."""
+    facts = {
+        "matched_keywords": result["matched_keywords"],
+        "partial_keywords": result.get("partial_keywords", []),
+        "missing_keywords": result["missing_keywords"],
+        "verdict": result["verdict"],
+        "suggestions": result["suggestions"],
+        "scoring": result.get("scoring_version", "llm-v1"),
+    }
+    if result.get("requirements"):
+        facts["requirements"] = [
+            {
+                "label": r["label"],
+                "required": r["must_have"] >= 0.5,
+                "status": r["status"],
+                "evidence": (r.get("evidence") or "")[:160],
+            }
+            for r in result["requirements"]
+        ]
+    if "instructions_removed" in result.get("notices", []):
+        facts["posting_contained_ai_instructions"] = (
+            "The posting had lines addressed to AI screeners; they were ignored. "
+            "Mention this to the user."
+        )
+    return facts
+
+
+def _match_panel(result):
+    """What the side panel draws for a match."""
+    return {
+        "score": result["score"],
+        "matched_keywords": result["matched_keywords"],
+        "partial_keywords": result.get("partial_keywords", []),
+        "missing_keywords": result["missing_keywords"],
+        "suggestions": result["suggestions"],
+        "requirements": result.get("requirements", []),
+        "scoring_version": result.get("scoring_version", "llm-v1"),
+        "notices": result.get("notices", []),
+        "message": "",
+    }
+
+
 @tool(
     name="match_job",
     description=(
@@ -530,7 +573,9 @@ def match_job(user, ctx, description, resume_id=None, apply_to=None):
     # after the base resume moves on.
     posting.take_snapshot(resume.content, resume.template_selector, resume)
     previous = posting.record_score(
-        result["score"], resume.id, result["missing_keywords"]
+        result["score"], resume.id, result["missing_keywords"],
+        requirements=result.get("requirements"),
+        scoring_version=result.get("scoring_version", "llm-v1"),
     )
     posting.save()
 
@@ -541,10 +586,7 @@ def match_job(user, ctx, description, resume_id=None, apply_to=None):
             "score": result["score"],
             "previous_score": previous,
             "is_new_application": is_new,
-            "matched_keywords": result["matched_keywords"],
-            "missing_keywords": result["missing_keywords"],
-            "verdict": result["verdict"],
-            "suggestions": result["suggestions"],
+            **_match_facts(result),
         },
         ui=[
             {
@@ -553,12 +595,8 @@ def match_job(user, ctx, description, resume_id=None, apply_to=None):
                 "job_label": posting.label,
                 "resume_id": resume.id,
                 "resume_name": resume.display_name,
-                "score": result["score"],
                 "previous_score": previous,
-                "matched_keywords": result["matched_keywords"],
-                "missing_keywords": result["missing_keywords"],
-                "suggestions": result["suggestions"],
-                "message": "",
+                **_match_panel(result),
             }
         ],
     )
@@ -720,10 +758,12 @@ def rescore_job(user, ctx, job_id):
         return ToolResult(data=result)
 
     previous = posting.record_score(
-        result["score"], posting.source_resume_id, result["missing_keywords"]
+        result["score"], posting.source_resume_id, result["missing_keywords"],
+        requirements=result.get("requirements"),
+        scoring_version=result.get("scoring_version", "llm-v1"),
     )
     posting.save(update_fields=["match_score", "score_history", "missing_keywords",
-                                "updated_at"])
+                                "requirements", "scoring_version", "updated_at"])
 
     delta = None if previous is None else result["score"] - previous
     return ToolResult(
@@ -733,8 +773,7 @@ def rescore_job(user, ctx, job_id):
             "score": result["score"],
             "previous_score": previous,
             "change": delta,
-            "missing_keywords": result["missing_keywords"],
-            "suggestions": result["suggestions"],
+            **_match_facts(result),
         },
         ui=[
             {
@@ -745,12 +784,8 @@ def rescore_job(user, ctx, job_id):
                 "job_snapshot_id": posting.id,
                 "resume_name": posting.snapshot_name,
                 "preview_url": f"/jobs/{posting.id}/snapshot/",
-                "score": result["score"],
                 "previous_score": previous,
-                "matched_keywords": result["matched_keywords"],
-                "missing_keywords": result["missing_keywords"],
-                "suggestions": result["suggestions"],
-                "message": "",
+                **_match_panel(result),
             }
         ],
     )

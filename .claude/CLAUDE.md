@@ -553,6 +553,15 @@ result = send_openai_message(user_message, meta_prompt, temperature=0.7, max_tok
 - Fail-open: Jev unavailable → allow. An approved (parked) call is not re-checked.
 - A new tool that writes or spends quota belongs in `GUARDED_TOOLS`. Thresholds come from `manage.py jev_eval guard` (`resume/evals/guard_cases.py`) — add the conversation there when a wrong block or a miss is reported.
 
+### Job match scoring (`resume/services/job_match.py`)
+
+- `job_service._analyze` tries Jev first and falls back to the single OpenAI call (`_analyze_llm`) when Jev is unavailable. `scoring_version` (`"jev-1"` / `"llm-v1"`) is stored on `JobPosting` and in each `score_history` entry; `record_score` does not report a "previous score" across versions.
+- Pipeline: code splits the posting into lines → Jev classifies each line (requirement / responsibility / heading / about / other), P(required), and P(instruction aimed at an AI) → Jev scores each requirement against the resume as numbered lines (`evidence_lines`), a 4-level `Score` plus a `Choice` of the evidence line → code computes `composite()` (requirement weight 1 + P(required), responsibility 1) → OpenAI writes only title, company, verdict, suggestions and short labels from that table.
+- Lines judged as instructions to an AI screener are dropped before scoring and before the OpenAI prompt; the result carries `notices: ["instructions_removed"]` and the agent is told to mention it.
+- `JobPosting.requirements` holds the table: `{id, text, label, kind, must_have, level, status (covered/partial/missing), confidence, uncertain, evidence}`. Evidence is a quoted resume line, never generated.
+- Skills listed only in the skills section score "partial" by design — the useful advice is to show them in a bullet.
+- Scores repeat within ±1 for the same input. Thresholds come from `manage.py jev_eval match` (`resume/evals/match_cases.py`).
+
 ### WeasyPrint (PDF Generation)
 
 - **No extra stylesheet.** Each layout carries its own `<style>` (`resume_templates/_styles.html`); `ResumePdfService` passes no CSS to WeasyPrint so the download matches the live preview of the same template. Fonts are always named explicitly — renderer defaults differ between WeasyPrint and the browser.

@@ -151,10 +151,66 @@ def guard_suite():
     return rows
 
 
+def match_suite():
+    """Job match: requirements get the right status, and better fits score higher."""
+    from unittest.mock import patch
+
+    from resume.evals.match_cases import CASES
+    from resume.services import job_match
+
+    rows = []
+    # Prose comes from OpenAI and is not what is being measured here.
+    with patch("resume.services.job_match.send_openai_message", return_value="{}"):
+        for case in CASES:
+            results = {
+                key: job_match.analyze(content, case["posting"], "en")
+                for key, content in case["resumes"].items()
+            }
+            if any(r is None for r in results.values()):
+                rows.append((case["name"], False, "no answer from Jev"))
+                continue
+
+            scores = [results[key]["score"] for key in case["ranking"]]
+            gaps_ok = all(a - b >= case["min_gap"] for a, b in zip(scores, scores[1:]))
+            rows.append((f"{case['name']}: ranking", gaps_ok,
+                         " > ".join(f"{k}={s}" for k, s in zip(case["ranking"], scores))))
+
+            if "injection" in case:
+                first = results[case["ranking"][0]]
+                rows.append((f"{case['name']}: injection noticed",
+                             ("instructions_removed" in first["notices"]) == case["injection"],
+                             ", ".join(first["notices"]) or "none"))
+
+            for key, expectations in case["expect"].items():
+                requirements = results[key]["requirements"]
+                for needle, want in expectations.items():
+                    # Exact line first: a short needle like "Go" is inside "Django".
+                    found = [r for r in requirements if r["text"].lower() == needle.lower()] or [
+                        r for r in requirements if needle.lower() in r["text"].lower()
+                    ]
+                    label = f"{case['name']}/{key}: {needle[:24]}"
+                    if want.get("scored") is False:
+                        rows.append((label, not found, "not scored" if not found else found[0]["kind"]))
+                        continue
+                    if not found:
+                        rows.append((label, False, "not scored"))
+                        continue
+                    r = found[0]
+                    ok = True
+                    if "status" in want:
+                        ok &= r["status"] == want["status"]
+                    if "required" in want:
+                        ok &= (r["must_have"] >= 0.5) == want["required"]
+                    rows.append((label, ok,
+                                 f"{r['status']} level={r['level']:.2f} must={r['must_have']:.2f}"))
+    return rows
+
+
 SUITES = {
     "smoke": smoke_suite,
     "import": import_suite,
     "guard": guard_suite,
+    "match": match_suite,
 }
 
 

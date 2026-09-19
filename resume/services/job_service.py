@@ -99,12 +99,29 @@ def _analyze(content, description, lang="en"):
     """
     Score how well a resume answers a posting.
 
-    Returns a dict with score, matched/missing keywords, tags and a short
-    verdict, or {"error": ...} when the model's answer is unusable.
+    Jev measures it line by line (services/job_match.py); when Jev cannot be
+    reached, a single OpenAI call estimates it instead. `scoring_version` says
+    which one did, since their numbers are not directly comparable.
     """
     description = (description or "").strip()[:MAX_DESCRIPTION_CHARS]
     if len(description) < 40:
         return {"error": "The job description is too short to analyse."}
+
+    from resume.services import job_match
+
+    measured = job_match.analyze(content, description, lang)
+    if measured is not None:
+        return measured
+    return _analyze_llm(content, description, lang)
+
+
+def _analyze_llm(content, description, lang="en"):
+    """
+    The single-call scorer: one LLM estimate of the whole match.
+
+    Returns a dict with score, matched/missing keywords and a short verdict,
+    or {"error": ...} when the model's answer is unusable.
+    """
 
     meta_prompt = """
     You compare a resume against a job posting for a candidate deciding whether
@@ -167,6 +184,10 @@ def _analyze(content, description, lang="en"):
         "company": str(parsed.get("company") or "")[:255],
         "verdict": str(parsed.get("verdict") or ""),
         "suggestions": [str(x) for x in parsed.get("suggestions", [])][:5],
+        "partial_keywords": [],
+        "requirements": [],
+        "scoring_version": "llm-v1",
+        "notices": [],
     }
 
 

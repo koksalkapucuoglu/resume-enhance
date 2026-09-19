@@ -191,6 +191,13 @@ class JobPosting(models.Model):
     match_score = models.IntegerField(null=True, blank=True)
     score_history = models.JSONField(default=list, blank=True)
     missing_keywords = models.JSONField(default=list, blank=True)
+    # The line-by-line measurement behind match_score: each requirement of the
+    # posting, how strongly the resume evidences it and with which line. Empty
+    # for scores from the single-call estimator (services/job_match.py).
+    requirements = models.JSONField(default=list, blank=True)
+    # Which scorer produced match_score. Scores from different scorers are not
+    # comparable, so a change of scorer is not reported as the score moving.
+    scoring_version = models.CharField(max_length=20, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -231,21 +238,32 @@ class JobPosting(models.Model):
         ).strip()
         return f"{full_name} → {self.title}" if full_name else self.title
 
-    def record_score(self, score, resume_id=None, missing_keywords=None):
-        """Add a measurement and return the one before it, if any."""
+    def record_score(self, score, resume_id=None, missing_keywords=None,
+                     requirements=None, scoring_version="llm-v1"):
+        """
+        Add a measurement and return the one before it, if any.
+
+        The previous score is only returned when the same scorer produced it;
+        otherwise "your score moved from X" would compare two different scales.
+        """
         from django.utils import timezone
 
-        previous = self.match_score
+        comparable = (self.scoring_version or "llm-v1") == scoring_version
+        previous = self.match_score if comparable else None
         self.score_history = list(self.score_history or [])[-19:] + [
             {
                 "at": timezone.now().isoformat(timespec="seconds"),
                 "score": score,
                 "resume_id": resume_id,
+                "version": scoring_version,
             }
         ]
         self.match_score = score
+        self.scoring_version = scoring_version
         if missing_keywords is not None:
             self.missing_keywords = missing_keywords
+        if requirements is not None:
+            self.requirements = requirements
         return previous
 
     @property
