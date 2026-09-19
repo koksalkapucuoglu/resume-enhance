@@ -256,5 +256,43 @@ class AgenticDashboardTests(TestCase):
         self.assertIn('id="app-score-modal"', page)
         self.assertIn("Başvuru Skoru", page)
         # Job wording comes from the one server table, in the interface language.
-        self.assertIn('"chip_tailor": "Bu ilana g', page)
+        self.assertIn('"chip_tailor": "Bu ilan i\\u00e7in CV', page)
         self.assertIn('"name": "Main"', page)
+
+
+class TailorWithTableTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("tailor", password="x")
+        self.resume = Resume.objects.create(user=self.user, title="Main", content=CONTENT)
+        self.ctx = {"lang": "en", "active_resume": self.resume}
+        self.posting = JobPosting.objects.create(
+            user=self.user, title="Backend", company="Acme", description=POSTING,
+            source_resume=self.resume, match_score=50, scoring_version="jev-1",
+            requirements=[
+                {"text": "Kafka", "status": "partial", "must_have": 0.9,
+                 "evidence": "Engineer at Initech: RabbitMQ consumers"},
+                {"text": "PCI-DSS", "status": "missing", "must_have": 0.9, "evidence": ""},
+            ],
+        )
+
+    def test_the_rewrite_is_pointed_at_partial_lines_and_told_not_to_claim_gaps(self):
+        from resume.services import job_service
+
+        rewritten = json.dumps({"resume": CONTENT, "changes_summary": "x"})
+        with patch("resume.services.job_service.send_openai_message", return_value=rewritten) as llm:
+            job_service.tailor_content(self.resume, POSTING, requirements=self.posting.requirements)
+        sent = llm.call_args.kwargs["user_message"]
+        self.assertIn("- Kafka [Engineer at Initech: RabbitMQ consumers]", sent)
+        self.assertIn("Do NOT add them or imply them: PCI-DSS", sent)
+
+    def test_the_tailored_copy_is_measured_in_the_same_turn(self):
+        rewritten = json.dumps({"resume": CONTENT, "changes_summary": "Surfaced Kafka-like work"})
+        with patch("resume.services.job_service.send_openai_message", return_value=rewritten), \
+             patch(ASK, side_effect=fake_ask), patch(OPENAI, return_value=PROSE):
+            result = agent_tools.get_tool("tailor_resume_for_job").handler(
+                self.user, self.ctx, job_id=self.posting.id)
+        self.assertEqual(result.data["score_before"], 50)
+        self.assertEqual(result.data["score_after"], 66)
+        self.posting.refresh_from_db()
+        self.assertEqual(self.posting.match_score, 66)
+        self.assertEqual(result.ui[0]["type"], "preview")

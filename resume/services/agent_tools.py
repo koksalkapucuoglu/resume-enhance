@@ -567,7 +567,8 @@ def tailor_resume_for_job(user, ctx, job_id, resume_id=None):
     source = source.root
 
     result = job_service.tailor_content(
-        source, posting.description, posting.missing_keywords
+        source, posting.description, posting.missing_keywords,
+        requirements=posting.requirements,
     )
     if "error" in result:
         return ToolResult(data=result)
@@ -577,6 +578,20 @@ def tailor_resume_for_job(user, ctx, job_id, resume_id=None):
         source.template_selector,
         source,
     )
+    # Measure the new copy straight away, so "did it help?" is answered in the
+    # same turn. A failed measurement leaves the tailoring in place.
+    before = posting.match_score
+    after = None
+    measured = job_service.analyze_snapshot(
+        posting.snapshot_content, posting.description, ctx.get("lang", "en")
+    )
+    if "error" not in measured:
+        posting.record_score(
+            measured["score"], source.id, measured["missing_keywords"],
+            requirements=measured.get("requirements"),
+            scoring_version=measured.get("scoring_version", "llm-v1"),
+        )
+        after = measured["score"]
     posting.save()
 
     return ToolResult(
@@ -587,9 +602,12 @@ def tailor_resume_for_job(user, ctx, job_id, resume_id=None):
             "stored_as": "application_snapshot",
             "counts_against_resume_limit": False,
             "changes_summary": result["changes_summary"],
+            "score_before": before,
+            "score_after": after,
             "next": (
-                "Offer rescore_job on the same posting so the user can see "
-                "whether the score moved."
+                "Tell the user what changed and how the score moved (it was "
+                "measured already; do not call rescore_job). Their own resume "
+                "is unchanged."
             ),
         },
         ui=[

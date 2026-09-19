@@ -1043,14 +1043,11 @@ function requirementGroup(title, items) {
 // guardrail and revision history as anything typed.
 function renderJobMatchChips(data) {
     const L = JOB_LABELS;
-    if (!data.job_id || !L.chip_apply) return;
+    if (!data.job_id || !L.chip_tailor) return;
+    // One next step: a tailored copy for this application. The base resume is
+    // left alone, and the copy is measured again straight away.
     const job = data.job_label || '';
-    const chips = [];
-    if ((data.suggestions || []).length) {
-        chips.push({label: L.chip_apply, message: L.msg_apply.replace('{job}', job)});
-    }
-    chips.push({label: L.chip_tailor, message: L.msg_tailor.replace('{job}', job)});
-    renderQuickChips(chips);
+    renderQuickChips([{label: L.chip_tailor, message: L.msg_tailor.replace('{job}', job)}]);
 }
 
 function statusChip(status) {
@@ -1144,23 +1141,29 @@ async function runAgentStream(url, body) {
     let done = null;
     streamedBubble = null;
 
-    while (true) {
-        const {value, done: finished} = await reader.read();
-        if (finished) break;
-        buffer += decoder.decode(value, {stream: true});
+    try {
+        while (true) {
+            const {value, done: finished} = await reader.read();
+            if (finished) break;
+            buffer += decoder.decode(value, {stream: true});
 
-        let split;
-        while ((split = buffer.indexOf('\n\n')) !== -1) {
-            const frame = buffer.slice(0, split);
-            buffer = buffer.slice(split + 2);
-            const parsed = parseSseFrame(frame);
-            if (!parsed) continue;
-            if (parsed.event === 'done') {
-                done = parsed.data;
-            } else {
-                applyStreamEvent(parsed);
+            let split;
+            while ((split = buffer.indexOf('\n\n')) !== -1) {
+                const frame = buffer.slice(0, split);
+                buffer = buffer.slice(split + 2);
+                const parsed = parseSseFrame(frame);
+                if (!parsed) continue;
+                if (parsed.event === 'done') {
+                    done = parsed.data;
+                } else {
+                    applyStreamEvent(parsed);
+                }
             }
         }
+    } catch (err) {
+        // The connection dropped mid-stream (a proxy, a network blip). Treat it
+        // like a stream that ended early: keep what already arrived.
+        console.error('Agent stream interrupted', err);
     }
 
     const streamedText = streamedBubble !== null;
@@ -1207,7 +1210,9 @@ function applyStreamEvent(parsed) {
     } else if (parsed.event === 'effect') {
         hideStepIndicator();
         sawEffect = true;
-        applyEffect(parsed.data);
+        // One panel failing to draw must not turn a finished turn into
+        // "Error connecting": the reply and the other panels still show.
+        try { applyEffect(parsed.data); } catch (err) { console.error('Effect failed', parsed.data && parsed.data.type, err); }
     } else if (parsed.event === 'token') {
         hideTyping();
         hideStepIndicator();
@@ -1642,7 +1647,10 @@ function loadSnapshotPanel(previewUrl, label) {
     panel.classList.remove('hidden');
     panel.classList.add('flex');
     document.getElementById('preview-title').textContent = label || '';
-    document.getElementById('preview-iframe').src = previewUrl;
+    // Edit and download act on a resume; a stored copy is neither.
+    document.getElementById('preview-edit-btn').hidden = true;
+    document.getElementById('preview-download-btn').hidden = true;
+    document.getElementById('context-iframe').src = previewUrl;
     if (mobileActiveTab === 'chat') showContextBadge();
 }
 
@@ -1654,7 +1662,9 @@ function loadPreviewPanel(resumeId, title) {
 
     document.getElementById('preview-title').textContent = title || `Resume ${resumeId}`;
     document.getElementById('preview-edit-btn').href = `/form/${resumeId}/`;
+    document.getElementById('preview-edit-btn').hidden = false;
     const dlBtn = document.getElementById('preview-download-btn');
+    dlBtn.hidden = false;
     dlBtn.href = `/resume/${resumeId}/download/`;
     dlBtn.download = `${(title || 'resume').replace(/\s+/g, '_')}_${resumeId}.pdf`;
 

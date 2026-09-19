@@ -41,9 +41,7 @@ JOB_COPY = {
         "notice_injection": "This posting had lines addressed to AI screeners. They were ignored.",
         "method_lines": "{n} requirements measured one by one",
         "method_estimate": "Estimated in one pass",
-        "chip_apply": "Apply the suggestions",
-        "chip_tailor": "Tailor a copy for this job",
-        "msg_apply": "Apply the suggestions from the {job} match to my resume.",
+        "chip_tailor": "Tailor my resume for this job",
         "msg_tailor": "Tailor my resume for the {job} application.",
         "one_use": "1 application",
         "many_uses": "applications",
@@ -74,9 +72,7 @@ JOB_COPY = {
         "notice_injection": "Bu ilanda yapay zekâ taramasına yönelik satırlar vardı. Dikkate alınmadılar.",
         "method_lines": "{n} gereksinim tek tek ölçüldü",
         "method_estimate": "Tek seferde tahmin edildi",
-        "chip_apply": "Önerileri uygula",
-        "chip_tailor": "Bu ilana göre kopya uyarla",
-        "msg_apply": "{job} eşleşmesindeki önerileri CV'me uygula.",
+        "chip_tailor": "Bu ilan için CV'mi uyarla",
         "msg_tailor": "CV'mi {job} başvurusu için uyarla.",
         "one_use": "1 başvuru",
         "many_uses": "başvuru",
@@ -320,9 +316,13 @@ def _analyze_llm(content, description, lang="en"):
     }
 
 
-def tailor_content(resume, description, missing_keywords=None):
+def tailor_content(resume, description, missing_keywords=None, requirements=None):
     """
     Rewrite a resume's content for one posting.
+
+    With a measured requirement table (`requirements`, from job_match), the
+    rewrite is pointed at what the measurement found: lines the resume shows
+    only partly are the ones worth making clearer, from the evidence it has.
 
     Returns the new content dict, or {"error": ...}. Only rewrites and
     reorders what is already there — the caller saves this to a *copy*, never
@@ -349,7 +349,25 @@ def tailor_content(resume, description, missing_keywords=None):
     """.strip()
 
     hint = ""
-    if missing_keywords:
+    partial = [r for r in requirements or [] if r.get("status") == "partial"]
+    missing = [r for r in requirements or [] if r.get("status") == "missing"]
+    if partial or missing:
+        if partial:
+            hint += (
+                "\n\nThe posting asks for these and the resume shows them only "
+                "partly. Make them clearer where the existing work supports it "
+                "(the line in brackets is where the resume touches on it):\n"
+                + "\n".join(
+                    f"- {r['text']}" + (f" [{r['evidence']}]" if r.get("evidence") else "")
+                    for r in partial[:12]
+                )
+            )
+        if missing:
+            hint += (
+                "\n\nThe resume does not evidence these. Do NOT add them or "
+                "imply them: " + "; ".join(r["text"] for r in missing[:12])
+            )
+    elif missing_keywords:
         hint = (
             "\n\nThe posting asks for these, which the resume does not evidence. "
             "Only surface them where the candidate's existing work genuinely "

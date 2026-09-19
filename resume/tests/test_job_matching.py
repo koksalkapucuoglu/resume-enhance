@@ -505,7 +505,8 @@ class SnapshotTest(TestCase):
             self._tailor_called = agent_tools.get_tool(
                 "tailor_resume_for_job"
             ).handler(self.user, self.ctx, job_id=job_id)
-        sent = llm.call_args.kwargs["user_message"]
+        # The first call tailors; a second one measures the new copy.
+        sent = llm.call_args_list[0].kwargs["user_message"]
         self.assertIn("Ada Lovelace", sent)
         self.assertNotIn("First", sent)
 
