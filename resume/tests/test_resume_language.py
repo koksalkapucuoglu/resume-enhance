@@ -140,6 +140,20 @@ class TranslatedCopyToolTest(TestCase):
         self.assertIn("error", second.data)
         self.assertIn("existing_resume_id", second.data)
 
+    def test_refuses_a_job_branch_so_it_cannot_pose_as_a_language_version(self):
+        branch = Resume.objects.create(
+            user=self.user, title="CV › Acme", content=content(), language="en",
+            derived_from=self.resume, derived_kind=Resume.DERIVED_JOB,
+        )
+        ctx = {**self.ctx, "active_resume": branch}
+        with self._translated():
+            result = self.tool.handler(self.user, ctx, target_language="tr")
+        self.assertIn("error", result.data)
+        self.assertEqual(result.data["base_resume_id"], self.resume.pk)
+        self.assertFalse(
+            Resume.objects.filter(derived_kind=Resume.DERIVED_TRANSLATION).exists()
+        )
+
     def test_refuses_translating_into_its_own_language(self):
         result = self.tool.handler(self.user, self.ctx, target_language="en")
         self.assertIn("error", result.data)

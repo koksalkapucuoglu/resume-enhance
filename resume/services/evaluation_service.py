@@ -350,6 +350,45 @@ def postings_for(resume):
     return out
 
 
+def branches_by_base(bases):
+    """
+    The job branches of these base resumes, with each one's latest score, keyed
+    by base id.
+
+    The resume list shows a branch under the resume it came from: a branch is
+    not another resume the person keeps, it is one posting's version of this
+    one.
+    """
+    grouped = {base.pk: [] for base in bases}
+    owner = {base.pk: base.user_id for base in bases}
+    branches = [
+        branch
+        for branch in Resume.objects.filter(
+            derived_from__in=bases, derived_kind=Resume.DERIVED_JOB
+        ).select_related("job_posting").order_by("-updated_at")
+        # SECURITY: derived_from crosses accounts, so a branch is grouped in
+        # only when it belongs to the same person as the base.
+        if branch.user_id == owner.get(branch.derived_from_id)
+    ]
+    latest = {}
+    for evaluation in Evaluation.objects.filter(resume__in=branches, scorer=scorer()):
+        latest.setdefault(evaluation.resume_id, evaluation)  # ordered newest first
+    for branch in branches:
+        if branch.derived_from_id not in grouped:
+            continue
+        evaluation = latest.get(branch.pk)
+        grouped[branch.derived_from_id].append({
+            "resume": branch,
+            # The full label, not the short one: two postings at the same
+            # company would otherwise be two identical rows.
+            "posting_label": branch.job_posting.label if branch.job_posting_id else "",
+            "score": evaluation.score if evaluation else None,
+            "stale": bool(evaluation)
+            and evaluation.content_hash != content_hash(branch.content),
+        })
+    return grouped
+
+
 def context_summary(resume, posting):
     """
     What the assistant needs to talk about the active evaluation, from the

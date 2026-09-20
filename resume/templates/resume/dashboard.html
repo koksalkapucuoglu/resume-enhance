@@ -207,6 +207,34 @@
                                 </button>
                             </div>
                             
+                            <!-- Job branches: this resume's version for one posting -->
+                            {% if resume.job_branches %}
+                            <div class="pt-3 border-t border-slate-100 flex flex-col gap-1.5">
+                                <p class="text-[11px] font-bold uppercase tracking-wide text-slate-400">{{ UI.job_branches }}</p>
+                                {% for branch in resume.job_branches %}
+                                <div class="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-slate-50 transition-colors">
+                                    <span class="material-symbols-outlined !text-[15px] text-slate-300">alt_route</span>
+                                    <a href="{% url 'resume:resume_form_edit' pk=branch.resume.pk %}"
+                                       class="flex-1 min-w-0 truncate text-xs font-medium text-slate-600 hover:text-primary"
+                                       title="{{ branch.posting_label }}">{{ branch.posting_label|default:branch.resume.display_name }}</a>
+                                    {% if branch.score is not None %}
+                                    <span class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold {% if branch.stale %}bg-slate-100 text-slate-400{% else %}bg-primary/10 text-primary{% endif %}"
+                                          title="{% if branch.stale %}{{ UI.branch_score_stale }}{% endif %}">{{ branch.score }}{% if branch.stale %} ?{% endif %}</span>
+                                    {% endif %}
+                                    <button type="button"
+                                            onclick="showConfirmModal('delete', '{{ branch.resume.pk }}', '{{ branch.resume.display_name|escapejs }}')"
+                                            class="shrink-0 p-1 rounded text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                            title="{{ UI.btn_delete }}">
+                                        <span class="material-symbols-outlined !text-[15px]">delete</span>
+                                    </button>
+                                </div>
+                                <form id="delete-form-{{ branch.resume.pk }}" method="post" action="{% url 'resume:delete_resume' pk=branch.resume.pk %}" class="hidden">
+                                    {% csrf_token %}
+                                </form>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+
                             <!-- Hidden Forms -->
                             <form id="duplicate-form-{{ resume.pk }}" method="post" action="{% url 'resume:duplicate_resume' pk=resume.pk %}" class="hidden">
                                 {% csrf_token %}

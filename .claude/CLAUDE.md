@@ -565,6 +565,10 @@ Scope, on purpose: evaluate a resume against a posting, show strengths and gaps,
 - No Jev → no posting and no evaluation (`EvaluationError`); a guessed score would break "same yardstick every time".
 - **Agentic UI:** the Application Score button, a pasted posting (Jev `looks_like_posting` → offer bar) and `evaluate_posting` all lead to one flow: add posting → card "branch (recommended) / base" → `evaluate_job_posting` → panel (`context-evaluation`) + context bar ("Main › Finly (dal) · İlan … · 62") + one chat line saved to history. These endpoints run no chat turn and cost no agent message. After `modify_resume` or a restore, `refreshEvaluation()` re-measures and writes what moved. The dashboard sends `active_posting_id`; the assistant's context carries `evaluation_service.context_summary` (rows with status and evidence location).
 - Skills listed only in the skills section, or claims like "I have knowledge of X", score "partial" by design: the rubric rewards work shown.
+- **Standard mode list:** a branch is not a card of its own. `evaluation_service.branches_by_base` groups them under the base they came from, with the latest score and a `stale` mark when the branch changed since. It matches on owner as well as `derived_from`, which crosses accounts.
+- **Over MCP:** `evaluate_posting` (resume_id, posting, target=branch|base) and `list_evaluations` return the same table and no prose; the calling model writes the advice. `target` is required so the client asks the person where to measure, and is ignored once the posting has a branch. There is no improve tool over MCP: a gap is filled in the guided flow, where each line is checked against what the person said.
+- A job branch cannot get a language version (`create_translated_copy` refuses it): `derived_from` is one level deep, so the copy would hang off the base and read as a language version of the main resume. Translate in place, or promote first.
+
 
 ### Improving for a posting's gaps (`resume/services/improvement_service.py`)
 

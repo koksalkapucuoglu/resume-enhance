@@ -256,6 +256,8 @@ class SurfaceTests(ToolTestCase):
                 "set_template",
                 "render_pdf",
                 "check_quota",
+                "evaluate_posting",
+                "list_evaluations",
             },
         )
 

@@ -92,6 +92,50 @@ class AddAndEvaluateTests(Base):
         self.assertEqual(response.status_code, 400)
 
 
+class ResumeListTests(Base):
+    """A branch belongs under the resume it came from, not beside it."""
+
+    def setUp(self):
+        super().setUp()
+        self.user.profile.ui_mode = "standard"
+        self.user.profile.save()
+        posting_id = self.add()["posting_id"]
+        panel = self.post("resume:evaluate_job_posting",
+                          {"posting_id": posting_id, "resume_id": self.resume.pk,
+                           "target": "branch"}).json()
+        self.branch = Resume.objects.get(pk=panel["resume"]["id"])
+
+    def page(self):
+        response = self.client.get(reverse("resume:dashboard"))
+        self.assertEqual(response.status_code, 200)
+        return response
+
+    def test_the_branch_is_listed_under_its_base_with_its_score(self):
+        response = self.page()
+        self.assertEqual([r.pk for r in response.context["resumes"]], [self.resume.pk])
+        listed = response.context["resumes"][0].job_branches
+        self.assertEqual([b["resume"].pk for b in listed], [self.branch.pk])
+        self.assertEqual((listed[0]["score"], listed[0]["stale"]), (66, False))
+        html = response.content.decode()
+        self.assertIn(self.branch.job_posting.label, html)
+        # a card of its own would carry a duplicate form; a nested row does not
+        self.assertNotIn(f'duplicate-form-{self.branch.pk}', html)
+        self.assertIn(f'delete-form-{self.branch.pk}', html)
+
+    def test_an_edit_after_the_measurement_marks_the_score_stale(self):
+        self.branch.content["user_info"]["full_name"] = "Ada L."
+        self.branch.save()
+        listed = self.page().context["resumes"][0].job_branches
+        self.assertTrue(listed[0]["stale"])
+
+    def test_another_users_branches_are_not_grouped_in(self):
+        stranger = User.objects.create_user("outsider", password="x")
+        Resume.objects.create(user=stranger, title="Theirs", content={},
+                              derived_from=self.resume, derived_kind=Resume.DERIVED_JOB)
+        listed = self.page().context["resumes"][0].job_branches
+        self.assertEqual([b["resume"].pk for b in listed], [self.branch.pk])
+
+
 class SecurityTests(Base):
     def test_another_users_resume_and_posting_are_not_reachable(self):
         posting_id = self.add()["posting_id"]

@@ -671,6 +671,21 @@ def create_translated_copy(user, ctx, target_language, resume_id=None):
     if error:
         return error
 
+    if source.is_job_branch:
+        # A copy would hang off the base (derived_from is one level deep), so it
+        # would look like a language version of the main resume while carrying
+        # this posting's edits. Translate in place, or promote first.
+        return ToolResult(
+            data={
+                "error": (
+                    "This is a job branch, so it cannot get its own language "
+                    "version. Translate it in place with translate_resume, or "
+                    "promote it to the main resume first and translate that."
+                ),
+                "base_resume_id": source.derived_from_id,
+            }
+        )
+
     target_language = Resume.normalize_language(target_language)
     if source.language == target_language:
         return ToolResult(

@@ -169,6 +169,17 @@ class DashboardView(LoginRequiredMixin, ListView):
         context = super().get_context_data(**kwargs)
         context["settings"] = settings
 
+        if self.request.user.profile.resolved_ui_mode != "agentic":
+            # A job branch is one posting's version of a resume, not a resume of
+            # its own: it belongs under the card it came from, with its score.
+            from resume.services import evaluation_service
+
+            bases = [r for r in context["resumes"] if not r.is_job_branch]
+            grouped = evaluation_service.branches_by_base(bases)
+            for base in bases:
+                base.job_branches = grouped.get(base.pk, [])
+            context["resumes"] = bases
+
         # Proactive suggestions for agentic dashboard
         if self.request.user.profile.resolved_ui_mode == "agentic":
             suggestions = []

@@ -34,7 +34,7 @@ META_CLIENT_INFO = "io.modelcontextprotocol/clientInfo"
 META_CLIENT_CAPS = "io.modelcontextprotocol/clientCapabilities"
 META_SERVER_INFO = "io.modelcontextprotocol/serverInfo"
 
-SERVER_INFO = {"name": "resustack", "version": "1.1.0"}
+SERVER_INFO = {"name": "resustack", "version": "2.0.0"}
 
 INSTRUCTIONS = (
     "ResuStack builds and renders resumes. You structure the text; ResuStack "
@@ -43,7 +43,10 @@ INSTRUCTIONS = (
     "tool: removing a resume is done by the user on the website. To fill the "
     "\"What I'm working on\" section from what the user has actually been "
     "doing, use the focus_areas_from_my_work prompt, or follow the same steps: "
-    "draft, get approval, then set_focus_areas."
+    "draft, get approval, then set_focus_areas. evaluate_posting measures a "
+    "resume against a job posting and returns the requirement table without "
+    "advice; ask the user first whether to measure on a job branch (a copy "
+    "kept for that posting) or on the resume itself."
 )
 
 # JSON-RPC standard codes.
