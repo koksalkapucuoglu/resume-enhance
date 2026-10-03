@@ -157,3 +157,18 @@ class TelemetrySnippetTest(TestCase):
         landing = self.client.get(reverse("resume:index")).content.decode()
         self.assertNotIn("posthog.init", landing)
         self.assertNotIn("sentry-cdn", landing)
+
+
+class CheckIntegrationsCommandTest(TestCase):
+    @override_settings(OPENAI_API_KEY="sk-secret-value", POSTHOG_API_KEY="")
+    def test_reports_names_and_never_values(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        out = StringIO()
+        call_command("check_integrations", stdout=out)
+        text = out.getvalue()
+        self.assertIn("OPENAI_API_KEY            set", text)
+        self.assertIn("POSTHOG_API_KEY           MISSING", text)
+        self.assertNotIn("sk-secret-value", text)
