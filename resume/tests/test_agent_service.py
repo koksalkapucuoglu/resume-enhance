@@ -116,7 +116,6 @@ class AgentServiceTestBase(TestCase):
         "edit_resume": lambda svc, u, p, lang, ar: svc._exec_edit_resume(u, p, lang),
         "check_quota": lambda svc, u, p, lang, ar: svc._exec_check_quota(u, lang),
         "upload_resume": lambda svc, u, p, lang, ar: svc._exec_upload_resume(lang),
-        "upload_linkedin": lambda svc, u, p, lang, ar: svc._exec_upload_linkedin(lang),
         "translate_resume": lambda svc, u, p, lang, ar: svc._exec_translate_resume(u, p, lang, ar),
         "switch_template": lambda svc, u, p, lang, ar: svc._exec_switch_template(u, p, lang, ar),
     }
@@ -198,10 +197,10 @@ class ExecuteIntentTest(AgentServiceTestBase):
         result = self.execute_intent("check_quota", {}, self.user, lang="en")
         self.assertEqual(result["type"], "chat")
         self.assertEqual(result["data"]["tier"], "free")
-        self.assertEqual(result["data"]["import_remaining"], 1)  # 2 - 1
-        self.assertEqual(result["data"]["enhance_remaining"], 7)  # 10 - 3
-        self.assertEqual(result["data"]["download_remaining"], 3)  # 5 - 2
-        self.assertEqual(result["data"]["agent_message_remaining"], 5)  # 10 - 5
+        # Imports, enhancements and chat messages share one AI-credit pool.
+        self.assertEqual(result["data"]["ai_credits_remaining"], 30 - 9)
+        self.assertEqual(result["data"]["downloads_remaining"], 3)  # 5 - 2
+        self.assertEqual(result["data"]["resumes_remaining"], 2)  # 3 - 1
         self.assertEqual(result["data_type"], "quota")
 
     def test_check_quota_pro_tier(self):
@@ -209,7 +208,7 @@ class ExecuteIntentTest(AgentServiceTestBase):
         self.profile.save()
         result = self.execute_intent("check_quota", {}, self.user, lang="en")
         self.assertEqual(result["data"]["tier"], "pro")
-        self.assertIn("Pro plan", result["message"])
+        self.assertIn("Pro", result["message"])
 
     def test_download_resume_returns_url(self):
         result = self.execute_intent(
@@ -233,14 +232,6 @@ class ExecuteIntentTest(AgentServiceTestBase):
         self.assertEqual(result["type"], "request_upload")
         self.assertEqual(result["source"], "pdf")
         self.assertIn("upload", result["upload_url"])
-
-    def test_upload_linkedin_asks_for_a_file(self):
-        result = self.execute_intent(
-            "upload_linkedin", {}, self.user, lang="en"
-        )
-        self.assertEqual(result["type"], "request_upload")
-        self.assertEqual(result["source"], "linkedin")
-        self.assertIn("linkedin", result["upload_url"])
 
     def test_switch_template_valid(self):
         result = self.execute_intent(

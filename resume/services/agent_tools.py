@@ -209,26 +209,11 @@ def preview_resume(user, ctx, resume_id=None):
 
 @tool(
     name="check_quota",
-    description="Report the user's remaining monthly allowances and plan tier.",
+    description="Report the user's allowances (AI credits, downloads, resumes, job copies) and plan.",
 )
 def check_quota(user, ctx):
     legacy = _service()._exec_check_quota(user, ctx["lang"])
-    profile = user.profile
-    limits = settings.FREE_TIER_LIMITS
-    return ToolResult(
-        data={
-            "is_pro": profile.is_pro(),
-            "resumes_used": user.resumes.count(),
-            "resume_limit": limits["resume_count"],
-            "imports_left": max(0, limits["import_count"] - profile.import_count),
-            "enhancements_left": max(0, limits["enhance_count"] - profile.enhance_count),
-            "downloads_left": max(0, limits["download_count"] - profile.download_count),
-            "messages_left": max(
-                0, limits["agent_message_count"] - profile.agent_message_count
-            ),
-        },
-        ui=[legacy],
-    )
+    return ToolResult(data=user.profile.usage(), ui=[legacy])
 
 
 @tool(
@@ -302,25 +287,17 @@ def create_blank_resume(user, ctx):
 @tool(
     name="upload_resume",
     description=(
-        "Ask the user to pick a resume file to import. Default source to 'pdf'; "
-        "use 'linkedin' ONLY when the user mentions LinkedIn. Do not ask which "
-        "one they mean — plain 'upload' or 'import my CV' means 'pdf'."
+        "Ask the user to pick a PDF to import — a CV or a LinkedIn profile "
+        "export; the import tells them apart by itself."
     ),
-    parameters={"source": {"type": "string", "enum": ["pdf", "linkedin"]}},
 )
-def upload_resume(user, ctx, source="pdf"):
-    service = _service()
-    legacy = (
-        service._exec_upload_linkedin(ctx["lang"])
-        if source == "linkedin"
-        else service._exec_upload_resume(ctx["lang"])
-    )
+def upload_resume(user, ctx):
+    legacy = _service()._exec_upload_resume(ctx["lang"])
     # Deliberately not "ok": the file picker has only been shown. Reporting
     # success here made the model announce an upload that had not happened.
     return ToolResult(
         data={
             "awaiting_file": True,
-            "source": source,
             "note": (
                 "A file picker was shown to the user. Nothing has been uploaded "
                 "yet. Do not claim the import succeeded — say you are waiting "

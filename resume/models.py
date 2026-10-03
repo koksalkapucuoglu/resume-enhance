@@ -377,23 +377,32 @@ class UserProfile(models.Model):
         self.save(update_fields=["premium_until"])
         return self.premium_until
 
-    def can_import(self):
-        """Check if user can import a PDF."""
+    # ------------------------------------------------------------------
+    # Free plan allowances
+    #
+    # Four numbers a person can hold in their head: AI credits and PDF
+    # downloads per month, resumes and job copies in total. Imports,
+    # enhancements, improvement drafts and chat messages all draw from the one
+    # AI-credit pool; each keeps its own counter so we still know what the
+    # credits went on.
+    # ------------------------------------------------------------------
+
+    def ai_credits_used(self):
+        return self.import_count + self.enhance_count + self.agent_message_count
+
+    def has_ai_credit(self):
+        """One AI action left this month (import, enhancement or chat message)."""
         if self.is_pro():
             return True
         self.reset_if_new_month()
         from django.conf import settings
 
-        return self.import_count < settings.FREE_TIER_LIMITS["import_count"]
+        return self.ai_credits_used() < settings.FREE_TIER_LIMITS["ai_credits"]
 
-    def can_enhance(self):
-        """Check if user can use AI enhancement."""
-        if self.is_pro():
-            return True
-        self.reset_if_new_month()
-        from django.conf import settings
-
-        return self.enhance_count < settings.FREE_TIER_LIMITS["enhance_count"]
+    # The AI actions keep their own names so call sites read naturally.
+    can_import = has_ai_credit
+    can_enhance = has_ai_credit
+    can_send_agent_message = has_ai_credit
 
     def can_download(self):
         """Check if user can download a PDF."""
@@ -404,16 +413,41 @@ class UserProfile(models.Model):
 
         return self.download_count < settings.FREE_TIER_LIMITS["download_count"]
 
-    def can_send_agent_message(self):
-        """Check if user can send an agent chat message."""
-        if self.is_pro():
-            return True
-        self.reset_if_new_month()
+    def usage(self):
+        """
+        Every allowance with what is used, the limit and what is left.
+
+        The one place quota summaries come from — profile page, chat, MCP and
+        the agent's context all read this, so they cannot disagree. Limits are
+        None on Pro.
+        """
         from django.conf import settings
 
-        return (
-            self.agent_message_count < settings.FREE_TIER_LIMITS["agent_message_count"]
-        )
+        self.reset_if_new_month()
+        limits = settings.FREE_TIER_LIMITS
+        pro = self.is_pro()
+        used = {
+            "ai_credits": self.ai_credits_used(),
+            "downloads": self.download_count,
+            "resumes": self.user.resumes.filter(derived_from__isnull=True).count(),
+            "job_copies": self.user.resumes.filter(derived_kind=Resume.DERIVED_JOB).count(),
+        }
+        limit_keys = {
+            "ai_credits": "ai_credits",
+            "downloads": "download_count",
+            "resumes": "resume_count",
+            "job_copies": "job_branch_count",
+        }
+        allowances = {}
+        for name, count in used.items():
+            limit = None if pro else limits[limit_keys[name]]
+            allowances[name] = {
+                "used": count,
+                "limit": limit,
+                "left": None if limit is None else max(0, limit - count),
+                "monthly": name in ("ai_credits", "downloads"),
+            }
+        return {"is_pro": pro, "allowances": allowances}
 
     def can_create_job_branch(self):
         """Branches cost no resume slot, but the free plan keeps a few."""

@@ -7,6 +7,7 @@ before approval, and a stale draft cannot overwrite newer content.
 import json
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
@@ -191,7 +192,7 @@ class ViewTests(Base):
 
     def test_no_enhancements_left_means_no_draft(self):
         profile = self.user.profile
-        profile.enhance_count = improvement_service.enhance_limit()
+        profile.enhance_count = settings.FREE_TIER_LIMITS["ai_credits"]
         profile.save()
         with patch(WRITE) as write:
             response = self.client.post(reverse("resume:improve_draft"), json.dumps({

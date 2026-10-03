@@ -24,6 +24,7 @@ from django.urls import resolve, reverse
 from core import email_verification
 from core.adapters import SocialAccountAdapter
 from core.forms import GoogleSignupForm
+from resume.models import Resume
 
 PASSWORD = "a-long-unusual-passphrase-42"
 GOOGLE_APP = {
@@ -155,7 +156,14 @@ class AiGateTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertIn("Confirm your email", response.content.decode())
 
-    def test_import_is_refused(self):
+    def test_the_first_import_is_not_held_back(self):
+        """Seeing your own CV in a design should not wait for an inbox."""
+        response = self.client.post(reverse("resume:upload_cv"))
+        # Past the gate: it fails for the missing file instead.
+        self.assertEqual(response.status_code, 400)
+
+    def test_later_imports_are_refused(self):
+        Resume.objects.create(user=self.user, title="CV", content={})
         response = self.client.post(reverse("resume:upload_cv"))
         self.assertEqual(response.status_code, 403)
         self.assertTrue(response.json()["email_verification_required"])

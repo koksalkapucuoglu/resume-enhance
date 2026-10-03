@@ -395,12 +395,12 @@ REVISION_HISTORY_LIMIT = 10
 
 # Subscription Tier Limits
 FREE_TIER_LIMITS = {
-    "import_count": 2,  # Monthly PDF imports
-    "enhance_count": 10,  # Monthly AI enhancements (experience + project combined)
+    # One pool for every AI action: PDF import, bullet enhancement, improvement
+    # draft, chat message. Monthly. See UserProfile.usage().
+    "ai_credits": 30,
     "download_count": 5,  # Monthly PDF downloads
-    "resume_count": 3,  # Total resume count (not monthly)
-    "job_branch_count": 3,  # Resumes branched for a job posting (total)
-    "agent_message_count": 10,  # Monthly agent chat messages
+    "resume_count": 3,  # Base resumes in total (language versions and job copies are free)
+    "job_branch_count": 3,  # Job copies in total
 }
 
 # Purchasable access. One-time periods, not subscriptions — see

@@ -906,17 +906,13 @@ class UploadDoesNotClaimSuccessTest(TestCase):
         self.ctx = {"lang": "en", "active_resume": None, "resumes": [], "quota": {}}
 
     def test_result_says_it_is_waiting(self):
-        result = agent_tools.get_tool("upload_resume").handler(
-            self.user, self.ctx, source="pdf"
-        )
+        result = agent_tools.get_tool("upload_resume").handler(self.user, self.ctx)
         self.assertTrue(result.data["awaiting_file"])
         self.assertNotIn("ok", result.data)
         self.assertIn("nothing has been uploaded", result.data["note"].lower())
 
     def test_the_picker_is_still_shown(self):
-        result = agent_tools.get_tool("upload_resume").handler(
-            self.user, self.ctx, source="pdf"
-        )
+        result = agent_tools.get_tool("upload_resume").handler(self.user, self.ctx)
         self.assertEqual(result.ui[0]["type"], "request_upload")
 
 

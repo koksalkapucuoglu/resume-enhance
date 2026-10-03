@@ -2193,19 +2193,20 @@ function renderQuotaPanel(data) {
             '<div class="text-center py-4"><p class="text-slate-600 font-semibold mt-2">Pro Plan — Unlimited</p></div>';
         return;
     }
+    const tr = conversationLang === 'tr';
     const bars = [
-        {label: 'PDF Imports',       remaining: data.import_remaining,          max: 2},
-        {label: 'AI Enhancements',   remaining: data.enhance_remaining,         max: 10},
-        {label: 'PDF Downloads',     remaining: data.download_remaining,        max: 5},
-        {label: 'Chat Messages',     remaining: data.agent_message_remaining,   max: 10},
-    ];
+        {label: tr ? 'AI kredisi (aylık)' : 'AI credits (monthly)', remaining: data.ai_credits_remaining, max: data.ai_credits_limit},
+        {label: tr ? 'PDF indirme (aylık)' : 'PDF downloads (monthly)', remaining: data.downloads_remaining, max: data.downloads_limit},
+        {label: tr ? 'CV' : 'Resumes', remaining: data.resumes_remaining, max: data.resumes_limit},
+        {label: tr ? 'İlan kopyası' : 'Job copies', remaining: data.job_copies_remaining, max: data.job_copies_limit},
+    ].filter(b => b.max);
     document.getElementById('quota-content').innerHTML = bars.map(b => {
         const used = b.max - b.remaining;
         const pct = Math.min(100, Math.round((used / b.max) * 100));
         const color = pct >= 100 ? 'bg-red-400' : pct >= 70 ? 'bg-yellow-400' : 'bg-primary';
         return `<div>
             <div class="flex justify-between text-xs font-medium text-slate-600 mb-1">
-                <span>${b.label}</span><span>${b.remaining}/${b.max} left</span>
+                <span>${b.label}</span><span>${b.remaining}/${b.max} ${tr ? 'kaldı' : 'left'}</span>
             </div>
             <div class="w-full bg-slate-200 rounded-full h-2">
                 <div class="${color} h-2 rounded-full" style="width:${pct}%"></div>
@@ -2240,8 +2241,7 @@ async function uploadResumeFile(input, button, data) {
     showTyping();
 
     const form = new FormData();
-    // upload_cv reads "cv_file"; upload_linkedin_cv reads "linkedin_file"
-    form.append(data.source === 'linkedin' ? 'linkedin_file' : 'cv_file', file);
+    form.append('cv_file', file);
     try {
         const resp = await fetch(data.upload_url, {
             method: 'POST',

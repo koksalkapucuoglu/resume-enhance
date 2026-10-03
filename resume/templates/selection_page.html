@@ -126,7 +126,7 @@
             </div>
 
             <!-- Cards Grid -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 w-full">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-3xl mx-auto">
                 
                 <!-- Card 1: Start from Scratch -->
                 <a href="{% url 'resume:resume_form' %}" class="group relative flex flex-col items-center text-center gap-8 p-10 rounded-2xl border-2 border-slate-200 bg-white hover:border-primary hover:shadow-2xl hover:-translate-y-1 transition-all duration-300">
@@ -136,7 +136,7 @@
                     <div class="flex flex-col gap-3">
                         <h2 class="text-slate-900 text-xl font-bold">Start from Scratch</h2>
                         <p class="text-slate-500 text-sm leading-relaxed">
-                            Guided step-by-step editor for building your perfect profile from the ground up.
+                            Fill in the form with a live preview of the PDF next to it.
                         </p>
                     </div>
                     <div class="flex items-center text-primary font-semibold text-sm gap-2 mt-4">
@@ -152,8 +152,11 @@
                     <div class="flex flex-col gap-3">
                         <h2 class="text-slate-900 text-xl font-bold">Import PDF</h2>
                         <p class="text-slate-500 text-sm leading-relaxed">
-                            Upload your current resume. Our AI will automatically extract and structure your information.
+                            Your current CV or a LinkedIn profile PDF. The AI extracts and structures it, and flags anything the file does not support.
                         </p>
+                        <button type="button" onclick="event.stopPropagation(); showLinkedInHelp();" class="text-xs text-primary font-semibold hover:underline">
+                            How do I get my LinkedIn PDF?
+                        </button>
                     </div>
                     <div class="flex items-center text-primary font-semibold text-sm gap-2 mt-4">
                         Upload PDF <span class="material-symbols-outlined text-lg">upload_file</span>
@@ -166,32 +169,6 @@
                     </form>
                 </div>
 
-                <!-- Card 3: Import LinkedIn -->
-                <div class="group relative flex flex-col items-center text-center gap-8 p-10 rounded-2xl border-2 border-slate-200 bg-white hover:border-primary hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 cursor-pointer" id="upload-linkedin-card" onclick="document.getElementById('linkedin-file-input').click()">
-                    <div class="flex items-center justify-center size-16 rounded-2xl bg-primary/10 text-primary group-hover:scale-110 transition-transform">
-                        <span class="material-symbols-outlined text-4xl">share_reviews</span>
-                    </div>
-                    <div class="flex flex-col gap-3">
-                        <h2 class="text-slate-900 text-xl font-bold">Import LinkedIn</h2>
-                        <p class="text-slate-500 text-sm leading-relaxed">
-                            Export your LinkedIn profile as PDF and upload it to sync your latest work history.
-                        </p>
-                    </div>
-                    <div class="flex items-center text-primary font-semibold text-sm gap-2 mt-4">
-                        Upload Profile <span class="material-symbols-outlined text-lg">link</span>
-                    </div>
-                    
-                    <!-- Hidden Form -->
-                    <form id="upload-linkedin-form" action="{% url 'resume:upload_linkedin_cv' %}" method="post" enctype="multipart/form-data" class="hidden">
-                        {% csrf_token %}
-                        <input type="file" id="linkedin-file-input" name="linkedin_file" accept="application/pdf" required>
-                    </form>
-                    
-                    <!-- Info Tooltip -->
-                    <button type="button" onclick="event.stopPropagation(); showLinkedInHelp();" class="absolute top-4 right-4 w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center text-sm font-bold transition-colors">
-                        ?
-                    </button>
-                </div>
             </div>
 
             <!-- Back to Dashboard Link -->
@@ -322,11 +299,6 @@
             }
         });
 
-        document.getElementById('linkedin-file-input').addEventListener('change', function() {
-            if (this.files.length > 0) {
-                uploadFile('linkedin-file-input', 'upload-linkedin-form', '{% url "resume:upload_linkedin_cv" %}');
-            }
-        });
 
         // Global loading
         function showGlobalLoading() {

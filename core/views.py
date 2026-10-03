@@ -225,30 +225,27 @@ def delete_account(request):
 class ProfileView(View):
     """User profile view with password change."""
 
-    def _get_quota_percentages(self, request):
-        """Calculate quota percentages for progress bars."""
-        profile = request.user.profile
-        limits = settings.FREE_TIER_LIMITS
-        return {
-            "import_percent": int((profile.import_count / limits["import_count"]) * 100)
-            if limits["import_count"] > 0
-            else 0,
-            "enhance_percent": int(
-                (profile.enhance_count / limits["enhance_count"]) * 100
-            )
-            if limits["enhance_count"] > 0
-            else 0,
-            "download_percent": int(
-                (profile.download_count / limits["download_count"]) * 100
-            )
-            if limits["download_count"] > 0
-            else 0,
-            "resume_percent": int(
-                (request.user.resumes.count() / limits["resume_count"]) * 100
-            )
-            if limits["resume_count"] > 0
-            else 0,
-        }
+    def _ui(self, request):
+        from resume.i18n import TRANSLATIONS
+
+        return TRANSLATIONS.get(request.user.profile.ui_language or "en", TRANSLATIONS["en"])
+
+    def _quota_rows(self, request, ui):
+        """The free plan's four allowances, as progress rows."""
+        allowances = request.user.profile.usage()["allowances"]
+        rows = []
+        for key in ("ai_credits", "downloads", "resumes", "job_copies"):
+            a = allowances[key]
+            if a["limit"] is None:
+                continue
+            rows.append({
+                "label": ui[f"usage_{key}"],
+                "hint": ui[f"usage_{key}_hint"],
+                "used": a["used"],
+                "limit": a["limit"],
+                "percent": min(100, int(a["used"] * 100 / a["limit"])) if a["limit"] else 0,
+            })
+        return rows
 
     def _token_context(self, request):
         """
@@ -277,7 +274,7 @@ class ProfileView(View):
             {
                 "password_form": password_form,
                 "settings": settings,
-                "quota_percentages": self._get_quota_percentages(request),
+                "quota_rows": self._quota_rows(request, self._ui(request)),
                 **self._token_context(request),
             },
         )
@@ -299,7 +296,7 @@ class ProfileView(View):
             {
                 "password_form": password_form,
                 "settings": settings,
-                "quota_percentages": self._get_quota_percentages(request),
+                "quota_rows": self._quota_rows(request, self._ui(request)),
                 **self._token_context(request),
             },
         )

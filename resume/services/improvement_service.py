@@ -25,7 +25,6 @@ import json
 import logging
 import uuid
 
-from django.conf import settings
 from django.core.cache import cache
 
 from resume import typesafe_engine
@@ -362,12 +361,9 @@ def can_draft(user):
 
 
 def charge(user):
-    """A draft is one AI enhancement on the free plan."""
+    """A draft uses one AI credit on the free plan."""
     profile = user.profile
     if not profile.is_pro():
         profile.enhance_count += 1
         profile.save(update_fields=["enhance_count"])
 
-
-def enhance_limit():
-    return settings.FREE_TIER_LIMITS["enhance_count"]

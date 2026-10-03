@@ -31,6 +31,7 @@ from resume.services.pdf_service import (
     PdfGenerationError,
     resume_pdf_service,
 )
+from core.observability import report_degraded
 from resume.models import Feedback, JobPosting, Resume, ResumeRevision
 from resume.services import diff_service, resume_content, revision_service
 
@@ -1011,14 +1012,20 @@ def _ai_locked_message(request):
     return TRANSLATIONS.get(lang, TRANSLATIONS["en"])["ai_locked"]
 
 
-def _email_unverified(request):
+def _email_unverified(request, allow_first_import=False):
     """
     Soft email verification: the account works, AI features wait.
 
     Checked before any quota or model call, so an unconfirmed account costs
     nothing and cannot use a throwaway address to multiply the free allowance.
+    The one exception is the first import: seeing your own CV in a design is
+    the moment the product makes sense, and it should not wait for an inbox.
     """
-    return request.user.profile.email_verification_required
+    if not request.user.profile.email_verification_required:
+        return False
+    if allow_first_import and not request.user.resumes.exists():
+        return False
+    return True
 
 
 def enhance_field(request, prefix, field, enhance_function):
@@ -1066,7 +1073,7 @@ def enhance_experience(request):
     profile = request.user.profile
     if not profile.can_enhance():
         return HttpResponse(
-            '<p class="text-red-500">Monthly AI enhancement limit reached. Free plan allows 10 enhancements per month.</p>',
+            f'<p class="text-red-500">{_ai_credits_message(request)}</p>',
             status=403,
         )
 
@@ -1098,7 +1105,7 @@ def enhance_project(request):
     profile = request.user.profile
     if not profile.can_enhance():
         return HttpResponse(
-            '<p class="text-red-500">Monthly AI enhancement limit reached. Free plan allows 10 enhancements per month.</p>',
+            f'<p class="text-red-500">{_ai_credits_message(request)}</p>',
             status=403,
         )
 
@@ -1222,104 +1229,112 @@ def preview_resume_form(request):
         )
 
 
+def _looks_like_linkedin_export(text):
+    """LinkedIn's "Save to PDF" has a fixed shape; ordinary CVs rarely match it."""
+    lowered = text.lower()
+    return "linkedin.com/in/" in lowered and (
+        "top skills" in lowered or "page 1 of" in lowered
+    )
+
+
+def _parse_model_json(raw):
+    """The model sometimes wraps JSON in a code fence; take what is inside."""
+    if "```json" in raw:
+        raw = raw.split("```json")[1].split("```")[0]
+    elif "```" in raw:
+        raw = raw.split("```")[1]
+    return json.loads(raw.strip())
+
+
 @login_required
+@require_http_methods(["POST"])
 def upload_cv(request):
-    if request.method == "POST":
-        if _email_unverified(request):
-            return JsonResponse(
-                {"error": _ai_locked_message(request), "email_verification_required": True},
-                status=403,
-            )
-        # QUOTA: Check resume creation limit (PDF upload with AI parsing counts toward resume limit)
-        profile = request.user.profile
-        if not profile.can_create_resume():
-            return JsonResponse(
-                {
-                    "error": f"Resume limit reached. Free plan allows {settings.FREE_TIER_LIMITS['resume_count']} resumes. Upgrade to Pro for unlimited resumes."
-                },
-                status=403,
-            )
+    """
+    Import a PDF — a CV or a LinkedIn profile export, told apart by its text.
 
-        # QUOTA: Check import limit
-        if not profile.can_import():
-            return JsonResponse(
-                {
-                    "error": "Monthly PDF import limit reached. Free plan allows 2 imports per month."
-                },
-                status=403,
-            )
+    One entry point because the person only knows "I have a PDF". Answers JSON
+    in every case; nothing here should reach the user as a 500 page.
+    """
+    if _email_unverified(request, allow_first_import=True):
+        return JsonResponse(
+            {"error": _ai_locked_message(request), "email_verification_required": True},
+            status=403,
+        )
+    profile = request.user.profile
+    if not profile.can_create_resume():
+        return JsonResponse(
+            {
+                "error": f"Resume limit reached. The free plan keeps {settings.FREE_TIER_LIMITS['resume_count']} resumes.",
+                "quota_exceeded": True,
+            },
+            status=403,
+        )
+    if not profile.can_import():
+        return JsonResponse(
+            {"error": _ai_credits_message(request), "quota_exceeded": True}, status=403
+        )
 
-        cv_file = request.FILES.get("cv_file")
-        if not cv_file:
-            return JsonResponse({"error": "No file uploaded."}, status=400)
-        logger.info("CV file uploaded: %d bytes", cv_file.size)
+    # "linkedin_file" is what the old LinkedIn form posted.
+    cv_file = request.FILES.get("cv_file") or request.FILES.get("linkedin_file")
+    if not cv_file:
+        return JsonResponse({"error": "No file uploaded."}, status=400)
+    if not cv_file.name.lower().endswith(".pdf"):
+        return JsonResponse({"error": "Only PDF files are allowed."}, status=400)
+    if cv_file.size > 5 * 1024 * 1024:
+        return JsonResponse({"error": "File too large. Maximum size is 5MB."}, status=400)
+    logger.info("CV file uploaded: %d bytes", cv_file.size)
 
-        # Ensure the uploaded file is a PDF
-        if not cv_file.name.endswith(".pdf"):
-            return JsonResponse({"error": "Only PDF files are allowed."}, status=400)
-
-        # SECURITY: File size limit (5MB)
-        if cv_file.size > 5 * 1024 * 1024:
-            return JsonResponse(
-                {"error": "File too large. Maximum size is 5MB."}, status=400
-            )
-
-        # Extract data from the PDF
+    try:
         reader = PdfReader(cv_file)
         extracted_text = " ".join((page.extract_text() or "") for page in reader.pages)
+    except Exception as exc:  # pypdf raises several unrelated types for a bad file
+        logger.info("Unreadable PDF upload: %s", type(exc).__name__)
+        return JsonResponse(
+            {"error": "This file could not be read as a PDF. Try exporting it again."},
+            status=422,
+        )
+    if len(extracted_text.strip()) < 50:
+        return JsonResponse(
+            {
+                "error": "Could not extract enough text from this PDF. Please ensure it contains readable text (not a scanned image)."
+            },
+            status=422,
+        )
 
-        # Guard: minimum text length before calling OpenAI
-        if len(extracted_text.strip()) < 50:
-            return JsonResponse(
-                {
-                    "error": "Could not extract enough text from this PDF. Please ensure it contains readable text (not a scanned image)."
-                },
-                status=422,
-            )
+    linkedin = _looks_like_linkedin_export(extracted_text)
+    extract = extract_linkedin_resume_data if linkedin else extract_resume_data
+    start_time = datetime.now()
+    raw = extract(extracted_text)
+    logger.info("Import extraction took %s (linkedin=%s)", datetime.now() - start_time, linkedin)
 
-        start_time = datetime.now()
-        extracted_json_string = extract_resume_data(extracted_text)
-        logger.info("OpenAI API response time: %s", datetime.now() - start_time)
-
-        # Check for API Errors
-        if extracted_json_string.startswith(
-            "OpenAI API"
-        ) or extracted_json_string.startswith("Error:"):
-            return JsonResponse(
-                {"error": f"AI Service Error: {extracted_json_string}"}, status=503
-            )
-
-        # Clean up JSON string (remove markdown code blocks)
-        if "```json" in extracted_json_string:
-            extracted_json_string = (
-                extracted_json_string.split("```json")[1].split("```")[0].strip()
-            )
-        elif "```" in extracted_json_string:
-            extracted_json_string = extracted_json_string.split("```")[1].strip()
-
-        extracted_json_string = extracted_json_string.strip()
-
-        try:
-            extracted_json = json.loads(extracted_json_string)
-
-            # Check for parse failure from validation layer
-            if extracted_json.get("parse_error"):
-                return JsonResponse(
-                    {
-                        "error": extracted_json.get(
-                            "message", "Could not extract resume data."
-                        )
-                    },
-                    status=422,
-                )
-
-            return _save_import(request, extracted_json, extracted_text)
-
-        except json.JSONDecodeError as e:
-            logger.error("Failed to decode JSON: %s", e)
-            return JsonResponse({"error": "Failed to parse extracted JSON"}, status=500)
-
-    return redirect("resume:index")
+    if raw.startswith("OpenAI API") or raw.startswith("Error:"):
+        report_degraded("import_ai_unavailable", error=raw.split(":", 1)[0])
+        return JsonResponse(
+            {"error": "The AI service is not answering right now. Please try again in a minute."},
+            status=503,
+        )
+    try:
+        extracted_json = _parse_model_json(raw)
+    except (ValueError, IndexError):
+        report_degraded("import_unparseable_output", linkedin=linkedin)
+        return JsonResponse(
+            {"error": "We could not read the AI's answer for this file. Please try again."},
+            status=502,
+        )
+    if not isinstance(extracted_json, dict):
+        report_degraded("import_unparseable_output", linkedin=linkedin)
+        return JsonResponse(
+            {"error": "We could not read the AI's answer for this file. Please try again."},
+            status=502,
+        )
+    if extracted_json.get("parse_error"):
+        return JsonResponse(
+            {"error": extracted_json.get("message", "Could not extract resume data.")},
+            status=422,
+        )
+    return _save_import(
+        request, extracted_json, extracted_text, prefix="LinkedIn" if linkedin else ""
+    )
 
 
 def _save_import(request, extracted_json, extracted_text, prefix=""):
@@ -1329,8 +1344,6 @@ def _save_import(request, extracted_json, extracted_text, prefix=""):
     """
     from resume.services import import_check
 
-    if not isinstance(extracted_json, dict):
-        return JsonResponse({"error": "Failed to parse extracted JSON"}, status=500)
     content, review = import_check.run(extracted_json, extracted_text)
     resume = Resume.objects.create(
         user=request.user,
@@ -1353,93 +1366,6 @@ def _save_import(request, extracted_json, extracted_text, prefix=""):
             "review": import_check.summary(review),
         }
     )
-
-
-@login_required
-def upload_linkedin_cv(request):
-    if request.method == "POST" and request.FILES.get("linkedin_file"):
-        if _email_unverified(request):
-            return JsonResponse(
-                {"error": _ai_locked_message(request), "email_verification_required": True},
-                status=403,
-            )
-        # QUOTA: Check resume creation limit (PDF upload with AI parsing counts toward resume limit)
-        profile = request.user.profile
-        if not profile.can_create_resume():
-            return JsonResponse(
-                {
-                    "error": f"Resume limit reached. Free plan allows {settings.FREE_TIER_LIMITS['resume_count']} resumes. Upgrade to Pro for unlimited resumes."
-                },
-                status=403,
-            )
-
-        # QUOTA: Check import limit
-        if not profile.can_import():
-            return JsonResponse(
-                {
-                    "error": "Monthly PDF import limit reached. Free plan allows 2 imports per month."
-                },
-                status=403,
-            )
-
-        linkedin_file = request.FILES["linkedin_file"]
-        logger.info("LinkedIn file uploaded: %d bytes", linkedin_file.size)
-
-        if not linkedin_file.name.endswith(".pdf"):
-            return JsonResponse({"error": "Only PDF files are allowed."}, status=400)
-
-        # SECURITY: File size limit (5MB)
-        if linkedin_file.size > 5 * 1024 * 1024:
-            return JsonResponse(
-                {"error": "File too large. Maximum size is 5MB."}, status=400
-            )
-
-        reader = PdfReader(linkedin_file)
-        extracted_text = " ".join((page.extract_text() or "") for page in reader.pages)
-
-        # Guard: minimum text length before calling OpenAI
-        if len(extracted_text.strip()) < 50:
-            return JsonResponse(
-                {
-                    "error": "Could not extract enough text from this PDF. Please ensure it contains readable text (not a scanned image)."
-                },
-                status=422,
-            )
-
-        start_time = datetime.now()
-        extracted_json_string = extract_linkedin_resume_data(extracted_text)
-        logger.info("OpenAI API response time: %s", datetime.now() - start_time)
-
-        # Check for API Errors
-        if extracted_json_string.startswith(
-            "OpenAI API"
-        ) or extracted_json_string.startswith("Error:"):
-            return JsonResponse(
-                {"error": f"AI Service Error: {extracted_json_string}"}, status=503
-            )
-
-        # Clean up JSON string (remove markdown code blocks)
-        if "```json" in extracted_json_string:
-            extracted_json_string = (
-                extracted_json_string.split("```json")[1].split("```")[0].strip()
-            )
-        elif "```" in extracted_json_string:
-            extracted_json_string = extracted_json_string.split("```")[1].strip()
-
-        extracted_json_string = extracted_json_string.strip()
-
-        try:
-            extracted_json = json.loads(extracted_json_string)
-
-            return _save_import(
-                request, extracted_json, extracted_text, prefix="LinkedIn"
-            )
-
-        except json.JSONDecodeError as e:
-            logger.error("Failed to decode JSON: %s", e)
-            return JsonResponse({"error": "Failed to parse extracted JSON"}, status=500)
-
-    return redirect("resume:index")
 
 
 @require_http_methods(["GET"])
@@ -2185,7 +2111,7 @@ def improve_draft(request):
         return locked
     if not improvement_service.can_draft(request.user):
         return JsonResponse(
-            {"error": f"You have used this month's {improvement_service.enhance_limit()} AI enhancements."},
+            {"error": _ai_credits_message(request)},
             status=403,
         )
     data = _json_body(request) or {}
@@ -2274,12 +2200,25 @@ def _agent_quota_exceeded(request, message):
     """Checked before any LLM call, so an over-quota user costs nothing."""
     if request.user.profile.can_send_agent_message():
         return None
-    lang = "tr" if any(c in message for c in "çğıöşüÇĞİÖŞÜ") else "en"
-    msg = {
-        "en": "You've reached your monthly chat message limit (10). Upgrade to Pro for unlimited usage.",
-        "tr": "Aylık sohbet mesajı limitinize (10) ulaştınız. Sınırsız kullanım için Pro'ya geçin.",
-    }[lang]
-    return JsonResponse({"type": "chat", "message": msg, "quota_exceeded": True})
+    lang = "tr" if any(c in message for c in "çğıöşüÇĞİÖŞÜ") else None
+    return JsonResponse(
+        {"type": "chat", "message": _ai_credits_message(request, lang), "quota_exceeded": True}
+    )
+
+
+def _ai_credits_message(request, lang=None):
+    """What an over-quota AI action answers, in the person's language."""
+    lang = lang or request.user.profile.ui_language or "en"
+    limit = settings.FREE_TIER_LIMITS["ai_credits"]
+    if lang == "tr":
+        return (
+            f"Bu ayki {limit} AI kredinizi kullandınız. Kredileriniz ay başında "
+            "yenilenir; Pro'da sınır yok."
+        )
+    return (
+        f"You've used this month's {limit} AI credits. They renew on the 1st; "
+        "Pro has no limit."
+    )
 
 
 def _agent_context(request, active_resume, message="", history=None, posting_id=None):
@@ -2287,7 +2226,6 @@ def _agent_context(request, active_resume, message="", history=None, posting_id=
     from resume.services.agent_service import agent_service
 
     profile = request.user.profile
-    limits = settings.FREE_TIER_LIMITS
     resume_qs = list(Resume.objects.filter(user=request.user).order_by("-updated_at"))
     # Conversation language, not the interface setting: someone chatting in
     # Turkish should get Turkish confirmations even with an English UI.
@@ -2325,16 +2263,7 @@ def _agent_context(request, active_resume, message="", history=None, posting_id=
             }
             for idx, r in enumerate(resume_qs)
         ],
-        "quota": {
-            "is_pro": profile.is_pro(),
-            "resume_count": len(resume_qs),
-            "resume_limit": limits["resume_count"],
-            "imports_left": max(0, limits["import_count"] - profile.import_count),
-            "downloads_left": max(0, limits["download_count"] - profile.download_count),
-            "messages_left": max(
-                0, limits["agent_message_count"] - profile.agent_message_count
-            ),
-        },
+        "quota": profile.usage(),
     }
 
 

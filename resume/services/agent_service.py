@@ -171,67 +171,34 @@ class AgentService:
             "message": msg,
         }
 
-    def _exec_upload_linkedin(self, lang: str) -> dict:
-        msg = {
-            "en": "Choose your LinkedIn profile PDF.",
-            "tr": "LinkedIn profil PDF'inizi secin.",
-        }.get(lang, "Choose a LinkedIn PDF.")
-        return {
-            "type": "request_upload",
-            "source": "linkedin",
-            "upload_url": reverse("resume:upload_linkedin_cv"),
-            "message": msg,
-        }
-
     def _exec_check_quota(self, user, lang: str) -> dict:
-        profile = user.profile
-        profile.reset_if_new_month()
-        limits = settings.FREE_TIER_LIMITS
-        resume_count = user.resumes.count()
-
-        if profile.is_pro():
+        usage = user.profile.usage()
+        if usage["is_pro"]:
             msg = {
-                "en": "You are on the **Pro plan** — unlimited usage!",
-                "tr": "**Pro plan**dasiniz — tum ozelliklerde sinirsiz kullanim!",
-            }.get(lang, "Pro plan — unlimited.")
+                "en": "You are on **Pro** — no limits.",
+                "tr": "**Pro** kullanıyorsunuz — sınır yok.",
+            }.get(lang, "Pro — no limits.")
             return {"type": "chat", "message": msg, "data": {"tier": "pro"}}
 
-        import_rem = max(0, limits["import_count"] - profile.import_count)
-        enhance_rem = max(0, limits["enhance_count"] - profile.enhance_count)
-        download_rem = max(0, limits["download_count"] - profile.download_count)
-        resume_rem = max(0, limits["resume_count"] - resume_count)
-        agent_msg_rem = max(
-            0, limits["agent_message_count"] - profile.agent_message_count
+        a = usage["allowances"]
+        labels = {
+            "en": [("ai_credits", "AI credits this month"), ("downloads", "PDF downloads this month"),
+                   ("resumes", "Resumes"), ("job_copies", "Job copies")],
+            "tr": [("ai_credits", "Bu ayki AI kredisi"), ("downloads", "Bu ayki PDF indirme"),
+                   ("resumes", "CV"), ("job_copies", "İlan kopyası")],
+        }.get(lang) or []
+        lines = [f"- {label}: {a[key]['used']}/{a[key]['limit']}" for key, label in labels]
+        head = "**Ücretsiz plan:**" if lang == "tr" else "**Free plan:**"
+        foot = (
+            "AI kredisi içe aktarma, iyileştirme ve sohbet mesajlarında kullanılır; aylık kotalar ay başında yenilenir."
+            if lang == "tr"
+            else "AI credits cover imports, enhancements and chat messages; monthly allowances renew on the 1st."
         )
-
-        if lang == "tr":
-            msg = (
-                "**Kullanim Durumunuz (Ucretsiz Plan):**\n"
-                f"- PDF Aktarim: {import_rem}/{limits['import_count']} kaldi\n"
-                f"- AI Iyilestirme: {enhance_rem}/{limits['enhance_count']} kaldi\n"
-                f"- PDF Indirme: {download_rem}/{limits['download_count']} kaldi\n"
-                f"- Sohbet Mesaji: {agent_msg_rem}/{limits['agent_message_count']} kaldi\n"
-                f"- Resume Sayisi: {resume_count}/{limits['resume_count']}\n\n"
-                "Kotaniz her ayin basinda sifirlanir."
-            )
-        else:
-            msg = (
-                "**Your Usage (Free Plan):**\n"
-                f"- PDF Imports: {import_rem}/{limits['import_count']} remaining\n"
-                f"- AI Enhancements: {enhance_rem}/{limits['enhance_count']} remaining\n"
-                f"- PDF Downloads: {download_rem}/{limits['download_count']} remaining\n"
-                f"- Chat Messages: {agent_msg_rem}/{limits['agent_message_count']} remaining\n"
-                f"- Resumes: {resume_count}/{limits['resume_count']}\n\n"
-                "Quotas reset each month."
-            )
-        data = {
-            "tier": "free",
-            "import_remaining": import_rem,
-            "enhance_remaining": enhance_rem,
-            "download_remaining": download_rem,
-            "resume_remaining": resume_rem,
-            "agent_message_remaining": agent_msg_rem,
-        }
+        data = {"tier": "free"}
+        for key, _ in labels:
+            data[f"{key}_remaining"] = a[key]["left"]
+            data[f"{key}_limit"] = a[key]["limit"]
+        msg = head + "\n" + "\n".join(lines) + "\n\n" + foot
         return {"type": "chat", "message": msg, "data": data, "data_type": "quota"}
 
     def _exec_duplicate_resume(self, user, params: dict, lang: str) -> dict:
