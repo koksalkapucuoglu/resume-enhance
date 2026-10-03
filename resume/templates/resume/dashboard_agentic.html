@@ -389,14 +389,6 @@
                 </div>
             </div>
 
-            <!-- Analysis Panel -->
-            <div id="context-analysis" class="hidden flex-col flex-1 overflow-hidden">
-                <div class="px-4 py-3 border-b border-slate-200 bg-white flex items-center gap-2">
-                    <span class="material-symbols-outlined text-slate-500">analytics</span>
-                    <h3 class="font-semibold text-slate-700 text-sm">Resume Analysis</h3>
-                </div>
-                <div id="analysis-content" class="flex-1 overflow-y-auto p-4 space-y-4 chat-scroll"></div>
-            </div>
         </div>
     </div>
 </div>
@@ -420,7 +412,6 @@
 // State
 // ---------------------------------------------------------------------------
 let conversationHistory = [];
-let builderState = null;
 let pendingConfirm = null;
 let isSending = false;
 let activeResumeId = null;
@@ -499,9 +490,14 @@ const HAS_RESUMES = {{ has_resumes|yesno:"true,false" }};
 // ---------------------------------------------------------------------------
 // localStorage keys
 // ---------------------------------------------------------------------------
-const LS_ACTIVE = 'resustack_active_resume';
-const LS_CHAT = 'resustack_chat';
-const LS_BUILDER = 'resustack_builder';
+// Scoped to the signed-in account: on a shared browser the next person must
+// not open someone else's conversation.
+const LS_SCOPE = ':{{ request.user.id }}';
+const LS_ACTIVE = 'resustack_active_resume' + LS_SCOPE;
+const LS_CHAT = 'resustack_chat' + LS_SCOPE;
+// Keys from before the scoping held whoever signed in last; drop them.
+['resustack_chat', 'resustack_active_resume', 'resustack_builder', 'resustack_active_posting']
+    .forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
 
 function persistChat() {
     const sliced = conversationHistory.slice(-50);
@@ -513,14 +509,6 @@ function persistActiveResume() {
         try { localStorage.setItem(LS_ACTIVE, JSON.stringify({id: activeResumeId, name: activeResumeName})); } catch(e) {}
     } else {
         localStorage.removeItem(LS_ACTIVE);
-    }
-}
-
-function persistBuilderState() {
-    if (builderState) {
-        try { localStorage.setItem(LS_BUILDER, JSON.stringify(builderState)); } catch(e) {}
-    } else {
-        localStorage.removeItem(LS_BUILDER);
     }
 }
 
@@ -566,12 +554,6 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
     } catch(e) { localStorage.removeItem(LS_CHAT); }
-
-    // Restore builder state
-    try {
-        const storedBuilder = JSON.parse(localStorage.getItem(LS_BUILDER));
-        if (storedBuilder && storedBuilder.mode === 'build') builderState = storedBuilder;
-    } catch(e) { localStorage.removeItem(LS_BUILDER); }
 
     document.getElementById('chat-input').focus();
 
@@ -862,9 +844,7 @@ function clearActiveResume() {
 // ---------------------------------------------------------------------------
 function clearChat() {
     conversationHistory = [];
-    builderState = null;
     localStorage.removeItem(LS_CHAT);
-    localStorage.removeItem(LS_BUILDER);
     const container = document.getElementById('chat-messages');
     // Keep only the welcome bubble
     const welcome = container.firstElementChild;
@@ -892,7 +872,6 @@ async function sendMessage(text) {
 
     try {
         const body = {message: msg, history: conversationHistory};
-        if (builderState) body.builder_state = builderState;
         if (activeResumeId) body.active_resume_id = activeResumeId;
         if (activePostingId) body.active_posting_id = activePostingId;
 
@@ -951,7 +930,7 @@ function onHistoryRestored() {
 // no chat turn, no agent message. What happened is written into the chat and
 // its history, so the assistant can talk about it afterwards.
 // ---------------------------------------------------------------------------
-const LS_POSTING = 'resustack_active_posting';
+const LS_POSTING = 'resustack_active_posting' + LS_SCOPE;
 let activePostingId = null;
 let lastEvaluation = null;
 try { activePostingId = Number(localStorage.getItem(LS_POSTING)) || null; } catch (e) {}
@@ -1731,7 +1710,7 @@ function handleAgentPayload(data, opts = {}) {
 
 // Effects that prompt the user for something carry their own wording; the rest
 // are data panels the model narrates itself.
-const INTERACTIVE_EFFECTS = new Set(['multi_step', 'create_choice', 'request_upload']);
+const INTERACTIVE_EFFECTS = new Set(['request_upload']);
 
 function applyEffect(effect) {
     if (!effect || !effect.type) return;
@@ -1879,13 +1858,6 @@ function handleResponse(data) {
             renderTemplatePicker(data.templates);
             break;
 
-        case 'analyze_resume':
-            appendMessage('bot', msg);
-            setActiveResume(data.resume_id, data.resume_name || activeResumeName);
-            renderAnalysisPanel(data.analysis);
-            showContextBadge();
-            break;
-
         case 'download':
             appendMessage('bot', msg);
             triggerDownload(data.download_url, data.filename);
@@ -1893,15 +1865,7 @@ function handleResponse(data) {
 
         case 'redirect':
             appendMessage('bot', msg);
-            builderState = null;
-            persistBuilderState();
             setTimeout(() => { window.location.href = data.url; }, 800);
-            break;
-
-        case 'create_choice':
-            appendMessage('bot', msg);
-            renderCreateChoice(data.choices);
-            if (!activeResumeId) showContextDefault();
             break;
 
         case 'request_upload':
@@ -1914,13 +1878,6 @@ function handleResponse(data) {
             pendingConfirm = {action: data.action, params: data.params};
             showConfirmPanel(data);
             showContextBadge();
-            break;
-
-        case 'multi_step':
-            appendMessage('bot', msg);
-            builderState = data.session_data;
-            persistBuilderState();
-            if (!activeResumeId) showContextDefault();
             break;
 
         default:
@@ -1975,7 +1932,7 @@ function showContextDefault() {
 
 function hideAllContextPanels() {
     ['context-default','context-empty','context-resume-list','context-preview',
-     'context-quota','context-confirm','context-analysis','context-diff','context-evaluation'].forEach(id => {
+     'context-quota','context-confirm','context-diff','context-evaluation'].forEach(id => {
         const el = document.getElementById(id);
         el.classList.add('hidden');
         el.classList.remove('flex');
@@ -2257,58 +2214,6 @@ function renderQuotaPanel(data) {
     }).join('');
 }
 
-function renderCreateChoice(choices) {
-    const container = document.getElementById('chat-messages');
-    const div = document.createElement('div');
-    div.className = 'flex items-start gap-2';
-    div.innerHTML = `
-        <div class="w-7 h-7 rounded-full bg-primary flex items-center justify-center flex-shrink-0 mt-0.5">
-            <span class="material-symbols-outlined !text-[14px] text-white">auto_awesome</span>
-        </div>
-        <div class="flex flex-col gap-2 max-w-[85%]">
-            ${choices.map(c => {
-                if (c.action === 'redirect') {
-                    return `<a href="${c.url}" class="px-4 py-2.5 rounded-xl border-2 border-primary text-primary font-semibold text-sm hover:bg-primary hover:text-white transition-all text-center">${escHtml(c.label)}</a>`;
-                }
-                return `<button data-action="${escHtml(c.action || '')}" data-label="${escHtml(c.label)}" class="choice-btn px-4 py-2.5 rounded-xl border-2 border-primary text-primary font-semibold text-sm hover:bg-primary hover:text-white transition-all">${escHtml(c.label)}</button>`;
-            }).join('')}
-        </div>`;
-    div.querySelectorAll('.choice-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            if (btn.dataset.action === 'conversational_build') {
-                startGuidedBuilder();
-            } else {
-                sendMessage(btn.dataset.label);
-            }
-        });
-    });
-    container.appendChild(div);
-    scrollToBottom();
-}
-
-// The builder is a fixed question sequence, so it is requested directly rather
-// than described to the model and hopefully classified back into itself.
-async function startGuidedBuilder() {
-    showTyping();
-    try {
-        const resp = await fetch('{% url "resume:agent_builder_start" %}', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN},
-            body: JSON.stringify({lang: CHAT_LANG}),
-        });
-        const data = await resp.json();
-        hideTyping();
-        if (!resp.ok) {
-            appendMessage('bot', data.message || 'Could not start the builder.', true);
-            return;
-        }
-        handleResponse(data);
-    } catch (e) {
-        hideTyping();
-        appendMessage('bot', 'Error connecting to assistant. Please try again.', true);
-    }
-}
-
 function renderUploadPrompt(data) {
     const container = document.getElementById('chat-messages');
     const div = document.createElement('div');
@@ -2402,57 +2307,6 @@ async function executeConfirm() {
             showContextDefault();
         }
     }
-}
-
-// ---------------------------------------------------------------------------
-// Analysis panel
-// ---------------------------------------------------------------------------
-function renderAnalysisPanel(analysis) {
-    hideAllContextPanels();
-    const panel = document.getElementById('context-analysis');
-    panel.classList.remove('hidden');
-    panel.classList.add('flex');
-
-    const score = analysis.overall_score || 0;
-    const scoreColor = score >= 80 ? 'text-green-600' : score >= 60 ? 'text-yellow-600' : 'text-red-600';
-    const scoreBg = score >= 80 ? 'bg-green-50 border-green-200' : score >= 60 ? 'bg-yellow-50 border-yellow-200' : 'bg-red-50 border-red-200';
-
-    let html = `
-        <div class="${scoreBg} border rounded-xl p-4 text-center">
-            <p class="text-4xl font-bold ${scoreColor}">${score}</p>
-            <p class="text-xs text-slate-500 mt-1">Overall Score / 100</p>
-        </div>`;
-
-    const categories = analysis.categories || [];
-    if (categories.length) {
-        html += '<div class="space-y-3">';
-        categories.forEach(cat => {
-            const pct = Math.round((cat.score / cat.max) * 100);
-            const barColor = pct >= 80 ? 'bg-green-500' : pct >= 60 ? 'bg-yellow-500' : 'bg-red-500';
-            html += `
-            <div>
-                <div class="flex justify-between text-xs font-medium text-slate-600 mb-1">
-                    <span>${escHtml(cat.name)}</span><span>${cat.score}/${cat.max}</span>
-                </div>
-                <div class="w-full bg-slate-200 rounded-full h-2">
-                    <div class="${barColor} h-2 rounded-full transition-all" style="width:${pct}%"></div>
-                </div>
-                <p class="text-xs text-slate-500 mt-1">${escHtml(cat.feedback || '')}</p>
-            </div>`;
-        });
-        html += '</div>';
-    }
-
-    const suggestions = analysis.top_suggestions || [];
-    if (suggestions.length) {
-        html += '<div class="bg-white border border-slate-200 rounded-xl p-3"><h4 class="text-xs font-semibold text-slate-700 mb-2">Top Suggestions</h4><ul class="space-y-1">';
-        suggestions.forEach(s => {
-            html += `<li class="text-xs text-slate-600 flex items-start gap-1.5"><span class="material-symbols-outlined !text-[14px] text-primary mt-0.5 flex-shrink-0">lightbulb</span>${escHtml(s)}</li>`;
-        });
-        html += '</ul></div>';
-    }
-
-    document.getElementById('analysis-content').innerHTML = html;
 }
 
 // ---------------------------------------------------------------------------

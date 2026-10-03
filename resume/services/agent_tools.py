@@ -22,8 +22,10 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 from django.conf import settings
+from django.urls import reverse
 
 from resume.models import Resume
+from resume.services import resume_content
 
 logger = logging.getLogger(__name__)
 
@@ -230,57 +232,6 @@ def check_quota(user, ctx):
 
 
 @tool(
-    name="find_resume",
-    description="Search the user's resumes by content — a skill, company, job title, school or keyword.",
-    parameters={"query": {"type": "string"}},
-)
-def find_resume(user, ctx, query):
-    legacy = _service()._exec_find_resume(user, {"query": query}, ctx["lang"])
-    return ToolResult(data={"matches": legacy.get("data", [])}, ui=[legacy])
-
-
-@tool(
-    name="analyze_resume",
-    description="Score a resume's strength across five categories and return improvement suggestions.",
-    parameters={"resume_id": INT_OR_NULL},
-)
-def analyze_resume(user, ctx, resume_id=None):
-    resume, error = _resume_or_error(user, resume_id, ctx)
-    if error:
-        return error
-    legacy = _service()._exec_analyze_resume(user, {"resume_id": resume.id}, ctx["lang"])
-    analysis = legacy.get("analysis") or {}
-    return ToolResult(
-        data={
-            "resume_id": resume.id,
-            "overall_score": analysis.get("overall_score"),
-            "categories": analysis.get("categories", []),
-            "suggestions": analysis.get("suggestions", []),
-        },
-        ui=[legacy],
-    )
-
-
-@tool(
-    name="compare_resumes",
-    description="Compare two resumes side by side, highlighting differences and which is stronger.",
-    parameters={"resume_id_1": {"type": "integer"}, "resume_id_2": {"type": "integer"}},
-)
-def compare_resumes(user, ctx, resume_id_1, resume_id_2):
-    legacy = _service()._exec_compare_resumes(
-        user, {"resume_id_1": resume_id_1, "resume_id_2": resume_id_2}, ctx["lang"]
-    )
-    if legacy.get("type") == "chat" and not legacy.get("comparison"):
-        return ToolResult(data={"summary": legacy.get("message", "")}, ui=[legacy])
-    return ToolResult(data={"comparison": legacy.get("comparison", {})}, ui=[legacy])
-
-
-# ---------------------------------------------------------------------------
-# Navigation tools — these hand the user off to another page
-# ---------------------------------------------------------------------------
-
-
-@tool(
     name="download_resume",
     description="Download a resume as PDF. Counts against the user's monthly download quota.",
     parameters={"resume_id": INT_OR_NULL},
@@ -316,7 +267,12 @@ def edit_resume(user, ctx, resume_id=None):
 
 @tool(
     name="create_blank_resume",
-    description="Start a new empty resume. Offers a step-by-step chat build or the form editor.",
+    description=(
+        "Create a new, empty resume and make it the active one. Use it when the "
+        "user wants to start from scratch. Then ask for their details a few at a "
+        "time (name and contact, roles, education, skills) and write each answer "
+        "in with modify_resume. Mention that the form editor is there too."
+    ),
 )
 def create_blank_resume(user, ctx):
     if not user.profile.can_create_resume():
@@ -325,23 +281,22 @@ def create_blank_resume(user, ctx):
                 "error": f"Resume limit reached ({settings.FREE_TIER_LIMITS['resume_count']} on the free plan)."
             }
         )
-    legacy = _service()._exec_create_blank(ctx["lang"])
-    return ToolResult(data={"ok": True, "awaiting_user_choice": True}, ui=[legacy])
-
-
-@tool(
-    name="start_guided_build",
-    description="Begin the step-by-step question-and-answer flow that builds a resume from scratch.",
-)
-def start_guided_build(user, ctx):
-    if not user.profile.can_create_resume():
-        return ToolResult(
-            data={
-                "error": f"Resume limit reached ({settings.FREE_TIER_LIMITS['resume_count']} on the free plan)."
-            }
-        )
-    legacy = _service()._exec_builder_start(ctx["lang"])
-    return ToolResult(data={"ok": True, "builder_started": True}, ui=[legacy])
+    resume = Resume.objects.create(
+        user=user,
+        title="Yeni CV" if ctx["lang"] == "tr" else "New resume",
+        content=resume_content.normalize({}),
+        language=ctx["lang"] if ctx["lang"] in ("en", "tr") else "en",
+    )
+    ctx["active_resume"] = resume
+    preview = _service()._exec_preview_resume(user, {"resume_id": resume.id}, ctx["lang"])
+    return ToolResult(
+        data={
+            "ok": True,
+            "resume_id": resume.id,
+            "editor_url": reverse("resume:resume_form_edit", args=[resume.id]),
+        },
+        ui=[preview],
+    )
 
 
 @tool(

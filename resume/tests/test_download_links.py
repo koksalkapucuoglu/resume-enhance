@@ -13,7 +13,6 @@ from django.contrib.auth.models import User
 from django.core import signing
 from django.test import TestCase, override_settings
 from django.urls import reverse
-from rest_framework.authtoken.models import Token
 
 from resume.models import Resume
 from resume.services import download_links
@@ -82,48 +81,16 @@ class SignAndConsumeTest(TestCase):
 class DownloadLinkEndpointTest(TestCase):
     def setUp(self):
         self.user = User.objects.create_user("ada", password="x")
-        self.token = Token.objects.create(user=self.user)
-        self.auth = {"HTTP_AUTHORIZATION": f"Token {self.token.key}"}
         self.resume = Resume.objects.create(
             user=self.user, title="CV", content=content()
         )
 
     def _mint(self):
-        return self.client.post(
-            f"/api/v1/resumes/{self.resume.pk}/download-link/", **self.auth
-        )
-
-    def test_minting_returns_an_absolute_single_use_url(self):
-        body = self._mint().json()
-        self.assertIn("/d/", body["download_url"])
-        self.assertTrue(body["download_url"].startswith("http"))
-        self.assertTrue(body["single_use"])
-        self.assertEqual(body["expires_in_seconds"], download_links.max_age())
-
-    def test_minting_needs_a_token(self):
-        self.assertEqual(
-            self.client.post(
-                f"/api/v1/resumes/{self.resume.pk}/download-link/"
-            ).status_code,
-            401,
-        )
-
-    def test_another_users_resume_cannot_be_minted(self):
-        eve = User.objects.create_user("eve", password="x")
-        theirs = Resume.objects.create(user=eve, title="Eve CV", content=content("Eve"))
-        response = self.client.post(
-            f"/api/v1/resumes/{theirs.pk}/download-link/", **self.auth
-        )
-        self.assertEqual(response.status_code, 404)
-
-    def test_minting_is_refused_over_quota(self):
-        self.user.profile.download_count = 99
-        self.user.profile.save()
-        self.assertEqual(self._mint().status_code, 403)
+        return reverse("resume:signed_download", args=[download_links.sign(self.resume)])
 
     @patch("resume.views.resume_pdf_service.generate_resume_pdf", return_value=PDF)
     def test_following_the_link_serves_the_pdf(self, _render):
-        url = self._mint().json()["download_url"]
+        url = self._mint()
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "application/pdf")
@@ -133,13 +100,13 @@ class DownloadLinkEndpointTest(TestCase):
     @patch("resume.views.resume_pdf_service.generate_resume_pdf", return_value=PDF)
     def test_the_link_needs_no_session_or_token(self, _render):
         """A browser following it has neither."""
-        url = self._mint().json()["download_url"]
+        url = self._mint()
         self.client.logout()
         self.assertEqual(self.client.get(url).status_code, 200)
 
     @patch("resume.views.resume_pdf_service.generate_resume_pdf", return_value=PDF)
     def test_a_second_visit_is_refused(self, _render):
-        url = self._mint().json()["download_url"]
+        url = self._mint()
         self.client.get(url)
         second = self.client.get(url)
         self.assertEqual(second.status_code, 410)
@@ -152,7 +119,7 @@ class DownloadLinkEndpointTest(TestCase):
         self.user.profile.refresh_from_db()
         self.assertEqual(self.user.profile.download_count, before)
 
-        self.client.get(self._mint().json()["download_url"])
+        self.client.get(self._mint())
         self.user.profile.refresh_from_db()
         self.assertEqual(self.user.profile.download_count, before + 1)
 
@@ -167,7 +134,7 @@ class DownloadLinkEndpointTest(TestCase):
     def test_a_failed_render_does_not_charge_the_quota(self):
         from resume.services.pdf_service import PdfGenerationError
 
-        url = self._mint().json()["download_url"]
+        url = self._mint()
         before = self.user.profile.download_count
         with patch(
             "resume.views.resume_pdf_service.generate_resume_pdf",
@@ -181,13 +148,13 @@ class DownloadLinkEndpointTest(TestCase):
     @patch("resume.views.resume_pdf_service.generate_resume_pdf", return_value=PDF)
     def test_the_quota_is_rechecked_at_delivery(self, _render):
         """Minting under quota then going over must not still deliver."""
-        url = self._mint().json()["download_url"]
+        url = self._mint()
         self.user.profile.download_count = 99
         self.user.profile.save()
         self.assertEqual(self.client.get(url).status_code, 403)
 
     def test_an_expired_link_says_so(self):
-        url = self._mint().json()["download_url"]
+        url = self._mint()
         with override_settings(DOWNLOAD_LINK_MAX_AGE=-1):
             response = self.client.get(url)
         self.assertEqual(response.status_code, 410)
@@ -195,7 +162,7 @@ class DownloadLinkEndpointTest(TestCase):
 
     @patch("resume.views.resume_pdf_service.generate_resume_pdf", return_value=PDF)
     def test_a_deleted_resume_gives_404_not_a_stale_pdf(self, _render):
-        url = self._mint().json()["download_url"]
+        url = self._mint()
         self.resume.delete()
         self.assertEqual(self.client.get(url).status_code, 404)
 
@@ -203,7 +170,7 @@ class DownloadLinkEndpointTest(TestCase):
     def test_the_filename_survives_turkish_characters(self, _render):
         self.resume.content["user_info"]["full_name"] = "Köksal Kapucuoğlu"
         self.resume.save()
-        response = self.client.get(self._mint().json()["download_url"])
+        response = self.client.get(self._mint())
         disposition = response["Content-Disposition"]
         self.assertIn("Koksal_Kapucuoglu", disposition)
         self.assertTrue(disposition.isascii())

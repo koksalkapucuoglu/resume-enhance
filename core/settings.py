@@ -355,17 +355,6 @@ if len(sys.argv) > 1 and sys.argv[1] == "test":
 TYPESAFE_MODEL = os.environ.get("TYPESAFE_MODEL", "jev-1.13.0")
 TYPESAFE_TIMEOUT = float(os.environ.get("TYPESAFE_TIMEOUT", "15"))
 
-# TODO: Convert to template selector map (faangpath-simple: faangpath_simple_template.tex, cls)
-# LATEX_SETTINGS = {
-#     'TEMPLATE_DIR': BASE_DIR / 'latex_renderer' / 'templates',
-#     'TEMP_DIR': BASE_DIR / 'latex_renderer' / 'templates' / 'temp_latex_files',
-#     'DEFAULT_TEMPLATE': 'faangpath_simple_template.tex',
-#     'PDF_TIMEOUT': 30,
-# }
-
-# TEMPLATE_SELECTOR_PREVIEW_MAP = {
-#     'faangpath-simple': 'faangpath_simple_template_preview.html'
-# }
 
 # Map LaTeX templates to HTML preview templates (Phase 4)
 # TEX_PREVIEW_HTML_MAP = {

@@ -30,7 +30,6 @@ from core.views import (
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("", include("resume.urls")),
-    path("api/v1/", include("resume.api_urls")),  # Mobile API endpoints
     # The MCP endpoint. One URL, POST only — clients are given exactly this.
     path("mcp", include("mcp_server.urls")),
     # The trailing-slash spelling answers too. APPEND_SLASH only adds slashes,

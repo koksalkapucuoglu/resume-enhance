@@ -162,7 +162,7 @@ class AiGateTests(TestCase):
 
     def test_agent_chat_is_refused_like_a_quota_answer(self):
         response = self.client.post(
-            reverse("resume:agent_chat"),
+            reverse("resume:agent_chat_stream"),
             data=json.dumps({"message": "Improve my resume"}),
             content_type="application/json",
         )

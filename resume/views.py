@@ -1587,80 +1587,6 @@ def download_resume_pdf(request, pk):
         return redirect("resume:dashboard")
 
 
-def test_faangpath_template(request):
-    """
-    Test view to render the default resume design
-    with sample data for development and testing purposes.
-    """
-    if request.method == "POST":
-        user_form = UserInfoForm(request.POST)
-        education_formset = EducationFormSet(request.POST, prefix="education")
-        experience_formset = ExperienceFormSet(request.POST, prefix="experience")
-        project_formset = ProjectFormSet(request.POST, prefix="project")
-
-        # Validate all forms and formsets
-        if all(
-            [
-                user_form.is_valid(),
-                education_formset.is_valid(),
-                experience_formset.is_valid(),
-                project_formset.is_valid(),
-            ]
-        ):
-            # Prepare context data for template
-            user_data = user_form.cleaned_data
-            education_data = [
-                form.cleaned_data for form in education_formset if form.cleaned_data
-            ]
-
-            # Split experience descriptions into lists
-            experience_data = []
-            for form in experience_formset:
-                if form.is_valid() and form.cleaned_data:
-                    cleaned_data = form.cleaned_data.copy()
-                    cleaned_data["description"] = list(
-                        filter(
-                            None,
-                            map(
-                                str.strip,
-                                cleaned_data.get("description", "").split("\n"),
-                            ),
-                        )
-                    )
-                    experience_data.append(cleaned_data)
-
-            project_data = [
-                form.cleaned_data for form in project_formset if form.cleaned_data
-            ]
-
-            context = {
-                "user_data": user_data,
-                "education_data": education_data,
-                "experience_data": experience_data,
-                "project_data": project_data,
-                "generation_date": datetime.now().strftime("%Y-%m-%d"),
-            }
-
-            design = resume_templates.get(resume_templates.DEFAULT_TEMPLATE_KEY)
-            return render(
-                request,
-                design.template_file,
-                resume_templates.design_context(design.key, context),
-            )
-        else:
-            messages.error(request, "Please correct the errors in the form.")
-
-    # If GET request or form validation failed, show the form
-    context = get_init_values_for_resume_form()
-    context.update(template_picker_context())
-    return render(request, "resume_form.html", context)
-
-
-# ---------------------------------------------------------------------------
-# Saved-resume appearance: template and optional sections
-# ---------------------------------------------------------------------------
-
-
 @login_required
 @require_http_methods(["POST"])
 def set_resume_appearance(request, pk):
@@ -1880,75 +1806,6 @@ def payment_webhook(request):
     return HttpResponse(status=200)
 
 
-@login_required
-@require_http_methods(["POST"])
-def agent_chat(request):
-    """
-    Run one turn of the agent loop.
-
-    JSON in:  {message, history, builder_state, active_resume_id}
-    JSON out: {type: "agent_turn"|"approval_required", message, effects, ...}
-    """
-    from resume.services.agent_service import agent_service
-    from resume.services import agent_loop
-
-    limited = _agent_rate_limited(request)
-    if limited:
-        return limited
-    if _email_unverified(request):
-        # Same shape as the quota answer, so the chat shows it as a message.
-        return JsonResponse(
-            {
-                "type": "chat",
-                "message": _ai_locked_message(request),
-                "email_verification_required": True,
-            }
-        )
-
-    try:
-        data = json.loads(request.body)
-    except (ValueError, KeyError):
-        return JsonResponse({"error": "Invalid JSON"}, status=400)
-
-    message = data.get("message", "").strip()
-    if not message:
-        return JsonResponse({"error": "Empty message"}, status=400)
-
-    profile = request.user.profile
-    quota_response = _agent_quota_exceeded(request, message)
-    if quota_response:
-        return quota_response
-
-    builder_state = data.get("builder_state")
-    active_resume_id = data.get("active_resume_id")
-    active_resume = (
-        Resume.objects.filter(pk=active_resume_id, user=request.user).first()
-        if active_resume_id
-        else None
-    )
-
-    # The guided builder is a fixed question sequence, not an agent decision —
-    # it stays outside the loop.
-    if builder_state and builder_state.get("mode") == "build":
-        result = agent_service.handle_builder_step(
-            message, builder_state, request.user
-        )
-        profile.agent_message_count += 1
-        profile.save(update_fields=["agent_message_count"])
-        return JsonResponse({**result, "user_message": message})
-
-    ctx = _agent_context(request, active_resume, message, data.get("history"), data.get("active_posting_id"))
-    outcome = agent_loop.run_turn(
-        request.user, ctx, data.get("history"), message
-    )
-
-    profile.agent_message_count += 1
-    profile.save(update_fields=["agent_message_count"])
-    return JsonResponse(
-        _agent_response_with_lang(outcome, active_resume_id, message, ctx["lang"])
-    )
-
-
 def _sse(event, payload):
     """One server-sent-events frame."""
     return f"event: {event}\ndata: {json.dumps(payload, default=str)}\n\n"
@@ -2125,97 +1982,6 @@ def agent_approve_stream(request):
     return _sse_response(
         _stream_agent(events, active_resume_id, "", ctx["lang"])
     )
-
-
-@login_required
-@require_http_methods(["POST"])
-def agent_builder_start(request):
-    """
-    Start the guided resume builder.
-
-    The builder is a fixed question sequence, not something the model decides,
-    so the "step by step" button reaches it directly — no LLM call, no message
-    quota, and no chance of the label being classified as something else.
-    """
-    from resume.services.agent_service import agent_service
-
-    if not request.user.profile.can_create_resume():
-        return JsonResponse(
-            {
-                "type": "chat",
-                "message": f"Resume limit reached. The free plan allows {settings.FREE_TIER_LIMITS['resume_count']} resumes.",
-            },
-            status=403,
-        )
-
-    try:
-        lang = json.loads(request.body).get("lang", "en")
-    except (ValueError, KeyError):
-        lang = "en"
-    lang = lang if lang in ("en", "tr") else "en"
-    return JsonResponse(agent_service._exec_builder_start(lang))
-
-
-@login_required
-@require_http_methods(["POST"])
-def agent_approve(request):
-    """
-    Approve or decline a destructive tool call and continue the paused loop.
-    JSON in: {token, approved}
-    """
-    from resume.services import agent_loop
-
-    limited = _agent_rate_limited(request)
-    if limited:
-        return limited
-    if _email_unverified(request):
-        # Same shape as the quota answer, so the chat shows it as a message.
-        return JsonResponse(
-            {
-                "type": "chat",
-                "message": _ai_locked_message(request),
-                "email_verification_required": True,
-            }
-        )
-
-    try:
-        data = json.loads(request.body)
-    except (ValueError, KeyError):
-        return JsonResponse({"error": "Invalid JSON"}, status=400)
-
-    token = data.get("token", "")
-    # SECURITY: the parked loop is keyed by user, so a token cannot be replayed
-    # against someone else's conversation. It is consumed on read.
-    parked = agent_loop.take_pending(request.user, token)
-    if not parked:
-        return JsonResponse(
-            {"error": "This confirmation has expired. Please ask again."}, status=410
-        )
-
-    active_resume_id = data.get("active_resume_id")
-    active_resume = (
-        Resume.objects.filter(pk=active_resume_id, user=request.user).first()
-        if active_resume_id
-        else None
-    )
-    ctx = _agent_context(request, active_resume, data.get("message", ""), data.get("history"), data.get("active_posting_id"))
-    ctx["lang"] = parked.get("lang", ctx["lang"])
-    outcome = agent_loop.resume_turn(
-        request.user, ctx, parked, approved=bool(data.get("approved"))
-    )
-    return JsonResponse(
-        _agent_response_with_lang(outcome, active_resume_id, "", ctx["lang"])
-    )
-
-
-# ---------------------------------------------------------------------------
-# Job posting evaluation (services/evaluation_service.py)
-#
-# Deterministic endpoints the dashboard calls directly: adding a posting,
-# evaluating it, switching between evaluations and replacing a base resume
-# with its branch. None of them runs a chat turn, so none costs an agent
-# message; the assistant reaches the same service through its tools.
-# ---------------------------------------------------------------------------
 
 
 def _json_body(request):
@@ -2610,7 +2376,7 @@ def _agent_response(outcome, active_resume_id, user_message):
             e.get("resume_id")
             for e in reversed(effects)
             if e.get("type")
-            in ("modify_resume", "preview", "analyze_resume", "switch_template")
+            in ("modify_resume", "preview", "switch_template")
             and e.get("resume_id")
         ),
         None,
@@ -2861,3 +2627,25 @@ def toggle_ui_language(request):
     profile.ui_language = lang
     profile.save(update_fields=["ui_language"])
     return JsonResponse({"status": "ok", "language": lang})
+
+
+@require_http_methods(["POST"])
+def submit_feedback(request):
+    """Feedback from the floating widget. Signing in is optional."""
+    try:
+        data = json.loads(request.body)
+    except (ValueError, TypeError):
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    if not isinstance(data, dict):
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    message = str(data.get("message") or "").strip()
+    if not message:
+        return JsonResponse({"error": "Message is required"}, status=400)
+    rating = data.get("rating")
+    Feedback.objects.create(
+        user=request.user if request.user.is_authenticated else None,
+        message=message[:2000],
+        rating=rating if isinstance(rating, int) and rating in range(1, 6) else None,
+        page=str(data.get("page") or "")[:100],
+    )
+    return JsonResponse({"success": True})

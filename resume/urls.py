@@ -10,6 +10,7 @@ urlpatterns = [
     # Short, unguessable path: this is followed by a browser with no session.
     path("d/<str:token>/", views.signed_download, name="signed_download"),
     path("pricing/", views.pricing_page, name="pricing"),
+    path("feedback/", views.submit_feedback, name="submit_feedback"),
     path("privacy/", views.privacy_policy, name="privacy"),
     path("gizlilik/", views.privacy_policy_tr, name="privacy_tr"),
     # Domain proof for publishing as com.resustackapp/* in the MCP Registry.
@@ -34,7 +35,6 @@ urlpatterns = [
         views.dismiss_import_review,
         name="dismiss_import_review",
     ),
-    path("test-faangpath/", views.test_faangpath_template, name="test_faangpath"),
     path("enhance-project", views.enhance_project, name="enhance_project"),
     path("enhance-experience", views.enhance_experience, name="enhance_experience"),
     path("preview-resume-form", views.preview_resume_form, name="preview_resume_form"),
@@ -75,7 +75,6 @@ urlpatterns = [
         views.revert_resume,
         name="revert_resume",
     ),
-    path("agent/chat/", views.agent_chat, name="agent_chat"),
     path("agent/detect-posting/", views.detect_job_posting, name="detect_job_posting"),
     path("agent/postings/", views.add_job_posting, name="add_job_posting"),
     path("agent/evaluate/", views.evaluate_job_posting, name="evaluate_job_posting"),
@@ -94,12 +93,6 @@ urlpatterns = [
         "agent/approve/stream/",
         views.agent_approve_stream,
         name="agent_approve_stream",
-    ),
-    path("agent/approve/", views.agent_approve, name="agent_approve"),
-    path(
-        "agent/builder/start/",
-        views.agent_builder_start,
-        name="agent_builder_start",
     ),
     path("agent/toggle-mode/", views.toggle_agent_mode, name="toggle_agent_mode"),
     path("agent/toggle-language/", views.toggle_ui_language, name="toggle_ui_language"),

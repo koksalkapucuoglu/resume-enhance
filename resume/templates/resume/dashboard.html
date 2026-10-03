@@ -500,7 +500,7 @@ function submitFeedback() {
   btn.disabled = true;
   btn.textContent = 'Sending...';
 
-  fetch('/api/v1/feedback/', {
+  fetch('{% url "resume:submit_feedback" %}', {
     method: 'POST',
     headers: {'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken')},
     body: JSON.stringify({message, rating: rating ? parseInt(rating) : null, page: window.location.pathname})

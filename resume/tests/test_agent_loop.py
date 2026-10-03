@@ -35,6 +35,35 @@ def assistant(content_text=None, tool_calls=None):
 USAGE = SimpleNamespace(prompt_tokens=100, completion_tokens=20)
 
 
+def stream_turns(*turns):
+    """
+    Stand-in for stream_openai_tool_turn: each turn is (text, [(tool, args)]).
+    """
+    queue = list(turns)
+
+    def fake(messages, tools, **kwargs):
+        text, calls = queue.pop(0)
+        yield ("message", {
+            "content": text or "",
+            "tool_calls": [
+                {"id": f"c{i}", "name": name, "arguments": json.dumps(args)}
+                for i, (name, args) in enumerate(calls or [])
+            ],
+        }, USAGE)
+
+    return fake
+
+
+def post_stream(client, url, payload):
+    """POST to a streaming agent endpoint; return the done frame (or the JSON answer)."""
+    resp = client.post(url, json.dumps(payload), content_type="application/json")
+    if not getattr(resp, "streaming", False):
+        return resp
+    body = b"".join(resp.streaming_content).decode()
+    frame = next(f for f in body.split("\n\n") if f.startswith("event: done"))
+    return json.loads(frame.split("data:", 1)[1].strip())
+
+
 class LoopTest(TestCase):
     def setUp(self):
         self.user = User.objects.create_user("ada", password="x")
@@ -288,40 +317,31 @@ class AgentEndpointTest(TestCase):
         self.resume = Resume.objects.create(user=self.user, title="CV", content=content())
         self.client.force_login(self.user)
 
-    def test_chat_returns_an_agent_turn(self):
+    def _chat(self, message, *turns):
         with patch(
-            "resume.services.agent_loop.send_openai_tool_turn",
-            return_value=(assistant("Hi there."), USAGE),
+            "resume.services.agent_loop.stream_openai_tool_turn",
+            side_effect=stream_turns(*turns),
         ):
-            resp = self.client.post(
-                reverse("resume:agent_chat"),
-                json.dumps({"message": "hello"}),
-                content_type="application/json",
+            return post_stream(
+                self.client, reverse("resume:agent_chat_stream"), {"message": message}
             )
-        body = resp.json()
+
+    def test_chat_returns_an_agent_turn(self):
+        body = self._chat("hello", ("Hi there.", []))
         self.assertEqual(body["type"], "agent_turn")
         self.assertEqual(body["message"], "Hi there.")
 
     def test_message_counter_increments_once_per_turn(self):
-        turns = [
-            (assistant(tool_calls=[call("list_resumes", {})]), USAGE),
-            (assistant("done"), USAGE),
-        ]
-        with patch("resume.services.agent_loop.send_openai_tool_turn", side_effect=turns):
-            self.client.post(
-                reverse("resume:agent_chat"),
-                json.dumps({"message": "list"}),
-                content_type="application/json",
-            )
+        self._chat("list", (None, [("list_resumes", {})]), ("done", []))
         self.user.profile.refresh_from_db()
         self.assertEqual(self.user.profile.agent_message_count, 1)
 
     def test_quota_blocks_before_any_llm_call(self):
         with patch.object(
             type(self.user.profile), "can_send_agent_message", return_value=False
-        ), patch("resume.services.agent_loop.send_openai_tool_turn") as llm:
+        ), patch("resume.services.agent_loop.stream_openai_tool_turn") as llm:
             resp = self.client.post(
-                reverse("resume:agent_chat"),
+                reverse("resume:agent_chat_stream"),
                 json.dumps({"message": "hello"}),
                 content_type="application/json",
             )
@@ -329,31 +349,27 @@ class AgentEndpointTest(TestCase):
         llm.assert_not_called()
 
     def test_approval_round_trip_over_http(self):
-        turn = (assistant(tool_calls=[call("delete_resume", {"resume_id": self.resume.id})]), USAGE)
-        with patch("resume.services.agent_loop.send_openai_tool_turn", return_value=turn):
-            first = self.client.post(
-                reverse("resume:agent_chat"),
-                json.dumps({"message": "delete it"}),
-                content_type="application/json",
-            ).json()
+        first = self._chat(
+            "delete it", (None, [("delete_resume", {"resume_id": self.resume.id})])
+        )
         self.assertEqual(first["type"], "approval_required")
         self.assertTrue(Resume.objects.filter(pk=self.resume.pk).exists())
 
         with patch(
-            "resume.services.agent_loop.send_openai_tool_turn",
-            return_value=(assistant("Deleted."), USAGE),
+            "resume.services.agent_loop.stream_openai_tool_turn",
+            side_effect=stream_turns(("Deleted.", [])),
         ):
-            second = self.client.post(
-                reverse("resume:agent_approve"),
-                json.dumps({"token": first["token"], "approved": True}),
-                content_type="application/json",
-            ).json()
+            second = post_stream(
+                self.client,
+                reverse("resume:agent_approve_stream"),
+                {"token": first["token"], "approved": True},
+            )
         self.assertEqual(second["message"], "Deleted.")
         self.assertFalse(Resume.objects.filter(pk=self.resume.pk).exists())
 
     def test_expired_or_forged_token_is_rejected(self):
         resp = self.client.post(
-            reverse("resume:agent_approve"),
+            reverse("resume:agent_approve_stream"),
             json.dumps({"token": "deadbeef", "approved": True}),
             content_type="application/json",
         )
@@ -362,66 +378,8 @@ class AgentEndpointTest(TestCase):
     def test_approve_requires_login(self):
         self.client.logout()
         resp = self.client.post(
-            reverse("resume:agent_approve"),
+            reverse("resume:agent_approve_stream"),
             json.dumps({"token": "x", "approved": True}),
-            content_type="application/json",
-        )
-        self.assertEqual(resp.status_code, 302)
-
-
-class BuilderEntryTest(TestCase):
-    """The guided builder is reached directly, not via LLM classification."""
-
-    def setUp(self):
-        self.user = User.objects.create_user("ada", password="x")
-        self.client.force_login(self.user)
-
-    def test_start_returns_the_first_question_without_an_llm_call(self):
-        with patch("resume.services.agent_loop.send_openai_tool_turn") as llm:
-            resp = self.client.post(
-                reverse("resume:agent_builder_start"),
-                json.dumps({"lang": "en"}),
-                content_type="application/json",
-            )
-        body = resp.json()
-        self.assertEqual(body["type"], "multi_step")
-        self.assertEqual(body["step"], "ask_name")
-        self.assertTrue(body["message"])
-        llm.assert_not_called()
-
-    def test_start_does_not_spend_message_quota(self):
-        self.client.post(
-            reverse("resume:agent_builder_start"),
-            json.dumps({"lang": "en"}),
-            content_type="application/json",
-        )
-        self.user.profile.refresh_from_db()
-        self.assertEqual(self.user.profile.agent_message_count, 0)
-
-    def test_start_respects_the_resume_limit(self):
-        with patch.object(
-            type(self.user.profile), "can_create_resume", return_value=False
-        ):
-            resp = self.client.post(
-                reverse("resume:agent_builder_start"),
-                json.dumps({"lang": "en"}),
-                content_type="application/json",
-            )
-        self.assertEqual(resp.status_code, 403)
-
-    def test_language_falls_back_for_an_unknown_code(self):
-        resp = self.client.post(
-            reverse("resume:agent_builder_start"),
-            json.dumps({"lang": "klingon"}),
-            content_type="application/json",
-        )
-        self.assertEqual(resp.status_code, 200)
-
-    def test_requires_login(self):
-        self.client.logout()
-        resp = self.client.post(
-            reverse("resume:agent_builder_start"),
-            json.dumps({}),
             content_type="application/json",
         )
         self.assertEqual(resp.status_code, 302)
@@ -635,8 +593,8 @@ class ProgressCopyTest(TestCase):
     def test_step_copy_is_localized(self):
         from resume.services import agent_loop
 
-        self.assertIn("Analyzing", agent_loop.step_copy("en", "analyze_resume"))
-        self.assertIn("analiz", agent_loop.step_copy("tr", "analyze_resume"))
+        self.assertIn("Setting up", agent_loop.step_copy("en", "create_blank_resume"))
+        self.assertIn("hazırlanıyor", agent_loop.step_copy("tr", "create_blank_resume"))
 
     def test_unknown_tool_falls_back(self):
         from resume.services import agent_loop
@@ -802,14 +760,12 @@ class AgentTurnCopyTest(TestCase):
 
     def _turn(self, message):
         with patch(
-            "resume.services.agent_loop.send_openai_tool_turn",
-            return_value=(assistant("ok"), USAGE),
+            "resume.services.agent_loop.stream_openai_tool_turn",
+            side_effect=stream_turns(("ok", [])),
         ):
-            return self.client.post(
-                reverse("resume:agent_chat"),
-                json.dumps({"message": message}),
-                content_type="application/json",
-            ).json()
+            return post_stream(
+                self.client, reverse("resume:agent_chat_stream"), {"message": message}
+            )
 
     def test_turkish_message_returns_turkish_diff_copy(self):
         body = self._turn("CV'mi göster")
@@ -962,3 +918,27 @@ class UploadDoesNotClaimSuccessTest(TestCase):
             self.user, self.ctx, source="pdf"
         )
         self.assertEqual(result.ui[0]["type"], "request_upload")
+
+
+class CreateBlankResumeToolTest(TestCase):
+    """Starting from scratch makes a real resume the chat can fill in."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("ada", password="x")
+        self.ctx = {"lang": "tr", "active_resume": None, "resumes": [], "quota": {}}
+
+    def test_creates_an_empty_resume_and_makes_it_active(self):
+        result = agent_tools.get_tool("create_blank_resume").handler(self.user, self.ctx)
+        resume = Resume.objects.get(user=self.user)
+        self.assertEqual(result.data["resume_id"], resume.id)
+        self.assertEqual(self.ctx["active_resume"], resume)
+        self.assertEqual(resume.language, "tr")
+        self.assertEqual(result.ui[0]["type"], "preview")
+
+    def test_the_resume_limit_applies(self):
+        for i in range(3):
+            Resume.objects.create(user=self.user, title=f"CV {i}", content=content())
+        result = agent_tools.get_tool("create_blank_resume").handler(self.user, self.ctx)
+        self.assertIn("error", result.data)
+        self.assertEqual(Resume.objects.filter(user=self.user).count(), 3)
+
