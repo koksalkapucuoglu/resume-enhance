@@ -1,17 +1,23 @@
 # ResuStack — Architecture & Development Guide
 
 > This document is written for AI agents and new contributors. Read it before making any change.
+>
+> **Docs map:** `.claude/HANDOFF.md` (current state, owner's pending steps, what to build next) ·
+> `.claude/integrations/` (one file per external service: code, env vars, rules, setup) ·
+> `.claude/product/` (product analysis, pre-sales feature tree). No secrets in any of them — variable names only.
 
 ## Quick Facts
 
 | | |
 |---|---|
 | **App Name** | ResuStack (formerly resume-enhance) |
-| **Tech Stack** | Django 4.2, DRF 3.15, HTMX, TailwindCSS (CDN), Vanilla JS |
+| **Tech Stack** | Django 4.2, HTMX, TailwindCSS (CDN), Vanilla JS (DRF is installed only for `authtoken`, used by MCP) |
 | **Database** | PostgreSQL 15 |
 | **AI** | OpenAI `gpt-4o-mini` via `resume/openai_engine.py` (writes text); TypeSafe Jev via `resume/typesafe_engine.py` (typed judgments) |
 | **PDF Engine** | WeasyPrint (HTML/CSS → PDF) |
 | **Auth** | Django built-in auth + custom `SignupView`, `ProfileView` |
+| **Payments** | Paddle (merchant of record), one-time Pro periods — `integrations/payments.md` |
+| **Observability** | Sentry (errors only) + PostHog (content-free funnel events) — `core/observability.py`, `core/analytics.py` |
 | **Deployment** | Dokploy (Dockerfile build, Traefik); every push to `main` deploys |
 | **Main Purpose** | AI-powered resume builder: create manually or import from PDF, enhance with AI, export as PDF |
 
@@ -21,35 +27,34 @@
 
 ```
 resume-enhance/
-├── core/                   # Django project (settings, root URLs, auth views)
-│   ├── settings.py         # All config: DB, email, logging, template maps, OpenAI key
-│   ├── urls.py             # Root router: includes resume.urls + auth + api/v1/
-│   └── views.py            # SignupView, ProfileView (auth)
+├── .claude/                # CLAUDE.md, HANDOFF.md, integrations/*.md, product/*.md
+├── core/                   # Django project (settings, root URLs, auth + error views)
+│   ├── settings.py         # All config: DB, email, logging, limits, plans, integrations
+│   ├── urls.py             # Root router: resume.urls + /mcp + auth + allauth; handler400/403/404/500
+│   ├── views.py            # SignupView, ProfileView, verify_email, delete_account, error pages
+│   ├── observability.py    # Sentry init + scrubbing, report_degraded(), report_exception()
+│   └── analytics.py        # PostHog track() + the EVENTS contract
 │
 ├── resume/                 # Main application (all business logic lives here)
-│   ├── models.py           # Resume (JSONField content, template_selector), Feedback, UserProfile (quota system)
-│   ├── views.py            # All web views: dashboard, form editor, upload, AI enhance, preview, quota checks
+│   ├── models.py           # Resume, ResumeRevision, JobPosting, Evaluation, Feedback, UserProfile (usage()), Purchase
+│   ├── views.py            # Web views: dashboard, editor, import, enhance, preview, agent, evaluation, pricing, webhook
 │   ├── forms.py            # UserInfoForm, EducationForm, ExperienceForm, ProjectForm + custom fields
-│   ├── openai_engine.py    # All OpenAI calls: extract_resume_data, enhance_resume_experience, etc.
+│   ├── openai_engine.py    # All OpenAI calls
+│   ├── typesafe_engine.py  # All Jev calls (ask)
+│   ├── resume_templates.py # The 14-design catalogue
+│   ├── i18n.py             # UI strings, en + tr
 │   ├── urls.py             # resume app URL patterns (app_name='resume')
-│   ├── api_views.py        # DRF ViewSets: ResumeViewSet + submit_feedback
-│   ├── api_urls.py         # DRF router for /api/v1/
-│   ├── serializers.py      # DRF serializers: List, Detail, Create
-│   ├── services/
-│   │   └── pdf_service.py  # HtmlToPdfConverter, ResumePdfService, PdfGenerationError
-│   ├── templates/          # App-level templates (resume form, PDF templates, dashboard)
+│   ├── services/           # pdf, payment, agent (loop/tools/guard/service), import_check,
+│   │                       # evaluation, improvement, job_match, revision, diff, download_links
+│   ├── templates/          # editor, dashboards, pricing, legal pages, PDF layouts
 │   └── tests/
-│       └── test_pdf_service.py
 │
-├── templates/              # Global templates (auth: login, signup, profile, password reset)
-│   └── registration/
-│
-├── latex_renderer/         # LaTeX export (hidden/advanced feature, not in main flow)
-├── static/                 # Static assets (CSS, JS)
-├── Dockerfile              # Multi-stage build, non-root user
-├── docker-compose.yml      # Dev: web + db
-├── docker-compose.prod.yml # Legacy self-hosted path (prod runs on Dokploy)
-└── Caddyfile               # Legacy: used only by docker-compose.prod.yml
+├── mcp_server/             # Streamable-HTTP MCP endpoint (/mcp), tools, prompts
+├── templates/              # Global: auth pages, error.html, partials (analytics, legal footer)
+├── static/                 # Logo, landing screenshots
+├── Dockerfile              # Multi-stage build, non-root user, resume fonts
+├── entrypoint.sh           # migrate → collectstatic → gunicorn (prod and local)
+└── docker-compose.yml      # Local: web + db
 ```
 
 ---
@@ -234,7 +239,7 @@ Rules when touching templates:
 
 - **django-allauth is used only for Google.** ResuStack's own `login`, `SignupView` and password views keep their paths; `include("allauth.urls")` is the last entry in `core/urls.py` so ours answer first. Two authentication backends are configured, so any `login(request, user)` call must pass `backend=`.
 - **No matching on email.** `SOCIALACCOUNT_EMAIL_AUTHENTICATION` and `..._AUTO_CONNECT` stay `False`: local addresses were never verified, so matching on them enables account takeover. Google is linked to an existing account only from the Profile page (`process="connect"`). `SOCIALACCOUNT_AUTO_SIGNUP = False` forces `core.forms.GoogleSignupForm`, which asks for the transfer consent and locks the email to Google's; `core.adapters.SocialAccountAdapter` refuses unverified Google emails.
-- **Soft email verification** (`core/email_verification.py`): email sign-ups get `UserProfile.email_verification_required = True` and a signed, expiring link. While it is set, every AI entry point refuses with `_ai_locked_message` — enhance (HTML 403), imports (JSON 403), agent chat/approve (chat-shaped JSON, like the quota answer). A new AI entry point must check `_email_unverified(request)` first. Google and pre-existing accounts are never set.
+- **Soft email verification** (`core/email_verification.py`): email sign-ups get `UserProfile.email_verification_required = True` and a signed, expiring link. While it is set, every AI entry point refuses with `_ai_locked_message` (JSON 403; agent chat answers chat-shaped JSON, like the quota answer) — except the **first import** (`_email_unverified(request, allow_first_import=True)` when the account has no resume yet). A new AI entry point must check `_email_unverified(request)` first. Details: `integrations/google-auth.md`. Google and pre-existing accounts are never set.
 - The Google button renders only when `GOOGLE_LOGIN_ENABLED` (both credentials set); tests that render it must configure `SOCIALACCOUNT_PROVIDERS["google"]["APP"]`. Without credentials, `core.middleware.GoogleLoginAvailabilityMiddleware` answers 404 for `/accounts/google/...` — allauth otherwise raises `SocialApp.DoesNotExist`, a 500.
 - **One host.** `core.middleware.CanonicalHostMiddleware` redirects `www.` to the bare domain (301, 308 for non-GET). Absolute URLs follow the request host, so a sign-in started on www sent Google an unregistered callback (`redirect_uri_mismatch`). The only registered redirect URI is `https://resustackapp.com/accounts/google/login/callback/`.
 - allauth pages we keep are restyled in `templates/socialaccount/` on `_frame.html` (sign-up step, continue page, connections). Failed or cancelled Google sign-ins never show allauth's error page: `SocialAccountAdapter.on_authentication_error` redirects to login (or profile when signed in) with a message.
@@ -260,15 +265,6 @@ Rules when touching templates:
 - `applyTemplate()` writes the hidden input, mirrors the other picker and calls `schedulePreviewUpdate()`
 - Filter chips narrow the grid by family; thumbnails are drawn from each design's own tokens (`_template_thumb.html`)
 
-### 5. DRF Action-Based Permissions
-
-API views use `get_queryset` to filter by user + a custom `IsOwnerOrReadOnly` permission. Never expose data across users.
-
-```python
-def get_queryset(self):
-    return Resume.objects.filter(user=self.request.user).order_by('-updated_at')
-```
-
 ### 6. Quota Check Pattern (Subscription Tiers)
 
 Free users face monthly quotas; Pro users are unlimited. Check quota **before any DB writes**.
@@ -277,15 +273,13 @@ Free users face monthly quotas; Pro users are unlimited. Check quota **before an
 ```python
 # For non-AJAX (form submissions, direct redirects)
 @login_required
-def upload_cv(request):
+def duplicate_resume(request, pk):
     profile = request.user.profile
     if not profile.can_create_resume():
+        track(request.user, "quota_reached", allowance="resumes")
         messages.error(request, "Resume limit reached...")
         return redirect("resume:dashboard")  # Redirect if quota fails
-    # ... AI processing
     resume = Resume.objects.create(...)
-    profile.import_count += 1
-    profile.save()
 
 # For AJAX (fetch requests)
 def post(self, request):
@@ -301,6 +295,7 @@ def post(self, request):
 - Increment counter **after success** (don't count failed attempts).
 - Pro users bypass all checks via `profile.is_pro()`.
 - Quotas reset monthly via `reset_if_new_month()` in `UserProfile` model.
+- Every refusal records `track(user, "quota_reached", allowance=...)` — that event is the monetisation funnel. `_ai_credits_message()` does it for AI actions.
 
 ---
 
@@ -329,14 +324,11 @@ except Resume.DoesNotExist:
 
 ### OpenAI Error Handling
 
-`send_openai_message()` catches all OpenAI exceptions and **returns an error string** (never raises). Callers must check for `"OpenAI API"` or `"Error:"` prefix:
+`send_openai_message()` catches all OpenAI exceptions and **returns an error string** (never raises). Callers check for the `"OpenAI API"` / `"Error:"` prefix, answer **503 with a plain sentence** (never the provider's message), and call `report_degraded(...)`. Never write an error string into user content.
 
-```python
-if extracted_json_string.startswith("OpenAI API") or extracted_json_string.startswith("Error:"):
-    return JsonResponse({"error": f"AI Service Error: {extracted_json_string}"}, status=503)
-```
+### Status codes and reporting
 
-> ⚠️ **Known inconsistency:** `openai_engine.py` returns error strings instead of raising exceptions. This is a deliberate trade-off for simplicity, but future refactoring should raise typed exceptions instead.
+400 wrong request (bad JSON body is always 400 — use `_json_body(request)`) · 403 quota (`quota_exceeded: true`) or unverified email · 404 not yours · 422 unusable file · 502 unreadable AI answer · 503 a dependency is down (`_service_error_status(exc)`) · 500 only for real bugs. Error pages and the JSON shape for scripts live in `core/views.py`; the full table is in `integrations/sentry.md`.
 
 ---
 
@@ -384,34 +376,30 @@ The `Resume.content` field stores the full resume as structured JSON:
 
 ### UserProfile Model (Subscription Tiers)
 
-OneToOneField to User, auto-created via post_save signal. Stores tier (free/pro) + monthly quota counters.
+OneToOneField to User, auto-created via post_save signal. Stores tier, `premium_until` (bought period) and monthly counters.
 
 ```python
 profile = request.user.profile
-profile.is_pro()              # → True if tier='pro'
-profile.can_import()           # → True if pro OR import_count < limit
-profile.reset_if_new_month()   # Auto-resets counters if month changed
+profile.is_pro()              # tier == "pro" (staff grant) or premium_until in the future
+profile.has_ai_credit()       # = can_import = can_enhance = can_send_agent_message
+profile.usage()               # {"is_pro", "allowances": {ai_credits, downloads, resumes, job_copies}}
+profile.reset_if_new_month()  # Auto-resets monthly counters
 ```
 
-**Quota limits defined in `settings.FREE_TIER_LIMITS`:**
-- `import_count`: 2 (PDF/LinkedIn imports per month) — checked in `upload_cv()`, `upload_linkedin_cv()`
-- `enhance_count`: 10 (AI text enhancements per month) — checked in `enhance_experience()`, `enhance_project()`
-- `download_count`: 5 (PDF exports per month) — checked in `download_resume_pdf()`, `ResumeFormView.post(export_format='pdf')`
-- `resume_count`: 3 (total resumes, not monthly) — checked in `upload_cv()`, `upload_linkedin_cv()`, `duplicate_resume()`, `ResumeViewSet.create()` — **NOT checked in blank resume creation** (`ResumeFormView.post(pk=None, form_action='save_only')`)
+**`settings.FREE_TIER_LIMITS`** — four numbers, shown the same everywhere via `usage()`:
+- `ai_credits`: 30 / month — shared by PDF import (`import_count`), AI enhance and improvement drafts (`enhance_count`) and chat messages (`agent_message_count`). Each action keeps its own counter; the check is on the sum.
+- `download_count`: 5 / month — editor export, dashboard download, signed links.
+- `resume_count`: 3 base resumes in total — language versions and job copies do not count. **Not checked for blank resumes from the editor.**
+- `job_branch_count`: 3 job copies in total.
 
 ---
 
 ## Testing Strategy
 
-- **Framework:** `django.test.TestCase` (standard Django).
-- **Test location:** `resume/tests/` directory (not in `tests.py` root file).
-- **Current coverage:** Focused on `pdf_service.py` — unit tests for `HtmlToPdfConverter` and `ResumePdfService` with WeasyPrint mocked.
-- **Run tests:**
-  ```bash
-  python manage.py test resume
-  ```
-- **Mock external calls:** WeasyPrint and OpenAI must always be mocked in tests. Never make real API calls in tests.
-- **Gap:** OpenAI engine and views have no test coverage yet. New features should include tests.
+- **Framework:** `django.test.TestCase`; tests in `resume/tests/`, `mcp_server/tests/`.
+- **Run:** `docker compose exec web python manage.py test resume core mcp_server --parallel 4` (~600 tests, ~30 s).
+- **Mock external calls:** WeasyPrint, OpenAI, Jev, Paddle, PostHog. `TYPESAFE_API_KEY` and `POSTHOG_API_KEY` are blanked under `manage.py test`; Sentry only starts from `wsgi.py`.
+- New features include tests; a user-facing failure path asserts its status code and that it was reported.
 
 ---
 
@@ -509,32 +497,13 @@ def new_feature(request):
 
 ## External Integrations
 
-### OpenAI (`resume/openai_engine.py`)
+### OpenAI, TypeSafe, Google, email, MCP, Paddle, Sentry, PostHog
 
-- **Model:** `gpt-4o-mini` (cost-optimized; switched from `gpt-4o` for ~95% cost reduction).
-- **Timeout:** 90 seconds per request.
-- **JSON mode:** `is_json=True` enforces `response_format: json_object` for structured parsing.
-- **Deterministic output:** `temperature=0` for parsing, `temperature=0.7` for enhancement.
-- **Error pattern:** Returns error strings, not exceptions. Callers must check prefix.
+Each has its own file in `.claude/integrations/` with the code locations, env vars, rules and setup steps — read it before touching that integration. The rules most often needed:
 
-```python
-# Parsing PDF content — deterministic, JSON mode
-result = send_openai_message(user_message, meta_prompt, is_json=True, temperature=0, max_tokens=6000)
-
-# Enhancing text — creative, free-form
-result = send_openai_message(user_message, meta_prompt, temperature=0.7, max_tokens=1500)
-```
-
-### TypeSafe Jev (`resume/typesafe_engine.py`)
-
-- **Division of labour:** OpenAI generates text; Jev answers typed questions about text (`Noul` = probability of yes, `Choice` = one of a set, `Score` = position on ordered levels) with probabilities. A decision the product acts on, or a number shown to the user, should come from Jev; prose stays with OpenAI.
-- **`ask(state, questions, purpose=...)` never raises.** It returns `Answers` or `None` (no key, timeout, API error). Every caller must have a path for `None`: fall back, skip the check, or let the user through. Nothing may depend on Jev being up.
-- **Model is pinned** (`settings.TYPESAFE_MODEL`, e.g. `jev-1.13.0`, not `jev-latest`) so stored scores do not drift. Bump it only after `python manage.py jev_eval` before/after.
-- **`jev_eval`** runs labelled, synthetic cases against the real API (paid; never part of `manage.py test`). A feature that adds Jev judgments adds a suite to `SUITES` and uses it to choose thresholds.
-- **Tests:** `TYPESAFE_API_KEY` is blanked when `manage.py test` runs, so an unmocked call returns `None` instead of reaching the API. Mock `typesafe_engine.ask` (or `_get_client`).
-- **Logs:** the SDK logs request/response bodies at DEBUG; the `typesafe_sdk` logger is pinned to WARNING in `LOGGING`. `ask` logs purpose, counts, latency and tokens only.
-- One request handled 200 questions in <1s; `ask` splits batches above `MAX_QUESTIONS_PER_REQUEST`. Questions in one call are independent — use a second call only when an answer is needed to build the next question.
-- TypeSafe is a named processor in both privacy policies and in the sign-up consent text.
+- OpenAI writes text; Jev (`typesafe_engine.ask`, never raises, returns `None` when down) makes typed judgments and every number shown to the user. Model pinned in `TYPESAFE_MODEL`; `jev_eval` before bumping it.
+- Logs, Sentry events and analytics never carry user content.
+- A new processor of user data updates both privacy policies, the consent text and `PRIVACY_POLICY_VERSION`.
 
 ### Import check (`resume/services/import_check.py`)
 
@@ -614,27 +583,15 @@ Scope, on purpose: evaluate a resume against a posting, show strengths and gaps,
 | TailwindCSS via CDN | Zero build step; acceptable for MVP scale; move to PostCSS build if bundle size becomes an issue |
 | No async/Celery (yet) | Accepted synchronous timeout risk for MVP; deferred to Phase 4 roadmap |
 | Template selector persisted per resume | Users can switch templates and have the choice saved; preview/export/download all respect it |
-| In-house quota system, no payment yet | Decoupled quota logic from payment; easy to plug in LemonSqueezy/Paddle webhook later |
+| In-house quota system, payment by Paddle | Quota logic knows nothing about the provider; Paddle only grants `premium_until` through a signed webhook |
+| One AI-credit pool | Four limits a person can remember instead of six counters |
+| Paddle as merchant of record | Accepts an individual in Türkiye, handles VAT/KDV and invoices; see `integrations/payments.md` |
 | Per-view quota checks | Simple, explicit, no middleware magic. Each sensitive action independently validates before writing. |
 
 ---
 
-## API Design (DRF)
+## Integration surface
 
-- **Base path:** `/api/v1/`
-- **Auth:** Session authentication (same Django session cookie).
-- **Versioning:** Path-based (`/api/v1/`).
-- **Serializer strategy:** Different serializers per action (`List`, `Detail`, `Create`) to keep payloads lean.
-- **Permission:** `IsAuthenticated` + `IsOwnerOrReadOnly` (users only see their own resumes).
-
-```
-GET    /api/v1/resumes/          → list (owned by user)
-POST   /api/v1/resumes/          → create
-GET    /api/v1/resumes/{id}/     → retrieve
-PUT    /api/v1/resumes/{id}/     → full update
-PATCH  /api/v1/resumes/{id}/     → partial update
-DELETE /api/v1/resumes/{id}/     → destroy
-POST   /api/v1/resumes/{id}/duplicate/ → custom action
-```
+There is no REST API: it was removed in October 2026 (no client used it). Programmatic access is the MCP server only (`mcp_server/`, `integrations/mcp.md`), authenticated with `rest_framework.authtoken` tokens issued on the Profile page.
 
 Important: Run project with docker.

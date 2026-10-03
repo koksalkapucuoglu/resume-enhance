@@ -52,7 +52,7 @@ Weak / bugs found while testing:
   showed someone else's job-posting chat.
 - Guided builder (a fixed question state machine) runs alongside the agent:
   asking to "build from scratch" produced two assistant questions in a row.
-- 23 tools, several overlapping (`translate_resume` vs `create_translated_copy`,
+- 24 tools, several overlapping (`translate_resume` vs `create_translated_copy`,
   `find_resume`, `compare_resumes`, `analyze_resume` scoring with OpenAI while
   postings are scored with Jev).
 - New users land here by default with an empty list and an "Application Score"
