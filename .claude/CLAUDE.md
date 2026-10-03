@@ -548,6 +548,10 @@ Scope, on purpose: evaluate a resume against a posting, show strengths and gaps,
 
 ### Agent loop notes
 
+- **Buttons are not messages.** Agentic chips, empty-state buttons, card actions and template cards call `resume:agent_action` (`AGENT_DIRECT_ACTIONS`: list, limits, new blank resume, preview) or their own endpoints — no LLM turn, no AI credit. Only typed text goes to `agent_chat_stream`. A new button follows the same rule.
+- **PDF import streams.** `upload_cv` with `Accept: text/event-stream` answers SSE `progress {stage, progress}` frames read from the JSON the parser is writing (`IMPORT_STAGES`), then `done {…, http_status}`. Refusals stay plain JSON before the stream. Both screens use `static/js/import_progress.js`.
+- Entering agentic from the other mode adds `fresh=1` (chat history cleared); server notices render as bot messages (`FLASH_MESSAGES`).
+
 - **Paused turns:** when a destructive call stops for approval, the later tool calls of the same assistant turn are answered with `DEFERRED_RESULT` before parking. Every `tool_call_id` needs an answer or the resumed turn fails with OpenAI 400 ("tool_calls must be followed by tool messages").
 - **Superuser debug:** `_agent_context` sets `ctx["debug"] = []` for superusers; `agent_loop._trace` records model calls, guard verdicts (with Jev scores), tool errors and timings, and the done frame carries it to a collapsible block in their chat. Never logged server-side.
 - Agentic right panel: the revision history modal (`resume/_history_modal.html`, shared with the editor) opens from the active-resume bar or the preview header.

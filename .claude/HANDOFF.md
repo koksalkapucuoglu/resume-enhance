@@ -45,6 +45,14 @@ Every push to `main` deploys to production.
 - Agentic chat history is stored per account in the browser (a new account on
   a shared browser used to see the previous person's chat).
 
+- Agentic short-term fixes (2026-10-03): buttons run without the model (no
+  credit), upload goes straight to a file picker with a staged progress bar
+  (also on the start page), logo returns to the resume list, entering agentic
+  starts a fresh chat, notices show in chat, template switch needs no
+  approval, editor header is "← Dashboard / Ask AI", Edit opens in the same tab.
+  Admin: JobPosting and Evaluation registered; "Mark email as verified"; a
+  verified allauth EmailAddress lifts the AI lock.
+
 ## Waiting on the owner (accounts and secrets)
 
 | What | Steps | Doc |

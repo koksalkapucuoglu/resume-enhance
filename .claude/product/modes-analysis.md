@@ -63,7 +63,10 @@ an agentic user"; they think "I want to change this bullet" or "I want to ask".
 
 ## Recommendation
 
-**Short term (small, removes most confusion):**
+**Short term — done 2026-10-03** (items 1–6 below; plus: logo in agentic goes
+to the resume list, entering agentic starts a fresh chat, PDF import shows a
+staged progress bar in both modes, admin can mark an email verified and a
+verified allauth address lifts the AI lock):
 1. Quick chips, empty-state buttons, card actions and template cards call their
    endpoints directly — no LLM, no credit (list, limits, preview, switch
    template, upload picker, new blank resume). Keep the LLM for free text.

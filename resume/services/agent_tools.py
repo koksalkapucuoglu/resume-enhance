@@ -553,7 +553,7 @@ def modify_resume(user, ctx, instruction, resume_id=None):
         "resume_id": INT_OR_NULL,
         "template": {"type": "string", "enum": list(settings.TEMPLATE_SELECTOR_HTML_MAP)},
     },
-    destructive=True,
+    # Cosmetic and one click to change back: no "are you sure?".
 )
 def switch_template(user, ctx, template, resume_id=None):
     resume, error = _resume_or_error(user, resume_id, ctx)

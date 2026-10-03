@@ -699,17 +699,17 @@ class ApprovedEffectStreamTest(TestCase):
     def test_effects_are_emitted_before_the_continuation(self):
         from resume.services import agent_loop
 
+        # A destructive tool that produces an effect: delete (the template
+        # switch used here before no longer asks for approval).
         pause = (
-            assistant(tool_calls=[call("switch_template",
-                                       {"resume_id": self.resume.id,
-                                        "template": "modern-sidebar"})]),
+            assistant(tool_calls=[call("delete_resume", {"resume_id": self.resume.id})]),
             USAGE,
         )
         with patch("resume.services.agent_loop.send_openai_tool_turn", return_value=pause):
-            out = agent_loop.run_turn(self.user, self.ctx, [], "switch template")
+            out = agent_loop.run_turn(self.user, self.ctx, [], "delete it")
         parked = agent_loop.take_pending(self.user, out["token"])
 
-        after = [("message", {"content": "Switched.", "tool_calls": []}, USAGE)]
+        after = [("message", {"content": "Deleted.", "tool_calls": []}, USAGE)]
         remaining = [after]
 
         def fake(messages, tools, **kwargs):
@@ -723,8 +723,7 @@ class ApprovedEffectStreamTest(TestCase):
         kinds = [e[0] for e in events]
         self.assertIn("effect", kinds)
         self.assertLess(kinds.index("effect"), kinds.index("done"))
-        self.resume.refresh_from_db()
-        self.assertEqual(self.resume.template_selector, "modern-sidebar")
+        self.assertFalse(Resume.objects.filter(pk=self.resume.pk).exists())
 
     def test_a_declined_call_emits_no_effect(self):
         from resume.services import agent_loop

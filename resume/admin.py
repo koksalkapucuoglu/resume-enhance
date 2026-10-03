@@ -2,7 +2,9 @@ from django.contrib import admin
 from django.utils import timezone
 
 from .models import (
+    Evaluation,
     Feedback,
+    JobPosting,
     Purchase,
     Resume,
     ResumeRevision,
@@ -80,6 +82,7 @@ class UserProfileAdmin(admin.ModelAdmin):
         "tier",
         "pro_status",
         "premium_until",
+        "email_verification_required",
         "ui_mode",
         "ui_language",
         "import_count",
@@ -90,8 +93,20 @@ class UserProfileAdmin(admin.ModelAdmin):
     )
     list_editable = ("tier", "premium_until")
     search_fields = ("user__username", "user__email")
-    list_filter = ("tier", "ui_mode", "ui_language", "quota_reset_date")
-    actions = ("grant_90_days", "grant_365_days", "revoke_premium", "reset_quotas")
+    list_filter = ("tier", "email_verification_required", "ui_mode", "ui_language", "quota_reset_date")
+    readonly_fields = ("privacy_consent_at", "privacy_consent_version")
+    actions = (
+        "grant_90_days",
+        "grant_365_days",
+        "revoke_premium",
+        "reset_quotas",
+        "mark_email_verified",
+    )
+
+    @admin.action(description="Mark email as verified (unlocks AI features)")
+    def mark_email_verified(self, request, queryset):
+        updated = queryset.update(email_verification_required=False)
+        self.message_user(request, f"Marked {updated} account(s) as verified.")
 
     @admin.display(boolean=True, description="Pro now")
     def pro_status(self, obj):
@@ -120,3 +135,19 @@ class UserProfileAdmin(admin.ModelAdmin):
             import_count=0, enhance_count=0, download_count=0, agent_message_count=0
         )
         self.message_user(request, f"Reset quotas for {updated} account(s).")
+
+
+@admin.register(JobPosting)
+class JobPostingAdmin(admin.ModelAdmin):
+    list_display = ("id", "user", "title", "company", "created_at")
+    search_fields = ("user__username", "title", "company")
+    raw_id_fields = ("user",)
+    readonly_fields = ("fingerprint", "requirements", "created_at")
+
+
+@admin.register(Evaluation)
+class EvaluationAdmin(admin.ModelAdmin):
+    list_display = ("id", "resume", "posting", "score", "scorer", "created_at")
+    search_fields = ("resume__title", "resume__user__username", "posting__title")
+    raw_id_fields = ("resume", "posting")
+    readonly_fields = tuple(f.name for f in Evaluation._meta.fields)

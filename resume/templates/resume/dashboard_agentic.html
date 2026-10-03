@@ -69,7 +69,7 @@
 
     <!-- Header -->
     <header class="flex items-center justify-between whitespace-nowrap border-b border-slate-200 bg-white px-4 md:px-8 py-3 z-10 flex-shrink-0">
-        <a href="{% url 'resume:dashboard' %}" class="flex items-center gap-3" title="{{ UI.dashboard }}">
+        <a href="{% url 'resume:dashboard' %}" onclick="goHome(event)" class="flex items-center gap-3" title="{{ UI.dashboard }}">
             <img src="{% static 'img/resustack_logo.png' %}" alt="ResuStack Logo" class="h-7 w-auto object-contain"/>
             <h2 class="text-slate-900 text-xl font-bold tracking-tight hidden sm:block">ResuStack</h2>
         </a>
@@ -192,23 +192,23 @@
                         class="px-3 py-1.5 rounded-full bg-primary/10 hover:bg-primary/20 text-xs font-semibold text-primary transition-colors flex items-center gap-1 flex-shrink-0">
                     <span class="material-symbols-outlined !text-[14px]">fact_check</span>{{ UI.quick_evaluate }}
                 </button>
-                <button onclick="sendQuickAction('list_resumes')"
+                <button onclick="runDirectAction('list_resumes')"
                         class="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition-colors flex items-center gap-1 flex-shrink-0">
                     <span class="material-symbols-outlined !text-[14px]">list</span>{{ UI.quick_list }}
                 </button>
-                <button onclick="sendQuickAction('check_quota')"
+                <button onclick="runDirectAction('check_quota')"
                         class="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition-colors flex items-center gap-1 flex-shrink-0">
                     <span class="material-symbols-outlined !text-[14px]">speed</span>{{ UI.quick_limits }}
                 </button>
-                <button onclick="sendQuickAction('create_blank_resume')"
+                <button onclick="startNewResume()"
                         class="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition-colors flex items-center gap-1 flex-shrink-0">
                     <span class="material-symbols-outlined !text-[14px]">add</span>{{ UI.quick_new }}
                 </button>
-                <button onclick="sendQuickAction('upload_resume')"
+                <button onclick="startUpload()"
                         class="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition-colors flex items-center gap-1 flex-shrink-0">
                     <span class="material-symbols-outlined !text-[14px]">upload_file</span>{{ UI.quick_upload }}
                 </button>
-                <button onclick="sendQuickAction('help')"
+                <button onclick="showHelp()"
                         class="px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 text-xs font-medium text-slate-600 transition-colors flex items-center gap-1 flex-shrink-0">
                     <span class="material-symbols-outlined !text-[14px]">help</span>{{ UI.quick_help }}
                 </button>
@@ -262,11 +262,11 @@
                 <h3 class="text-slate-700 font-semibold mb-2">{{ UI.context_empty_title }}</h3>
                 <p class="text-slate-400 text-sm max-w-xs mb-5">{{ UI.context_empty_hint }}</p>
                 <div class="flex flex-col gap-2 w-full max-w-[220px]">
-                    <button onclick="sendQuickAction('{{ UI.context_empty_create|escapejs }}')"
+                    <button onclick="startNewResume()"
                             class="px-4 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary-hover transition-colors">
                         {{ UI.context_empty_create }}
                     </button>
-                    <button onclick="sendQuickAction('{{ UI.context_empty_upload|escapejs }}')"
+                    <button onclick="startUpload()"
                             class="px-4 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors">
                         {{ UI.context_empty_upload }}
                     </button>
@@ -329,7 +329,7 @@
                                 class="p-1.5 rounded-md text-slate-400 hover:text-primary hover:bg-primary/10 transition-colors" title="{{ UI.history_title }}">
                             <span class="material-symbols-outlined !text-[16px]">history</span>
                         </button>
-                        <a id="preview-edit-btn" href="#" target="_blank"
+                        <a id="preview-edit-btn" href="#"
                            class="p-1.5 rounded-md text-slate-400 hover:text-primary hover:bg-primary/10 transition-colors" title="Edit">
                             <span class="material-symbols-outlined !text-[16px]">edit</span>
                         </a>
@@ -478,6 +478,8 @@ const STREAM_LABELS = {
   interrupted: `{{ UI.stream_interrupted|escapejs }}`,
 };
 const UPLOAD_LABELS = {
+  ask:       `{{ UI.upload_ask|escapejs }}`,
+  review:    `{{ UI.upload_review|escapejs }}`,
   choose:    `{{ UI.upload_choose|escapejs }}`,
   uploading: `{{ UI.upload_uploading|escapejs }}`,
   done:      `{{ UI.upload_done|escapejs }}`,
@@ -485,6 +487,22 @@ const UPLOAD_LABELS = {
   flagged:   `{{ UI.upload_flagged|escapejs }}`,
 };
 const INITIAL_RESUME = {{ initial_resume|default:"null"|safe }};
+const AGENT_COPY = {
+  newAsk: `{{ UI.new_resume_ask|escapejs }}`,
+  newChat: `{{ UI.new_resume_chat|escapejs }}`,
+  newForm: `{{ UI.new_resume_form|escapejs }}`,
+  newChatHint: `{{ UI.new_resume_chat_hint|escapejs }}`,
+  help: `{{ UI.agent_help|escapejs }}`,
+  home: `{{ UI.agent_home|escapejs }}`,
+  seePlans: `{{ UI.see_plans|escapejs }}`,
+};
+// Notices from the server ("verification email sent", "deleted") are shown as
+// assistant messages: this page has no banner area, and they used to wait
+// unseen until the next visit to the standard dashboard.
+const FLASH_MESSAGES = [{% for message in messages %}{text: "{{ message|escapejs }}", level: "{{ message.tags|escapejs }}"},{% endfor %}];
+const DIRECT_ACTION_URL = '{% url "resume:agent_action" %}';
+const UPLOAD_URL = '{% url "resume:upload_cv" %}';
+const EDITOR_URL = '{% url "resume:resume_form" %}';
 const OWNED_RESUME_IDS = new Set({{ owned_resume_ids|default:"[]"|safe }});
 const HAS_RESUMES = {{ has_resumes|yesno:"true,false" }};
 
@@ -544,6 +562,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Coming in from the other mode starts a fresh conversation.
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('fresh')) {
+        try { localStorage.removeItem(LS_CHAT); } catch (e) {}
+        params.delete('fresh');
+        const query = params.toString();
+        history.replaceState(null, '', window.location.pathname + (query ? `?${query}` : ''));
+    }
+
     // Restore chat history from localStorage
     try {
         const storedChat = JSON.parse(localStorage.getItem(LS_CHAT));
@@ -555,6 +582,8 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
     } catch(e) { localStorage.removeItem(LS_CHAT); }
+
+    FLASH_MESSAGES.forEach(m => appendMessage('bot', m.text, m.level === 'error'));
 
     document.getElementById('chat-input').focus();
 
@@ -902,18 +931,6 @@ async function sendMessage(text) {
     isSending = false;
     setSendDisabled(false);
     input.focus();
-}
-
-const quickActionLabels = {
-    list_resumes: '{{ UI.quick_list }} resumes',
-    check_quota: '{{ UI.quick_limits }}',
-    create_blank_resume: '{{ UI.quick_new }}',
-    upload_resume: '{{ UI.quick_upload }}',
-    help: '{{ UI.quick_help }}',
-};
-
-function sendQuickAction(intentLabel) {
-    sendMessage(quickActionLabels[intentLabel] || intentLabel);
 }
 
 // History modal hooks (resume/_history_modal.html)
@@ -1908,7 +1925,8 @@ function renderQuickChips(chips) {
         button.type = 'button';
         button.className = 'px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors';
         button.textContent = label;
-        button.addEventListener('click', () => sendMessage(message));
+        const direct = directReplyHandler(label);
+        button.addEventListener('click', direct || (() => sendMessage(message)));
         div.appendChild(button);
     });
     container.appendChild(div);
@@ -1996,7 +2014,7 @@ function renderResumeListPanel(resumes) {
                 <p class="text-xs text-slate-400">ID ${r.id} &middot; ${r.updated_at}</p>
             </div>
             <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onclick="event.stopPropagation(); sendMessage('Preview resume ${r.id}')"
+                <button onclick="event.stopPropagation(); selectResumeFromCard(this.closest('[data-resume-id]'))"
                         class="p-1 rounded text-slate-400 hover:text-primary" title="Preview">
                     <span class="material-symbols-outlined !text-[14px]">preview</span>
                 </button>
@@ -2005,7 +2023,7 @@ function renderResumeListPanel(resumes) {
                    class="p-1 rounded text-slate-400 hover:text-primary" title="Download">
                     <span class="material-symbols-outlined !text-[14px]">download</span>
                 </a>
-                <a href="/form/${r.id}/" onclick="event.stopPropagation()" target="_blank"
+                <a href="/form/${r.id}/" onclick="event.stopPropagation()"
                    class="p-1 rounded text-slate-400 hover:text-primary" title="Edit">
                     <span class="material-symbols-outlined !text-[14px]">edit</span>
                 </a>
@@ -2236,36 +2254,158 @@ function renderUploadPrompt(data) {
 async function uploadResumeFile(input, button, data) {
     const file = input.files && input.files[0];
     if (!file) return;
-    button.disabled = true;
-    button.textContent = UPLOAD_LABELS.uploading;
+    button.closest('div').remove();
     appendMessage('user', file.name);
-    showTyping();
+    const holder = document.createElement('div');
+    holder.className = 'ml-9 mt-1.5 max-w-md';
+    document.getElementById('chat-messages').appendChild(holder);
+    scrollToBottom();
 
-    const form = new FormData();
-    form.append('cv_file', file);
-    try {
-        const resp = await fetch(data.upload_url, {
-            method: 'POST',
-            headers: {'X-CSRFToken': CSRF_TOKEN, 'X-Requested-With': 'XMLHttpRequest'},
-            body: form,
-        });
-        const body = await resp.json();
-        hideTyping();
-        button.remove();
-        if (!resp.ok || body.error) {
-            appendMessage('bot', body.error || UPLOAD_LABELS.failed, true);
-            return;
-        }
-        appendMessage('bot', UPLOAD_LABELS.done);
-        const flagged = body.review && body.review.flagged;
-        if (flagged) appendMessage('bot', UPLOAD_LABELS.flagged.replace('{n}', flagged));
-        setActiveResume(body.resume_id, null);
-        loadPreviewPanel(body.resume_id, null);
-    } catch (e) {
-        hideTyping();
-        button.disabled = false;
-        appendMessage('bot', UPLOAD_LABELS.failed, true);
+    const result = await ResuImport.run(file, {
+        url: data.upload_url || UPLOAD_URL,
+        csrf: CSRF_TOKEN,
+        labels: JSON.parse(document.getElementById('import-labels').textContent),
+        mount: (card) => { holder.appendChild(card); scrollToBottom(); },
+    });
+    if (!result.ok) {
+        const error = (result.data && result.data.error) || UPLOAD_LABELS.failed;
+        appendMessage('bot', error, true);
+        if (result.data && result.data.quota_exceeded) renderPlansLink();
+        return;
     }
+    const body = result.data;
+    OWNED_RESUME_IDS.add(Number(body.resume_id));
+    appendMessage('bot', UPLOAD_LABELS.done);
+    const flagged = body.review && body.review.flagged;
+    if (flagged) {
+        appendMessage('bot', UPLOAD_LABELS.flagged.replace('{n}', flagged));
+        renderLinkChip(UPLOAD_LABELS.review, body.editor_url || `/form/${body.resume_id}/`);
+    }
+    setActiveResume(body.resume_id, body.resume_name || null);
+    loadPreviewPanel(body.resume_id, body.resume_name || null);
+}
+
+// ---------------------------------------------------------------------------
+// Direct actions: buttons that need no model (no AI credit, no misreading)
+// ---------------------------------------------------------------------------
+async function runDirectAction(action, resumeId) {
+    removeAllChips();
+    const body = {action};
+    if (resumeId) body.resume_id = resumeId;
+    try {
+        const resp = await fetch(DIRECT_ACTION_URL, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN},
+            body: JSON.stringify(body),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+            appendMessage('bot', data.error || 'Something went wrong.', true);
+            if (data.quota_exceeded) renderPlansLink();
+            return null;
+        }
+        (data.effects || []).forEach(effect => handleResponse(effect));
+        return data;
+    } catch (e) {
+        appendMessage('bot', 'Error connecting to assistant. Please try again.', true);
+        return null;
+    }
+}
+
+function startUpload() {
+    removeAllChips();
+    appendMessage('bot', UPLOAD_LABELS.ask);
+    renderUploadPrompt({upload_url: UPLOAD_URL});
+    // Straight to the file picker: the card stays for a second try.
+    const inputs = document.querySelectorAll('#chat-messages input[type=file]');
+    if (inputs.length) inputs[inputs.length - 1].click();
+}
+
+function startNewResume() {
+    removeAllChips();
+    appendMessage('bot', AGENT_COPY.newAsk);
+    const container = document.getElementById('chat-messages');
+    const div = document.createElement('div');
+    div.className = 'ml-9 mt-1.5 flex flex-wrap gap-2';
+    const chat = document.createElement('button');
+    chat.type = 'button';
+    chat.className = 'px-4 py-2 rounded-xl border-2 border-primary text-primary font-semibold text-sm hover:bg-primary hover:text-white transition-all';
+    chat.textContent = AGENT_COPY.newChat;
+    chat.addEventListener('click', async () => {
+        div.remove();
+        const data = await runDirectAction('create_blank_resume');
+        if (data && data.data && data.data.resume_id) {
+            OWNED_RESUME_IDS.add(Number(data.data.resume_id));
+            appendMessage('bot', AGENT_COPY.newChatHint);
+            document.getElementById('chat-input').focus();
+        }
+    });
+    const form = document.createElement('a');
+    form.href = EDITOR_URL;
+    form.className = 'px-4 py-2 rounded-xl border-2 border-slate-200 text-slate-700 font-semibold text-sm hover:bg-slate-50 transition-all';
+    form.textContent = AGENT_COPY.newForm;
+    div.append(chat, form);
+    container.appendChild(div);
+    scrollToBottom();
+}
+
+function showHelp() {
+    removeAllChips();
+    appendMessage('bot', AGENT_COPY.help);
+}
+
+function goHome(event) {
+    if (event) event.preventDefault();
+    clearActiveResume();
+    if (HAS_RESUMES || OWNED_RESUME_IDS.size) {
+        runDirectAction('list_resumes');
+    } else {
+        showContextDefault();
+        appendMessage('bot', AGENT_COPY.home);
+    }
+}
+
+function applyTemplateFromChat(key) {
+    if (!activeResumeId) return;
+    saveAgentAppearance({template: key});
+    const radio = document.querySelector(`[data-picker="agent"] input[value="${key}"]`);
+    if (radio) radio.checked = true;
+}
+
+function renderLinkChip(label, href) {
+    const container = document.getElementById('chat-messages');
+    const div = document.createElement('div');
+    div.className = 'flex flex-wrap gap-1.5 ml-9 mt-1.5';
+    const link = document.createElement('a');
+    link.href = href;
+    link.className = 'px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors';
+    link.textContent = label;
+    div.appendChild(link);
+    container.appendChild(div);
+    scrollToBottom();
+}
+
+function renderPlansLink() {
+    renderLinkChip(AGENT_COPY.seePlans, '{% url "resume:pricing" %}');
+}
+
+// Suggested replies that are really buttons run directly; the rest are
+// messages for the assistant.
+function directReplyHandler(label) {
+    const text = (label || '').toLowerCase();
+    if (activeResumeId && (text === 'download pdf' || text === 'pdf indir')) {
+        return () => { window.location.href = `/resume/${activeResumeId}/download/`; };
+    }
+    if (activeResumeId && (text === 'edit in form' || text === 'formda düzenle')) {
+        return () => { window.location.href = `/form/${activeResumeId}/`; };
+    }
+    if (activeResumeId && (text === 'preview changes' || text === 'değişiklikleri önizle')) {
+        return () => refreshPreview();
+    }
+    if (text === 'score against a job posting' || text === 'ilana göre puanla') {
+        return () => openEvaluateModal();
+    }
+    return null;
 }
 
 function showConfirmPanel(data) {
@@ -2323,7 +2463,7 @@ function renderTemplatePicker(templates) {
         </div>
         <div class="flex gap-3 max-w-[85%]">
             ${templates.map(t => `
-                <button onclick="sendMessage('Switch to ${t.key}')"
+                <button onclick="applyTemplateFromChat('${t.key}')"
                         class="flex flex-col items-center p-3 rounded-xl border-2 border-slate-200 hover:border-primary hover:bg-primary/5 transition-all w-36">
                     <div class="w-full h-16 rounded-lg bg-slate-100 mb-2 flex items-center justify-center overflow-hidden">
                         ${t.key === 'modern-sidebar' ?
@@ -2566,5 +2706,7 @@ function escHtml(str) {
     </div>
 </div>
 {% include "resume/_history_modal.html" %}
+{{ UI.import_progress|json_script:"import-labels" }}
+<script src="{% static 'js/import_progress.js' %}"></script>
 </body>
 </html>

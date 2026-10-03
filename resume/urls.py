@@ -89,6 +89,7 @@ urlpatterns = [
     ),
     path("resume/<int:pk>/promote/", views.promote_job_branch, name="promote_job_branch"),
     path("agent/chat/stream/", views.agent_chat_stream, name="agent_chat_stream"),
+    path("agent/action/", views.agent_action, name="agent_action"),
     path(
         "agent/approve/stream/",
         views.agent_approve_stream,

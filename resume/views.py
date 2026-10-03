@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+import time
 from datetime import date, datetime
 
 from django.conf import settings
@@ -1276,20 +1277,24 @@ def _parse_model_json(raw):
     return json.loads(raw.strip())
 
 
-@login_required
-@require_http_methods(["POST"])
-def upload_cv(request):
-    """
-    Import a PDF — a CV or a LinkedIn profile export, told apart by its text.
+# Where the parser has got to, read from the JSON it is writing. Keys arrive in
+# the order the prompt lists them; each one moves the bar to at least `floor`.
+IMPORT_STAGES = (
+    ("user_info", "contact", 12),
+    ("skills", "skills", 22),
+    ("experience", "experience", 30),
+    ("education", "education", 66),
+    ("projects_and_publications", "projects", 78),
+)
 
-    One entry point because the person only knows "I have a PDF". Answers JSON
-    in every case; nothing here should reach the user as a 500 page.
-    """
+
+def _import_precheck(request):
+    """Everything that can refuse an import before any AI call: (error, file)."""
     if _email_unverified(request, allow_first_import=True):
         return JsonResponse(
             {"error": _ai_locked_message(request), "email_verification_required": True},
             status=403,
-        )
+        ), None
     profile = request.user.profile
     if not profile.can_create_resume():
         track(request.user, "quota_reached", allowance="resumes")
@@ -1299,110 +1304,172 @@ def upload_cv(request):
                 "quota_exceeded": True,
             },
             status=403,
-        )
+        ), None
     if not profile.can_import():
         return JsonResponse(
             {"error": _ai_credits_message(request), "quota_exceeded": True}, status=403
-        )
+        ), None
 
     # "linkedin_file" is what the old LinkedIn form posted.
     cv_file = request.FILES.get("cv_file") or request.FILES.get("linkedin_file")
     if not cv_file:
-        return JsonResponse({"error": "No file uploaded."}, status=400)
+        return JsonResponse({"error": "No file uploaded."}, status=400), None
     if not cv_file.name.lower().endswith(".pdf"):
-        return JsonResponse({"error": "Only PDF files are allowed."}, status=400)
+        return JsonResponse({"error": "Only PDF files are allowed."}, status=400), None
     if cv_file.size > 5 * 1024 * 1024:
-        return JsonResponse({"error": "File too large. Maximum size is 5MB."}, status=400)
+        return JsonResponse({"error": "File too large. Maximum size is 5MB."}, status=400), None
     logger.info("CV file uploaded: %d bytes", cv_file.size)
+    return None, cv_file
 
+
+def _read_pdf_text(cv_file):
+    """The PDF's text, or an error response for a file we cannot use."""
     try:
         reader = PdfReader(cv_file)
-        extracted_text = " ".join((page.extract_text() or "") for page in reader.pages)
+        text = " ".join((page.extract_text() or "") for page in reader.pages)
     except Exception as exc:  # pypdf raises several unrelated types for a bad file
         logger.info("Unreadable PDF upload: %s", type(exc).__name__)
-        return JsonResponse(
+        return None, JsonResponse(
             {"error": "This file could not be read as a PDF. Try exporting it again."},
             status=422,
         )
-    if len(extracted_text.strip()) < 50:
-        return JsonResponse(
+    if len(text.strip()) < 50:
+        return None, JsonResponse(
             {
                 "error": "Could not extract enough text from this PDF. Please ensure it contains readable text (not a scanned image)."
             },
             status=422,
         )
-
-    linkedin = _looks_like_linkedin_export(extracted_text)
-    extract = extract_linkedin_resume_data if linkedin else extract_resume_data
-    start_time = datetime.now()
-    raw = extract(extracted_text)
-    logger.info("Import extraction took %s (linkedin=%s)", datetime.now() - start_time, linkedin)
-
-    if raw.startswith("OpenAI API") or raw.startswith("Error:"):
-        report_degraded("import_ai_unavailable", error=raw.split(":", 1)[0])
-        return JsonResponse(
-            {"error": "The AI service is not answering right now. Please try again in a minute."},
-            status=503,
-        )
-    try:
-        extracted_json = _parse_model_json(raw)
-    except (ValueError, IndexError):
-        report_degraded("import_unparseable_output", linkedin=linkedin)
-        return JsonResponse(
-            {"error": "We could not read the AI's answer for this file. Please try again."},
-            status=502,
-        )
-    if not isinstance(extracted_json, dict):
-        report_degraded("import_unparseable_output", linkedin=linkedin)
-        return JsonResponse(
-            {"error": "We could not read the AI's answer for this file. Please try again."},
-            status=502,
-        )
-    if extracted_json.get("parse_error"):
-        return JsonResponse(
-            {"error": extracted_json.get("message", "Could not extract resume data.")},
-            status=422,
-        )
-    return _save_import(
-        request, extracted_json, extracted_text, prefix="LinkedIn" if linkedin else ""
-    )
+    return text, None
 
 
-def _save_import(request, extracted_json, extracted_text, prefix=""):
+def _finish_import(request, raw, extracted_text, linkedin):
     """
-    Store an AI import once it has been held to our shape and checked against
-    the file it came from (services/import_check.py), then count it.
+    Turn the parser's answer into a stored resume: (payload, status).
+
+    Shared by the plain and the streaming import so both store, count and
+    report exactly the same way.
     """
     from resume.services import import_check
 
-    content, review = import_check.run(extracted_json, extracted_text)
+    if raw.startswith("OpenAI API") or raw.startswith("Error:"):
+        report_degraded("import_ai_unavailable", error=raw.split(":", 1)[0])
+        return {"error": "The AI service is not answering right now. Please try again in a minute."}, 503
+    try:
+        extracted = _parse_model_json(raw)
+    except (ValueError, IndexError):
+        extracted = None
+    if not isinstance(extracted, dict):
+        report_degraded("import_unparseable_output", linkedin=linkedin)
+        return {"error": "We could not read the AI's answer for this file. Please try again."}, 502
+    if extracted.get("parse_error"):
+        return {"error": extracted.get("message", "Could not extract resume data.")}, 422
+
+    content, review = import_check.run(extracted, extracted_text)
     resume = Resume.objects.create(
         user=request.user,
-        title=_auto_title_from_content(content, prefix=prefix),
+        title=_auto_title_from_content(content, prefix="LinkedIn" if linkedin else ""),
         content=content,
-        language=Resume.normalize_language(extracted_json.get("language")),
+        language=Resume.normalize_language(extracted.get("language")),
         import_review=review,
     )
-
-    # QUOTA: Increment import counter
     profile = request.user.profile
     profile.import_count += 1
     profile.save()
     track(
         request.user,
         "resume_imported",
-        linkedin=prefix == "LinkedIn",
+        linkedin=linkedin,
         flagged=len((review or {}).get("flags") or []),
     )
+    return {
+        "status": "success",
+        "resume_id": resume.pk,
+        "resume_name": resume.display_name,
+        "editor_url": reverse("resume:resume_form_edit", args=[resume.pk]),
+        "review": import_check.summary(review),
+    }, 200
 
-    # Return resume ID for frontend redirect (AJAX-friendly)
-    return JsonResponse(
-        {
-            "status": "success",
-            "resume_id": resume.pk,
-            "review": import_check.summary(review),
-        }
-    )
+
+@login_required
+@require_http_methods(["POST"])
+def upload_cv(request):
+    """
+    Import a PDF — a CV or a LinkedIn profile export, told apart by its text.
+
+    One entry point because the person only knows "I have a PDF". A client
+    that sends `Accept: text/event-stream` gets the import as it happens —
+    which section the parser is on and how far along it is — and then the
+    same result as the plain JSON answer. Nothing here reaches the user as a
+    500 page.
+    """
+    refused, cv_file = _import_precheck(request)
+    if refused:
+        return refused
+    text, refused = _read_pdf_text(cv_file)
+    if refused:
+        return refused
+    linkedin = _looks_like_linkedin_export(text)
+
+    if "text/event-stream" in request.headers.get("Accept", ""):
+        return _sse_response(_stream_import(request, text, linkedin))
+
+    started = datetime.now()
+    extract = extract_linkedin_resume_data if linkedin else extract_resume_data
+    raw = extract(text)
+    logger.info("Import extraction took %s (linkedin=%s)", datetime.now() - started, linkedin)
+    payload, status = _finish_import(request, raw, text, linkedin)
+    return JsonResponse(payload, status=status)
+
+
+def _stream_import(request, text, linkedin):
+    """SSE frames for one import: progress frames, then one done frame."""
+    from resume.openai_engine import stream_extraction
+
+    yield _sse("progress", {"stage": "reading", "progress": 5, "linkedin": linkedin})
+    # Rough size of the answer, so the bar moves with the text being written
+    # rather than sitting on a stage. The parser writes about as much as it reads.
+    expected = max(2500, int(len(text) * 1.1))
+    written, progress, stage = 0, 5, "reading"
+    seen = ""
+    last_sent = time.monotonic()
+    raw = None
+    started = datetime.now()
+    try:
+        for kind, value in stream_extraction(text, linkedin):
+            if kind == "error":
+                raw = value
+                break
+            if kind == "done":
+                raw = value
+                break
+            written += len(value)
+            seen = (seen + value)[-200:]
+            floor = 0
+            for index, (key, name, stage_floor) in enumerate(IMPORT_STAGES):
+                if index > _stage_index(stage) and f'"{key}"' in seen:
+                    stage, floor = name, stage_floor
+            new_progress = max(progress, floor, min(88, 8 + int(80 * written / expected)))
+            now = time.monotonic()
+            if new_progress != progress or now - last_sent > 1.5:
+                progress = new_progress
+                last_sent = now
+                yield _sse("progress", {"stage": stage, "progress": progress})
+    except Exception as exc:  # noqa: BLE001 — the stream must end with a frame
+        report_exception(exc, flow="import_stream")
+        raw = "Error: stream failed"
+    logger.info("Import extraction took %s (linkedin=%s, streamed)", datetime.now() - started, linkedin)
+
+    yield _sse("progress", {"stage": "checking", "progress": 92})
+    payload, status = _finish_import(request, raw or "Error: no answer", text, linkedin)
+    if status == 200:
+        yield _sse("progress", {"stage": "saved", "progress": 100})
+    yield _sse("done", {**payload, "http_status": status})
+
+
+def _stage_index(stage):
+    names = [name for _, name, _ in IMPORT_STAGES]
+    return names.index(stage) if stage in names else -1
 
 
 @require_http_methods(["GET"])
@@ -1903,6 +1970,48 @@ def agent_chat_stream(request):
             events, active_resume_id, message, ctx["lang"], on_done=charge
         )
     )
+
+
+# Buttons in the agentic dashboard that need no judgement: they run the tool
+# directly instead of asking the model, so a click costs no AI credit and
+# cannot be misread. Free text still goes through the chat.
+AGENT_DIRECT_ACTIONS = {"list_resumes", "check_quota", "create_blank_resume", "preview_resume"}
+
+
+@login_required
+@require_http_methods(["POST"])
+def agent_action(request):
+    """
+    Run one agent tool without the model. POST {action, resume_id?}.
+    Returns {"effects": [...]}, the same effects a chat turn would render.
+    """
+    from resume.services import agent_tools
+
+    limited = _agent_rate_limited(request)
+    if limited:
+        return limited
+    data = _json_body(request)
+    if data is None:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    action = data.get("action")
+    if action not in AGENT_DIRECT_ACTIONS:
+        return JsonResponse({"error": "Unknown action."}, status=400)
+
+    resume_id = data.get("resume_id")
+    active_resume = (
+        Resume.objects.filter(pk=resume_id, user=request.user).first() if resume_id else None
+    )
+    if resume_id and active_resume is None:
+        return JsonResponse({"error": "Not found."}, status=404)
+    ctx = _agent_context(request, active_resume)
+    tool = agent_tools.get_tool(action)
+    kwargs = {"resume_id": active_resume.pk} if action == "preview_resume" and active_resume else {}
+    result = tool.handler(request.user, ctx, **kwargs)
+    if not result.ui and result.data.get("error"):
+        # The only refusal a direct action has is the resume limit.
+        status = 403 if action == "create_blank_resume" else 400
+        return JsonResponse({"error": result.data["error"], "quota_exceeded": status == 403}, status=status)
+    return JsonResponse({"effects": result.ui, "data": result.data, "lang": ctx["lang"]})
 
 
 @login_required
@@ -2570,6 +2679,11 @@ def toggle_agent_mode(request):
                 )
             else:
                 redirect_url = f"{reverse('resume:dashboard')}?resume={resume.pk}"
+
+    if mode == "agentic":
+        # Coming over from the form starts a fresh conversation: last week's
+        # chat about another resume is noise here.
+        redirect_url += ("&" if "?" in redirect_url else "?") + "fresh=1"
 
     return JsonResponse(
         {"success": True, "mode": profile.ui_mode, "redirect_url": redirect_url}

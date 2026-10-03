@@ -173,3 +173,6 @@ mcp-registry-auth
 # Scratch output from local debugging scripts
 .frames*.json
 .render_*.html
+
+# Playwright MCP session artefacts (snapshots, screenshots, test files)
+.playwright-mcp/

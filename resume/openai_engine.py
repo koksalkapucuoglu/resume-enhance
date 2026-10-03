@@ -67,6 +67,61 @@ def send_openai_message(
         return f"Error: {str(e)}"
 
 
+def stream_openai_message(
+    user_message: str,
+    meta_prompt: str,
+    model: str = "gpt-4o-mini",
+    is_json: bool = False,
+    temperature: float = None,
+    max_tokens: int = None,
+):
+    """
+    Streaming counterpart of send_openai_message.
+
+    Yields ("delta", text) as the answer arrives, then exactly one terminal
+    event: ("done", full_text) or ("error", message). Errors keep the same
+    "OpenAI API…" / "Error:" wording send_openai_message returns.
+    """
+    kwargs = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": meta_prompt},
+            {"role": "user", "content": user_message},
+        ],
+        "stream": True,
+        "stream_options": {"include_usage": True},
+    }
+    if is_json:
+        kwargs["response_format"] = {"type": "json_object"}
+    if temperature is not None:
+        kwargs["temperature"] = temperature
+    if max_tokens is not None:
+        kwargs["max_tokens"] = max_tokens
+
+    parts = []
+    try:
+        stream = client.chat.completions.create(**kwargs, timeout=90)
+        for chunk in stream:
+            if getattr(chunk, "usage", None):
+                logger.info("OpenAI streamed usage: %s", chunk.usage)
+            if not chunk.choices:
+                continue
+            text = chunk.choices[0].delta.content or ""
+            if text:
+                parts.append(text)
+                yield ("delta", text)
+    except openai.RateLimitError as e:
+        yield ("error", f"OpenAI API request exceeded rate limit: {e}")
+        return
+    except openai.APIError as e:
+        yield ("error", f"OpenAI API returned an API Error: {e}")
+        return
+    except Exception as e:  # noqa: BLE001 — same contract as send_openai_message
+        yield ("error", f"Error: {str(e)}")
+        return
+    yield ("done", "".join(parts))
+
+
 def send_openai_tool_turn(
     messages: list,
     tools: list,
@@ -197,7 +252,7 @@ def enhance_resume_experience(user_message: str, language: str = None):
         str: The STAR-enhanced, resume-ready work experience description(s).
     """
 
-    meta_prompt = f"""
+    meta_prompt = """
     Act as a professional resume experience enhancer.
     Respond in the same language as the input text.
 
@@ -253,7 +308,7 @@ def enhance_project_description(user_message: str, language: str = None):
         str: The STAR-enhanced, resume-ready project description.
     """
 
-    meta_prompt = f"""
+    meta_prompt = """
     Act as a professional project description enhancer for resumes.
     Respond in the same language as the input text.
 
@@ -293,18 +348,7 @@ def enhance_project_description(user_message: str, language: str = None):
     )
 
 
-def extract_resume_data(user_message: str):
-    """
-    Extracts structured resume data from a given text using OpenAI GPT.
-
-    Parameters:
-        user_message (str): The raw text extracted from a resume.
-
-    Returns:
-        str: A JSON string containing structured resume data, or a parse error dict as JSON string.
-    """
-
-    meta_prompt = """
+CV_PARSER_PROMPT = """
     Act as a resume parser. I will provide you with raw text extracted from a resume PDF.
 
     IMPORTANT — Multi-column / garbled text handling:
@@ -385,49 +429,7 @@ def extract_resume_data(user_message: str):
     If a section is missing in the input text, leave it empty in the JSON.
     """.strip()
 
-    result = send_openai_message(
-        user_message=user_message,
-        meta_prompt=meta_prompt,
-        model="gpt-4o-mini",
-        is_json=True,
-        temperature=0,
-        max_tokens=6000,
-    )
-
-    # Validation: check for empty/corrupted PDF parse failure
-    try:
-        import json as _json
-
-        parsed = _json.loads(result)
-        has_name = bool(parsed.get("user_info", {}).get("full_name", "").strip())
-        has_experience = bool(parsed.get("experience"))
-        if not has_name and not has_experience:
-            return _json.dumps(
-                {
-                    "parse_error": True,
-                    "message": "Could not extract resume data. Please ensure the PDF contains readable text.",
-                }
-            )
-    except (ValueError, TypeError):
-        # If result isn't valid JSON at all, it's likely an API error string — pass through
-        pass
-
-    return result
-
-
-def extract_linkedin_resume_data(user_message: str):
-    """
-    Parses LinkedIn profile data from a PDF file using OpenAI's API.
-
-    Args:
-        user_message: The raw text extracted from a LinkedIn PDF.
-
-    Returns:
-        str: Parsed data as a JSON string.
-
-    """
-
-    meta_prompt = """
+LINKEDIN_PARSER_PROMPT = """
     Act as a LinkedIn profile parser. I will provide you with raw text extracted from a LinkedIn profile PDF.
 
     IMPORTANT — Multi-column / garbled text handling:
@@ -492,6 +494,87 @@ def extract_linkedin_resume_data(user_message: str):
 
     Ensure the JSON output is well-formed, accurate, and complete.
     """.strip()
+
+
+def _check_extraction(result):
+    """Turn an answer with neither a name nor any experience into a parse error."""
+    import json as _json
+
+    try:
+        parsed = _json.loads(result)
+        has_name = bool((parsed.get("user_info") or {}).get("full_name", "").strip())
+        has_experience = bool(parsed.get("experience"))
+        if not has_name and not has_experience:
+            return _json.dumps(
+                {
+                    "parse_error": True,
+                    "message": "Could not extract resume data. Please ensure the PDF contains readable text.",
+                }
+            )
+    except (ValueError, TypeError, AttributeError):
+        # Not JSON at all: an API error string, or something the caller rejects.
+        pass
+    return result
+
+
+def stream_extraction(text, linkedin=False):
+    """
+    Extract a resume while it is being written: yields ("delta", text) chunks
+    and ends with ("done", json_string) or ("error", message). The import view
+    reads the deltas to show which section the parser has reached.
+    """
+    for event in stream_openai_message(
+        user_message=text,
+        meta_prompt=LINKEDIN_PARSER_PROMPT if linkedin else CV_PARSER_PROMPT,
+        is_json=True,
+        temperature=0,
+        max_tokens=6000,
+    ):
+        if event[0] == "done":
+            result = event[1] if linkedin else _check_extraction(event[1])
+            yield ("done", result)
+        else:
+            yield event
+
+
+def extract_resume_data(user_message: str):
+    """
+    Extracts structured resume data from a given text using OpenAI GPT.
+
+    Parameters:
+        user_message (str): The raw text extracted from a resume.
+
+    Returns:
+        str: A JSON string containing structured resume data, or a parse error dict as JSON string.
+    """
+
+    meta_prompt = CV_PARSER_PROMPT
+
+    result = send_openai_message(
+        user_message=user_message,
+        meta_prompt=meta_prompt,
+        model="gpt-4o-mini",
+        is_json=True,
+        temperature=0,
+        max_tokens=6000,
+    )
+
+    return _check_extraction(result)
+
+
+def extract_linkedin_resume_data(user_message: str):
+    """
+    Parses LinkedIn profile data from a PDF file using OpenAI's API.
+
+    Args:
+        user_message: The raw text extracted from a LinkedIn PDF.
+
+    Returns:
+        str: Parsed data as a JSON string.
+
+    """
+
+    meta_prompt = LINKEDIN_PARSER_PROMPT
 
     return send_openai_message(
         user_message=user_message,

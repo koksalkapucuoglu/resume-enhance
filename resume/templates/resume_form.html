@@ -174,7 +174,7 @@
         </a>
         
         <!--
-          Only Save and the mode toggle stay visible as the viewport narrows.
+          Only Save, Dashboard and Ask AI stay visible as the viewport narrows.
           Secondary actions (Dashboard, History, Download) collapse into the
           overflow menu so the bar cannot push its own buttons off-screen.
         -->
@@ -185,18 +185,20 @@
                 <span class="hidden md:inline">{{ UI.unsaved_changes }}</span>
             </span>
 
-            <!-- Mode Toggle -->
-            <div class="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
-                <button type="button" id="btn-standard"
-                        class="px-2 md:px-3 py-1.5 rounded-md text-xs font-semibold bg-white text-slate-700 shadow-sm">
-                    {{ UI.mode_standard }}
-                </button>
-                <button type="button" id="btn-agentic" onclick="switchToAgentic()"
-                        class="px-2 md:px-3 py-1.5 rounded-md text-xs font-semibold text-slate-500 hover:text-slate-700 transition-all flex items-center gap-1">
-                    <span class="material-symbols-outlined !text-[14px]">auto_awesome</span>
-                    <span class="hidden sm:inline">{{ UI.mode_agentic }}</span>
-                </button>
-            </div>
+            <!-- The editor is not a mode: it goes back to the dashboard, or hands
+                 this resume to the assistant. -->
+            <a href="{% url 'resume:dashboard' %}"
+               class="flex items-center gap-1 px-2 md:px-3 py-1.5 rounded-md text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all">
+                <span class="material-symbols-outlined !text-[16px]">arrow_back</span>
+                <span class="hidden sm:inline">{{ UI.dashboard }}</span>
+            </a>
+            {% if resume_id %}
+            <button type="button" id="btn-agentic" onclick="switchToAgentic()"
+                    class="flex items-center gap-1 px-2 md:px-3 py-1.5 rounded-md text-xs font-semibold text-primary bg-primary/10 hover:bg-primary/20 transition-all">
+                <span class="material-symbols-outlined !text-[14px]">auto_awesome</span>
+                <span class="hidden sm:inline">{{ UI.ask_ai }}</span>
+            </button>
+            {% endif %}
 
             <!-- Primary action -->
             <button type="button" id="saveButton" onclick="saveChanges()"
