@@ -41,7 +41,7 @@ Hazırlık: iki tarayıcı profili (ya da biri gizli pencere), elinde bir CV PDF
 - [ ] C6 Sil (onay modalı) → kart gidiyor, bildirim çıkıyor
 - [ ] C7 İlan kopyası olan CV'nin kartında "For job postings" altında kopya + puan; CV ilandan sonra değiştiyse puan "?" ile soluk
 - [ ] C8 İlan kopyasına tıkla → editörde açılıyor; kopyayı sil
-- [ ] C9 Sağ alttaki Feedback → yıldız + mesaj gönder
+- [ ] C9 Sağ alttaki Feedback → yıldız + mesaj gönder → teşekkür → form kapanıyor; tekrar açınca boş form, ikinci geri bildirim gönderilebiliyor
 - [ ] C10 ⚠️ Dil sürümleri ayrı, birbirinden bağımsız kartlar gibi görünüyor
 
 ## D. CV oluşturma / içe aktarma (standart)
@@ -65,9 +65,9 @@ Hazırlık: iki tarayıcı profili (ya da biri gizli pencere), elinde bir CV PDF
 - [ ] E8 Başlık (resume title) değiştir, Save → "unsaved changes" göstergesi kayboluyor
 - [ ] E9 Kaydetmeden sayfadan çıkmaya çalış → tarayıcı uyarısı
 - [ ] E10 📄 Download PDF: önizlemeyle aynı tasarım; çok sayfalı CV'de sayfa kırılımları önizlemedeki gibi
-- [ ] E11 ⋯ menü → History: sürüm listesi, kelime bazlı diff, "Restore"
+- [ ] E11 ⋯ menü → History: sürüm listesi, kelime bazlı diff, "Restore". **Her kayıt yalnızca o adımın değişikliğini** gösteriyor (önce "2" ekle-kaydet, sonra başka bir değişiklik-kaydet → eski kayıtta sadece "2" görünmeli). Not: ✨ AI iyileştir ayrı kayıt değil, sonraki kaydetmeye dahil
 - [ ] E12 Mobil genişlikte sağ alttaki "Preview" düğmesi → önizleme modalı
-- [ ] E13 Editör başlığında mod anahtarı yok: "← Dashboard" (hesabın moduna göre listeye ya da sohbete) ve kayıtlı CV'de "Ask AI" → sohbet bu CV aktif ve **boş bir sohbetle** açılıyor
+- [ ] E13 Editör başlığında mod anahtarı ve ayrı "Dashboard" düğmesi yok (logo dashboard'a gider); kayıtlı CV'de "Ask AI" → sohbet bu CV aktif ve **boş bir sohbetle** açılıyor
 - [ ] E14 ⚠️ Editörde CV'nin dilini (EN/TR) değiştirecek alan yok
 
 ## F. Agentic mod — ekran ve düğmeler
@@ -114,7 +114,12 @@ Hazırlık: iki tarayıcı profili (ya da biri gizli pencere), elinde bir CV PDF
 - [ ] H3 Değerlendirme paneli: puan, gereksinim satırları (covered / partial / missing), kanıtın yeri
 - [ ] H4 Bağlam çubuğu: "CV › kopya · İlan … · puan"
 - [ ] H5 Aynı ilanı farklı boşluk/biçimle tekrar yapıştır → aynı kayıt, aynı puan
+- [ ] H5b Maddeleri ✅/🔹 ile tek paragrafta yazılmış ilan → her madde ayrı gereksinim (tek madde + %99 olmamalı); daha önce tek satır olarak kaydedilmiş ilan tekrar yapıştırılınca yeniden ayrıştırılıyor
+- [ ] H5c Değerlendirme panelindeki "CV" düğmesi → CV önizlemesine dönüyor
 - [ ] H6 💳 Eksikleri seç → "Improve selected / all" → soru kartı ("bunu nerede yaptın?", "Bunu yapmadım") → taslak kartı (kelime diff, işaretle/düzenle; desteklenmeyen satır işaretsiz gelir) → Apply → puan değişimi ("Kafka: partial → covered")
+- [ ] H6b Taslak satırlar güçlü fiille başlıyor, ilandaki terimi kullanıyor, aynı işteki bağlamı kullanıyor; yazdığının çevirisi değil, ama rakam/sonuç uydurmuyor
+- [ ] H6c Tüm gereksinimler karşılanmışken "CV'yi iyileştir / ilana göre iyileştir" → "kapatılacak eksik yok" mesajı (kart beklemeden kalmamalı)
+- [ ] H6d İlan açıkken "X deneyimimi ATS uyumlu iyileştir" → ilan soru kartı değil, doğrudan düzenleme (🔒 onay)
 - [ ] H7 CV'yi değiştirdikten sonra puan otomatik yeniden ölçülüyor
 - [ ] H8 Kopyada "Promote" → ana CV kopyanın içeriğiyle değişiyor (ana CV geçmişinde geri yükleme noktası var), kopya kalıyor
 - [ ] H9 4. ilan kopyası (ücretsiz plan) → sınır mesajı
