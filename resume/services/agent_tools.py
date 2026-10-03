@@ -273,6 +273,9 @@ def create_blank_resume(user, ctx):
         language=ctx["lang"] if ctx["lang"] in ("en", "tr") else "en",
     )
     ctx["active_resume"] = resume
+    from core.analytics import track
+
+    track(user, "resume_created", via="chat")
     preview = _service()._exec_preview_resume(user, {"resume_id": resume.id}, ctx["lang"])
     return ToolResult(
         data={

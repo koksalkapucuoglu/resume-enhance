@@ -53,3 +53,8 @@ urlpatterns = [
     # Google sign-up step and connection management (accounts/3rdparty/...).
     path("accounts/", include("allauth.urls")),
 ]
+
+handler400 = "core.views.bad_request"
+handler403 = "core.views.permission_denied"
+handler404 = "core.views.page_not_found"
+handler500 = "core.views.server_error"

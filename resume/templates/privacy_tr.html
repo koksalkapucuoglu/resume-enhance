@@ -35,7 +35,7 @@
     <main class="max-w-3xl mx-auto px-4 py-12">
         <article class="prose prose-slate max-w-none prose-headings:font-bold prose-a:text-primary">
             <h1>Gizlilik Politikası ve Aydınlatma Metni</h1>
-            <p class="text-sm text-slate-500">Son güncelleme: 20 Eylül 2026</p>
+            <p class="text-sm text-slate-500">Son güncelleme: 3 Ekim 2026</p>
 
             <p>
                 Bu metin, 6698 sayılı Kişisel Verilerin Korunması Kanunu ("KVKK") kapsamında,
@@ -53,7 +53,7 @@
             <h2>Kısaca</h2>
             <ul>
                 <li>ResuStack'e girdiğiniz verileri, ürünün çalışabilmesi için saklarız: hesabınız ve özgeçmişleriniz.</li>
-                <li>Verilerinizi satmayız, reklamcılarla paylaşmayız; analitik veya reklam takip araçları kullanmayız.</li>
+                <li>Verilerinizi satmayız, reklamcılarla paylaşmayız ve reklam takip aracı kullanmayız. Ürünün hangi adımlarının tamamlandığını adınız, e-posta adresiniz veya özgeçmiş içeriğiniz olmadan sayarız.</li>
                 <li>Yapay zekâ özellikleri, sonuç üretmek için özgeçmiş metninizi OpenAI'ye, değerlendirmek ve puanlamak için TypeSafe'e gönderir. Hizmeti işletmemize yardımcı olan diğer sağlayıcılar aşağıda listelenmiştir.</li>
                 <li>Şifreniz hiçbir zaman okunabilir biçimde saklanmaz.</li>
                 <li>Herhangi bir özgeçmişinizi veya hesabınızın tamamını kendiniz silebilirsiniz.</li>
@@ -83,11 +83,14 @@
             <ul>
                 <li><strong>Sunucu kayıtları (log)</strong>: istekler ve hatalarla ilgili, IP adresinizi de içerebilen teknik bilgiler. Yalnızca hizmetin çalışması ve güvenliği için kullanılır.</li>
                 <li><strong>Kısa ömürlü sayaçlar</strong>: istek sınırlaması (rate limit) için hesabınıza bağlı tutulan sayaçlar.</li>
+                <li><strong>Ürün kullanım olayları</strong>: bir adımı tamamladığınızda — kayıt, içe aktarma, PDF indirme, ilan puanlama, fiyat sayfasını açma, satın alma — bu adım sayısal hesap kimliğiniz ve kimlik belirtmeyen birkaç ayrıntıyla (örneğin "LinkedIn PDF'i içe aktarıldı" veya "puan aralığı 40–69") kaydedilir. Adınız, e-posta adresiniz, özgeçmiş metniniz, sohbet mesajlarınız veya ilanlar asla kaydedilmez. Ürünün nerede zor kullanıldığını görmek için kullanılır.</li>
+                <li><strong>Hata raporları</strong>: bir şey başarısız olduğunda hata takip aracımıza teknik bir rapor (hata türü, sayfa veya adım, tarayıcı ve sunucu bilgisi) gönderilir. İstek gövdeleri, form içerikleri ve çerezler gönderilmeden önce çıkarılır.</li>
+                <li><strong>Ödemeler</strong>: Pro satın alırsanız Paddle'dan hesabınıza bağlı olarak sipariş numarası, plan, tutar ve para birimi alırız. Kart bilgileriniz bize hiç ulaşmaz.</li>
             </ul>
 
             <h2>Tarayıcınızda kalan veriler</h2>
             <p>
-                Agentic Mod'daki sohbet geçmişiniz, adım adım oluşturma ilerlemeniz ve en son açtığınız özgeçmiş bilgisi sunucularımızda değil, tarayıcınızın yerel depolamasında (local storage) tutulur.
+                Agentic Mod'daki sohbet geçmişiniz ile en son açtığınız özgeçmiş ve ilan bilgisi sunucularımızda değil, tarayıcınızın yerel depolamasında (local storage), her hesap için ayrı tutulur.
                 Tarayıcınızda bu sitenin verilerini temizlediğinizde silinir. Gönderdiğiniz mesajlar ise yanıt üretilmesi için sunucumuz ve yapay zekâ sağlayıcımız tarafından işlenir.
             </p>
 
@@ -95,7 +98,7 @@
             <p>
                 Yalnızca sitenin çalışması için zorunlu çerezleri kullanırız: oturumunuzu açık tutan oturum çerezi, formları sahteciliğe karşı koruyan CSRF çerezi
                 ve "kaydedildi" gibi tek seferlik bildirimleri bir sonraki sayfaya taşıyan kısa ömürlü bir çerez.
-                Analitik veya reklam çerezi kullanmayız.
+                Analitik veya reklam çerezi kullanmayız. Herkese açık sayfalarımızın (ana sayfa, fiyatlar, kayıt) ziyaretleri çerez veya cihazınızda başka bir saklama olmadan sayılır: analitik sağlayıcımız IP adresiniz ve tarayıcınızdan, günden güne sizi izleyemeyen, geri döndürülemez günlük bir tanımlayıcı türetir.
             </p>
 
             <h2>İşleme amaçları ve hukuki sebepler</h2>
@@ -111,6 +114,14 @@
                 <li>
                     <strong>E-posta doğrulama ve şifre sıfırlama gibi hesap e-postaları göndermek ve bize yazdığınızda yanıt vermek.</strong>
                     Hukuki sebep: sözleşmenin ifası (KVKK m. 5/2-c).
+                </li>
+                <li>
+                    <strong>Hataları bulup düzeltmek ve ürünün hangi adımlarında zorlanıldığını görmek.</strong>
+                    Hukuki sebep: temel hak ve özgürlüklerinize zarar vermemek kaydıyla meşru menfaatimiz (KVKK m. 5/2-f).
+                </li>
+                <li>
+                    <strong>Pro erişimini satmak ve satın alma kaydını tutmak.</strong>
+                    Hukuki sebep: sözleşmenin ifası (KVKK m. 5/2-c) ve hukuki yükümlülüğümüz (KVKK m. 5/2-ç).
                 </li>
                 <li>
                     <strong>Yetkili makamların talepleri.</strong>
@@ -140,7 +151,18 @@
                 </li>
                 <li><strong>Google</strong> — tercih ederseniz Google hesabınızla giriş yapmanızı sağlar, hesap e-postalarını Gmail üzerinden iletir ve sayfalarımızın yüklediği yazı tiplerini (Google Fonts) sunar.</li>
                 <li>
-                    <strong>İçerik dağıtım ağları</strong> — sayfalarımız <code>cdn.tailwindcss.com</code> ve <code>unpkg.com</code> üzerinden betik yükler.
+                    <strong>Paddle</strong> (Paddle.com Market Ltd, Birleşik Krallık) — Pro satın alımlarında yeniden satıcımız ve kayıtlı satıcı (merchant of record). Satın aldığınızda
+                    adınızı, e-posta adresinizi, fatura ülkenizi ve ödeme bilgilerinizi Paddle toplar; faturayı keser, vergi ve iadeleri yönetir.
+                    Bkz. <a href="https://www.paddle.com/legal/privacy">Paddle gizlilik bildirimi</a>.
+                </li>
+                <li>
+                    <strong>Sentry</strong> (Functional Software, Inc.; AB veri bölgesi) — yukarıda açıklanan hata raporlarını, giriş yapmışsanız hesap kimliğinizle birlikte alır.
+                </li>
+                <li>
+                    <strong>PostHog</strong> (PostHog Inc.; AB bulutu, Almanya) — yukarıda açıklanan ürün kullanım olaylarını ve çerezsiz sayfa ziyareti sayımlarını alır.
+                </li>
+                <li>
+                    <strong>İçerik dağıtım ağları</strong> — sayfalarımız <code>cdn.tailwindcss.com</code> ve <code>unpkg.com</code> üzerinden, yukarıdaki özellikler açıkken ayrıca <code>cdn.paddle.com</code>, <code>browser.sentry-cdn.com</code> ve PostHog üzerinden betik yükler.
                     Google Fonts gibi bu hizmetler de tarayıcınız dosyaları yüklediğinde IP adresinizi ve tarayıcı bilgilerinizi alır.
                 </li>
             </ul>
@@ -158,6 +180,8 @@
             <h2>Saklama süreleri</h2>
             <ul>
                 <li><strong>Özgeçmişler, sürümler, ilanlar ve puanlar</strong>, siz silene veya hesabınızı silene kadar saklanır.</li>
+                <li><strong>Kullanım olayları ve hata raporları</strong> PostHog ve Sentry'de sırasıyla en çok 12 ay ve 90 gün saklanır.</li>
+                <li><strong>Satın alma kayıtları</strong> vergi mevzuatının gerektirdiği süre boyunca, hesap silinse de hesapla ilişkisi kesilerek saklanır.</li>
                 <li><strong>Bir özgeçmişi sildiğinizde</strong> geri yükleme noktaları, dil sürümleri ve ondan çıkarılan ilan dalları puanlarıyla birlikte silinir. Yapıştırdığınız bir ilan, siz onu veya hesabınızı silene kadar saklanır.</li>
                 <li>
                     <strong>Hesabınızı Profil sayfanızdan sildiğinizde</strong> hesabınız, ayarlarınız, özgeçmişleriniz, geri yükleme noktalarınız, dil sürümleriniz,

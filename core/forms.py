@@ -29,4 +29,7 @@ class GoogleSignupForm(SocialSignupForm):
     def save(self, request):
         user = super().save(request)
         record_privacy_consent(user)
+        from core.analytics import track
+
+        track(user, "signed_up", method="google")
         return user

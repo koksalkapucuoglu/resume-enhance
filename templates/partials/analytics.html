@@ -1,1 +1,45 @@
-{# Product analytics. Filled in when PostHog is configured (see .claude/integrations/posthog.md). #}
+{% comment %}
+Browser telemetry, both optional and both free of personal data:
+- Sentry: uncaught script errors on the page (no replays, no tracing, no user).
+- PostHog: page views on public pages only, cookieless — nothing is stored on
+  the visitor's device, visitors are not identified. See core/analytics.py.
+Include in <head>. Pass public=True on public marketing pages.
+{% endcomment %}
+{% if telemetry.sentry_dsn %}
+<script src="https://browser.sentry-cdn.com/11.4.0/bundle.min.js" crossorigin="anonymous"></script>
+<script>
+  if (window.Sentry) {
+    Sentry.init({
+      dsn: "{{ telemetry.sentry_dsn|escapejs }}",
+      environment: "{{ telemetry.sentry_environment|escapejs }}",
+      sendDefaultPii: false,
+      tracesSampleRate: 0,
+      // Third-party scripts (extensions, CDNs) are not ours to fix.
+      allowUrls: [window.location.origin],
+      beforeSend(event) {
+        if (event.request) { delete event.request.cookies; event.request.query_string = ""; }
+        return event;
+      },
+    });
+  }
+</script>
+{% endif %}
+{% if telemetry.posthog_key and public %}
+<script>
+  !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="capture register unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+  posthog.init("{{ telemetry.posthog_key|escapejs }}", {
+    api_host: "{{ telemetry.posthog_host|escapejs }}",
+    cookieless_mode: "always",
+    person_profiles: "never",
+    autocapture: false,
+    capture_pageview: true,
+    capture_pageleave: true,
+    disable_session_recording: true,
+    disable_surveys: true,
+  });
+  // Named clicks on public pages (e.g. "pricing_cta"). Content-free by design.
+  window.resustackTrack = function (name, props) { try { posthog.capture(name, props || {}); } catch (e) {} };
+</script>
+{% else %}
+<script>window.resustackTrack = window.resustackTrack || function () {};</script>
+{% endif %}

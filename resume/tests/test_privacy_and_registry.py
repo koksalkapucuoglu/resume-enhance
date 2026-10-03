@@ -20,7 +20,10 @@ SERVER_JSON = Path(settings.BASE_DIR) / "server.json"
 DATA_CONTROLLER = "Köksal Kapucuoğlu"
 
 # Everyone who receives user data, in both language versions.
-PROCESSORS = ("OpenAI", "TypeSafe", "Hetzner", "Cloudflare", "Google", "cdn.tailwindcss.com", "unpkg.com")
+PROCESSORS = (
+    "OpenAI", "TypeSafe", "Hetzner", "Cloudflare", "Google", "Paddle", "Sentry", "PostHog",
+    "cdn.tailwindcss.com", "unpkg.com",
+)
 
 
 class TurkishPrivacyPolicyTests(TestCase):
@@ -67,9 +70,16 @@ class PrivacyPolicyTests(TestCase):
         for processor in PROCESSORS:
             self.assertIn(processor, body)
 
-    def test_says_nothing_about_payments_yet(self):
-        """No payment provider is chosen; the policy must not name one."""
-        self.assertNotIn("Lemon Squeezy", self.body())
+    def test_names_the_merchant_of_record(self):
+        """Paddle sells Pro; the policy must say what it collects."""
+        body = self.body()
+        self.assertIn("merchant of record", body)
+        self.assertNotIn("Lemon Squeezy", body)
+
+    def test_analytics_are_described_as_content_free_and_cookieless(self):
+        body = self.body()
+        self.assertIn("without cookies", body)
+        self.assertIn("Never your name, email address, resume text", body)
 
     def test_states_passwords_are_hashed_not_absent(self):
         body = self.body()

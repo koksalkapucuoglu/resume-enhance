@@ -253,6 +253,9 @@ def create_resume(user, title, content, template=None, language=None, request=No
         language=Resume.normalize_language(language, "en"),
     )
     resume.save()
+    from core.analytics import track
+
+    track(user, "resume_created", via="mcp")
     data = _summarise(resume)
     data["preview_url"] = _preview_url(resume, request)
     return (

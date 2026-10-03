@@ -387,7 +387,7 @@ MCP_REGISTRY_AUTH = os.environ.get("MCP_REGISTRY_AUTH", "")
 # The version of the privacy policy a new user consents to at sign-up — the
 # "Last updated" date on /privacy/ and /gizlilik/. Change it together with the
 # policy text, so each stored consent points at the words it agreed to.
-PRIVACY_POLICY_VERSION = "2026-09-20"
+PRIVACY_POLICY_VERSION = "2026-10-03"
 
 # Restore points kept per resume, for every plan. Each is a full copy of the
 # content (a few KB), so a bound keeps the table from growing with every edit.
@@ -440,6 +440,21 @@ PAYMENTS = {
     # Secret key of the notification destination: verifies webhooks.
     "WEBHOOK_SECRET": os.environ.get("PADDLE_WEBHOOK_SECRET", ""),
 }
+
+# Error tracking (Sentry). Off without a DSN. Errors only — see core/observability.py.
+SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
+SENTRY_ENVIRONMENT = os.environ.get("SENTRY_ENVIRONMENT", "production" if not DEBUG else "development")
+SENTRY_RELEASE = os.environ.get("SENTRY_RELEASE", "")
+# Browser-side errors (the editor preview, the chat). Public DSN of a separate
+# Sentry project; omit to report server-side errors only.
+SENTRY_BROWSER_DSN = os.environ.get("SENTRY_BROWSER_DSN", "")
+
+# Product analytics (PostHog, EU cloud). Off without a key; blank under tests.
+# The project key is public by design (it also goes to the browser).
+POSTHOG_API_KEY = os.environ.get("POSTHOG_API_KEY", "")
+if len(sys.argv) > 1 and sys.argv[1] == "test":
+    POSTHOG_API_KEY = ""
+POSTHOG_HOST = os.environ.get("POSTHOG_HOST", "https://eu.i.posthog.com")
 
 # Where people reach a human: legal pages, payment questions, refunds.
 CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL", "privacy@resustackapp.com")

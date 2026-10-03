@@ -55,6 +55,9 @@ def send_verification_email(request, user):
     except Exception:  # noqa: BLE001 — a mail outage must not break sign-up
         # The user id only: logs never carry email addresses.
         logger.warning("Verification email could not be sent for user %s", user.pk)
+        from core.observability import report_degraded
+
+        report_degraded("verification_email_failed")
         return False
 
 

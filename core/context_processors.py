@@ -13,4 +13,11 @@ def account_status(request):
     return {
         "email_verification_pending": pending,
         "google_login_enabled": settings.GOOGLE_LOGIN_ENABLED,
+        # Browser telemetry (templates/partials/analytics.html). Public keys only.
+        "telemetry": {
+            "posthog_key": settings.POSTHOG_API_KEY,
+            "posthog_host": settings.POSTHOG_HOST,
+            "sentry_dsn": settings.SENTRY_BROWSER_DSN,
+            "sentry_environment": settings.SENTRY_ENVIRONMENT,
+        },
     }

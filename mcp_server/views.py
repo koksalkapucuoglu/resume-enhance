@@ -378,8 +378,11 @@ def mcp_endpoint(request):
             protocol.failure(request_id, exc.code, exc.message, exc.data),
             status=exc.http_status,
         )
-    except Exception:
+    except Exception as exc:
         logger.exception("MCP request failed: %s", method)
+        from core.observability import report_exception
+
+        report_exception(exc, flow="mcp", method=method)
         return _json(
             protocol.failure(request_id, protocol.INTERNAL_ERROR, "Internal error."),
             status=500,

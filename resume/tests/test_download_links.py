@@ -141,7 +141,8 @@ class DownloadLinkEndpointTest(TestCase):
             side_effect=PdfGenerationError("boom"),
         ):
             response = self.client.get(url)
-        self.assertEqual(response.status_code, 500)
+        # Our renderer failing is a temporary outage, not a crash page.
+        self.assertEqual(response.status_code, 503)
         self.user.profile.refresh_from_db()
         self.assertEqual(self.user.profile.download_count, before)
 

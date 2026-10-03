@@ -27,6 +27,7 @@ import logging
 
 from django.conf import settings
 
+from core.observability import report_degraded
 from resume.models import Evaluation, JobPosting, Resume, ResumeRevision
 from resume.openai_engine import send_openai_message
 from resume.services import job_match, revision_service
@@ -42,6 +43,12 @@ MIN_POSTING_CHARS = 40
 
 class EvaluationError(Exception):
     """Something the person can act on: a short posting, a limit, a busy service."""
+
+
+class EvaluationUnavailable(EvaluationError):
+    """The scorer did not answer: a 503 for the caller, not the user's mistake."""
+
+    unavailable = True
 
 
 def scorer():
@@ -76,7 +83,8 @@ def add_posting(user, text, lang="en"):
 
     requirements = job_match.parse_posting(text)
     if requirements is None:
-        raise EvaluationError("Evaluation is unavailable right now. Please try again shortly.")
+        report_degraded("evaluation_unavailable")
+        raise EvaluationUnavailable("Evaluation is unavailable right now. Please try again shortly.")
     if not requirements:
         raise EvaluationError("No requirements could be found in this text. Is it a job posting?")
 
@@ -162,7 +170,8 @@ def evaluate(resume, posting, force=False):
 
     measured = job_match.measure(resume.content, posting.requirements)
     if measured is None:
-        raise EvaluationError("Evaluation is unavailable right now. Please try again shortly.")
+        report_degraded("evaluation_unavailable")
+        raise EvaluationUnavailable("Evaluation is unavailable right now. Please try again shortly.")
 
     evaluation = Evaluation.objects.create(
         resume=resume,
@@ -229,6 +238,9 @@ def create_branch(resume, posting):
     if existing:
         return existing
     if not base.user.profile.can_create_job_branch():
+        from core.analytics import track
+
+        track(base.user, "quota_reached", allowance="job_copies")
         limit = settings.FREE_TIER_LIMITS["job_branch_count"]
         raise EvaluationError(
             f"The free plan keeps {limit} job branches. Delete one, or evaluate on the base resume."

@@ -1,0 +1,35 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>{{ title }} - ResuStack</title>
+    <style>
+        body { margin: 0; font-family: Inter, -apple-system, "Segoe UI", sans-serif; background: #f1f5f9; color: #0f172a; }
+        main { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
+        .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 32px; max-width: 440px; text-align: center; }
+        .code { font-size: 13px; font-weight: 700; color: #94a3b8; letter-spacing: .08em; }
+        h1 { font-size: 22px; margin: 8px 0; }
+        p { color: #475569; font-size: 14px; line-height: 1.5; }
+        .actions { display: flex; gap: 8px; justify-content: center; margin-top: 20px; flex-wrap: wrap; }
+        a { text-decoration: none; font-weight: 600; font-size: 14px; padding: 10px 16px; border-radius: 10px; }
+        .primary { background: #2563eb; color: #fff; }
+        .secondary { background: #f1f5f9; color: #334155; }
+    </style>
+</head>
+<body>
+<main>
+    <div class="card">
+        <img src="{% static 'img/resustack_logo.png' %}" alt="ResuStack" style="height:32px"/>
+        <p class="code">ERROR {{ status }}</p>
+        <h1>{{ title }}</h1>
+        <p>{{ hint }}</p>
+        <div class="actions">
+            <a class="primary" href="{% if user.is_authenticated %}{% url 'resume:dashboard' %}{% else %}{% url 'resume:index' %}{% endif %}">Back to ResuStack</a>
+            <a class="secondary" href="javascript:history.back()">Go back</a>
+        </div>
+    </div>
+</main>
+</body>
+</html>

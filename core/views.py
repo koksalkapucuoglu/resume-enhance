@@ -9,6 +9,7 @@ from django.contrib.auth import login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm, PasswordChangeForm
 from django.contrib.auth.models import User
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.utils.decorators import method_decorator
@@ -16,6 +17,7 @@ from django.views import View
 from django.views.decorators.http import require_http_methods
 
 from core import email_verification
+from core.analytics import track
 from core.consent import CONSENT_ERROR, record_privacy_consent
 
 
@@ -94,6 +96,7 @@ class SignupView(View):
             # Two authentication backends are configured (allauth for Google),
             # so Django needs to be told which one vouched for this user.
             login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+            track(user, "signed_up", method="email")
             return redirect(_safe_next(request) or "resume:index")
 
         return render(
@@ -164,6 +167,7 @@ def verify_email(request, token):
     if profile.email_verification_required:
         profile.email_verification_required = False
         profile.save(update_fields=["email_verification_required"])
+        track(user, "email_verified")
     messages.success(request, _ui(user)["verify_done"])
     return redirect(destination)
 
@@ -316,3 +320,53 @@ class ProfileView(View):
                 **self._token_context(request),
             },
         )
+
+
+# ---------------------------------------------------------------------------
+# Error pages
+#
+# Every error a person can meet gets a page that says what happened and what
+# to do next; requests made by our own scripts get JSON they can show.
+# ---------------------------------------------------------------------------
+
+_ERRORS = {
+    400: ("This request did not make sense to us", "Go back and try again. If it keeps happening, tell us what you were doing."),
+    403: ("You don't have access to this", "You may be signed in to another account, or the page has expired. Reload and try again."),
+    404: ("We couldn't find that page", "The link may be old, or the resume may have been deleted."),
+    500: ("Something broke on our side", "It has been reported. Your saved work is safe — please try again in a minute."),
+}
+
+
+def _wants_json(request):
+    return (
+        request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        or "application/json" in request.headers.get("Accept", "")
+        or request.content_type == "application/json"
+        or request.path.startswith(("/agent/", "/mcp", "/webhooks/"))
+    )
+
+
+def _error_response(request, status):
+    title, hint = _ERRORS[status]
+    if _wants_json(request):
+        return JsonResponse({"error": f"{title}. {hint}", "status": status}, status=status)
+    try:
+        return render(request, "error.html", {"status": status, "title": title, "hint": hint}, status=status)
+    except Exception:  # noqa: BLE001 — the error page itself must not fail
+        return HttpResponse(f"{title}. {hint}", status=status, content_type="text/plain")
+
+
+def bad_request(request, exception=None):
+    return _error_response(request, 400)
+
+
+def permission_denied(request, exception=None):
+    return _error_response(request, 403)
+
+
+def page_not_found(request, exception=None):
+    return _error_response(request, 404)
+
+
+def server_error(request):
+    return _error_response(request, 500)

@@ -31,7 +31,8 @@ from resume.services.pdf_service import (
     PdfGenerationError,
     resume_pdf_service,
 )
-from core.observability import report_degraded
+from core.analytics import score_band, track
+from core.observability import report_degraded, report_exception
 from resume.models import Feedback, JobPosting, Resume, ResumeRevision
 from resume.services import diff_service, resume_content, revision_service
 
@@ -313,6 +314,7 @@ def duplicate_resume(request, pk):
     # QUOTA: Check resume creation limit
     profile = request.user.profile
     if not profile.can_create_resume():
+        track(request.user, "quota_reached", allowance="resumes")
         messages.error(
             request,
             f"Resume limit reached. Free plan allows {settings.FREE_TIER_LIMITS['resume_count']} resumes. Upgrade to Pro for unlimited resumes.",
@@ -803,8 +805,8 @@ class ResumeFormView(TemplateView):
             response["Content-Disposition"] = 'inline; filename="resume.pdf"'
             return response
 
-        except PdfGenerationError as e:
-            messages.error(self.request, f"Failed to generate PDF: {str(e)}")
+        except PdfGenerationError:
+            # The caller (post) tells the user and reports it.
             raise
 
     def post(self, *args, **kwargs):
@@ -821,6 +823,7 @@ class ResumeFormView(TemplateView):
         if not pk:
             profile = self.request.user.profile
             if not profile.can_create_resume():
+                track(self.request.user, "quota_reached", allowance="resumes")
                 error_msg = f"Resume limit reached. Free plan allows {settings.FREE_TIER_LIMITS['resume_count']} resumes. Upgrade to Pro for unlimited resumes."
                 # AJAX request - return JSON, else redirect
                 if self.request.headers.get("X-Requested-With") == "XMLHttpRequest":
@@ -896,6 +899,7 @@ class ResumeFormView(TemplateView):
         if export_format == "pdf" and form_action != "save_only":
             profile = self.request.user.profile
             if not profile.can_download():
+                track(self.request.user, "quota_reached", allowance="downloads")
                 messages.error(
                     self.request,
                     "Monthly PDF download limit reached. Free plan allows 5 downloads per month.",
@@ -940,6 +944,7 @@ class ResumeFormView(TemplateView):
             )
             # Store pk in kwargs for subsequent actions
             self.kwargs["pk"] = resume.pk
+            track(self.request.user, "resume_created", via="editor")
 
         # Check if this is a save-only request (AJAX)
         if form_action == "save_only":
@@ -969,13 +974,19 @@ class ResumeFormView(TemplateView):
 
         try:
             # Increment download counter for PDF exports (after quota check passed)
+            response = self._generate_pdf_file(context)
             profile = self.request.user.profile
             profile.download_count += 1
             profile.save()
-            return self._generate_pdf_file(context)
+            track(self.request.user, "pdf_downloaded", via="editor")
+            return response
 
         except PdfGenerationError as e:
-            messages.error(self.request, f"Failed to render PDF: {str(e)}")
+            report_degraded("pdf_render_failed", via="editor", error=type(e).__name__)
+            messages.error(
+                self.request,
+                "We could not render the PDF right now. Your changes are saved — please try again in a minute.",
+            )
             # If error, stay on the same page. If we have PK, we should probably redirect or just render.
             # Ideally redirect to avoid resubmission issues, but we need errors.
             # Render is fine for now.
@@ -1010,10 +1021,10 @@ def get_field_value(request, prefix, field):
     field_value = None
     field_id = request.POST.get("field_id")
 
-    if field_id:
-        form_index_match = re.search(rf"id_{prefix}-(\d+)-{field}", field_id)
-        form_index = form_index_match.group(1)
-        field_value = request.POST.get(request.POST.get("field_id").strip("id_"))
+    match = re.search(rf"id_{prefix}-(\d+)-{field}", field_id or "")
+    if match:
+        form_index = match.group(1)
+        field_value = request.POST.get(field_id.removeprefix("id_"))
 
     return form_index, field_value
 
@@ -1055,9 +1066,18 @@ def enhance_field(request, prefix, field, enhance_function):
     Returns:
         HttpResponse: Rendered HTML or error message.
     """
+    from django.utils.html import escape
+
     form_index, field_value = get_field_value(request, prefix=prefix, field=field)
     if form_index and field_value:
         enhanced_text = enhance_function(field_value)
+        if not enhanced_text or enhanced_text.startswith(("OpenAI API", "Error:")):
+            # Never write a provider error into the person's text box.
+            report_degraded("enhance_ai_unavailable", field=prefix)
+            return JsonResponse(
+                {"error": "The AI did not answer just now. Your text is unchanged — please try again."},
+                status=503,
+            )
 
         # Format with double newlines for better readability
         # If GPT returns single-newline separated bullets, convert to double
@@ -1067,28 +1087,26 @@ def enhance_field(request, prefix, field, enhance_function):
 
         description_html = f"""
         <textarea name="{prefix}-{form_index}-{field}" cols="40" rows="10" 
-        class="textarea form-control" id="id_{prefix}-{form_index}-{field}">{enhanced_text}</textarea>
+        class="textarea form-control" id="id_{prefix}-{form_index}-{field}">{escape(enhanced_text)}</textarea>
         """
         return HttpResponse(description_html)
 
-    return HttpResponse({"error": "Invalid request"}, status=400)
+    return JsonResponse({"error": "Write something in this field first."}, status=400)
 
 
 @login_required
 @require_http_methods(["POST"])
 def enhance_experience(request):
     if _email_unverified(request):
-        from django.utils.html import escape
-
-        return HttpResponse(
-            f'<p class="text-red-500">{escape(_ai_locked_message(request))}</p>', status=403
+        return JsonResponse(
+            {"error": _ai_locked_message(request), "email_verification_required": True},
+            status=403,
         )
     # QUOTA: Check enhance limit
     profile = request.user.profile
     if not profile.can_enhance():
-        return HttpResponse(
-            f'<p class="text-red-500">{_ai_credits_message(request)}</p>',
-            status=403,
+        return JsonResponse(
+            {"error": _ai_credits_message(request), "quota_exceeded": True}, status=403
         )
 
     response = enhance_field(
@@ -1110,17 +1128,15 @@ def enhance_experience(request):
 @require_http_methods(["POST"])
 def enhance_project(request):
     if _email_unverified(request):
-        from django.utils.html import escape
-
-        return HttpResponse(
-            f'<p class="text-red-500">{escape(_ai_locked_message(request))}</p>', status=403
+        return JsonResponse(
+            {"error": _ai_locked_message(request), "email_verification_required": True},
+            status=403,
         )
     # QUOTA: Check enhance limit
     profile = request.user.profile
     if not profile.can_enhance():
-        return HttpResponse(
-            f'<p class="text-red-500">{_ai_credits_message(request)}</p>',
-            status=403,
+        return JsonResponse(
+            {"error": _ai_credits_message(request), "quota_exceeded": True}, status=403
         )
 
     response = enhance_field(
@@ -1276,6 +1292,7 @@ def upload_cv(request):
         )
     profile = request.user.profile
     if not profile.can_create_resume():
+        track(request.user, "quota_reached", allowance="resumes")
         return JsonResponse(
             {
                 "error": f"Resume limit reached. The free plan keeps {settings.FREE_TIER_LIMITS['resume_count']} resumes.",
@@ -1371,6 +1388,12 @@ def _save_import(request, extracted_json, extracted_text, prefix=""):
     profile = request.user.profile
     profile.import_count += 1
     profile.save()
+    track(
+        request.user,
+        "resume_imported",
+        linkedin=prefix == "LinkedIn",
+        flagged=len((review or {}).get("flags") or []),
+    )
 
     # Return resume ID for frontend redirect (AJAX-friendly)
     return JsonResponse(
@@ -1405,6 +1428,7 @@ def signed_download(request, token):
 
     profile = resume.user.profile
     if not profile.can_download():
+        track(resume.user, "quota_reached", allowance="downloads")
         return HttpResponse(
             "Monthly PDF download limit reached.", status=403, content_type="text/plain"
         )
@@ -1417,15 +1441,19 @@ def signed_download(request, token):
             language=resume.language,
         )
     except PdfGenerationError as exc:
-        logger.error("Signed download failed for resume %s: %s", resume.pk, exc)
+        logger.error("Signed download failed for resume %s: %s", resume.pk, type(exc).__name__)
+        report_degraded("pdf_render_failed", via="signed_link", template=resume.template_selector)
         return HttpResponse(
-            "Could not render this resume.", status=500, content_type="text/plain"
+            "We could not render this resume right now. Please try again in a minute.",
+            status=503,
+            content_type="text/plain",
         )
 
     # Counted on delivery, not on issuing the link: a link that is never
     # followed should not cost the user anything.
     profile.download_count += 1
     profile.save(update_fields=["download_count"])
+    track(resume.user, "pdf_downloaded", via="link")
 
     response = HttpResponse(pdf_bytes, content_type="application/pdf")
     response["Content-Disposition"] = f'attachment; filename="{_pdf_filename(resume)}"'
@@ -1456,6 +1484,7 @@ def download_resume_pdf(request, pk):
     # QUOTA: Check download limit
     profile = request.user.profile
     if not profile.can_download():
+        track(request.user, "quota_reached", allowance="downloads")
         messages.error(
             request,
             "Monthly PDF download limit reached. Free plan allows 5 downloads per month.",
@@ -1520,10 +1549,14 @@ def download_resume_pdf(request, pk):
         # QUOTA: Increment download counter on success
         profile.download_count += 1
         profile.save()
+        track(request.user, "pdf_downloaded", via="dashboard")
 
         return response
     except PdfGenerationError as e:
-        messages.error(request, f"PDF generation failed: {str(e)}")
+        report_degraded("pdf_render_failed", via="dashboard", error=type(e).__name__)
+        messages.error(
+            request, "We could not render this PDF right now. Please try again in a minute."
+        )
         return redirect("resume:dashboard")
 
 
@@ -1619,6 +1652,8 @@ def pricing_page(request):
     user = request.user if request.user.is_authenticated else None
     profile = user.profile if user else None
     live = payment_service.is_live()
+    if user:
+        track(user, "pricing_viewed", is_pro=profile.is_pro(), live=live)
     return render(
         request,
         "resume/pricing.html",
@@ -1713,7 +1748,7 @@ def payment_webhook(request):
         return HttpResponse(status=200)
 
     try:
-        payment_service.record_purchase(
+        purchase, created = payment_service.record_purchase(
             user=user,
             provider_name=provider.name,
             external_id=parsed["external_id"],
@@ -1726,6 +1761,14 @@ def payment_webhook(request):
         report_degraded("payment_not_granted", order=parsed["external_id"])
         return HttpResponse(status=400)
 
+    if created:
+        track(
+            user,
+            "purchase_completed",
+            plan=purchase.plan,
+            amount_cents=purchase.amount_cents,
+            currency=purchase.currency,
+        )
     return HttpResponse(status=200)
 
 
@@ -1781,8 +1824,9 @@ def _stream_agent(events, active_resume_id, user_message, lang="en", on_done=Non
                         outcome, active_resume_id, user_message, lang
                     ),
                 )
-    except Exception:
+    except Exception as exc:
         logger.exception("Agent stream failed")
+        report_exception(exc, flow="agent_stream")
         yield _sse(
             "done",
             {
@@ -1827,12 +1871,11 @@ def agent_chat_stream(request):
             }
         )
 
-    try:
-        data = json.loads(request.body)
-    except (ValueError, KeyError):
+    data = _json_body(request)
+    if data is None:
         return JsonResponse({"error": "Invalid JSON"}, status=400)
 
-    message = data.get("message", "").strip()
+    message = str(data.get("message") or "").strip()
     if not message:
         return JsonResponse({"error": "Empty message"}, status=400)
 
@@ -1852,6 +1895,7 @@ def agent_chat_stream(request):
     def charge(outcome):
         profile.agent_message_count += 1
         profile.save(update_fields=["agent_message_count"])
+        track(request.user, "chat_message_sent", has_active_resume=active_resume is not None)
 
     events = agent_loop.stream_turn(request.user, ctx, data.get("history"), message)
     return _sse_response(
@@ -1880,12 +1924,11 @@ def agent_approve_stream(request):
             }
         )
 
-    try:
-        data = json.loads(request.body)
-    except (ValueError, KeyError):
+    data = _json_body(request)
+    if data is None:
         return JsonResponse({"error": "Invalid JSON"}, status=400)
 
-    parked = agent_loop.take_pending(request.user, data.get("token", ""))
+    parked = agent_loop.take_pending(request.user, str(data.get("token") or ""))
     if not parked:
         return JsonResponse(
             {"error": "This confirmation has expired. Please ask again."}, status=410
@@ -1905,6 +1948,11 @@ def agent_approve_stream(request):
     return _sse_response(
         _stream_agent(events, active_resume_id, "", ctx["lang"])
     )
+
+
+def _service_error_status(exc):
+    """503 when a service we depend on did not answer; 400 when the request was wrong."""
+    return 503 if getattr(exc, "unavailable", False) else 400
 
 
 def _json_body(request):
@@ -1967,7 +2015,7 @@ def add_job_posting(request):
             request.user, data.get("text") or "", request.user.profile.ui_language or "en"
         )
     except evaluation_service.EvaluationError as exc:
-        return JsonResponse({"error": str(exc)}, status=400)
+        return JsonResponse({"error": str(exc)}, status=_service_error_status(exc))
 
     base = resume.root
     branch = Resume.objects.filter(
@@ -2009,8 +2057,14 @@ def evaluate_job_posting(request):
             # A branch belongs to one posting; another posting goes on the base.
             resume = resume.root
         evaluation, previous = evaluation_service.evaluate(resume, posting)
+        track(
+            request.user,
+            "posting_evaluated",
+            target="branch" if resume.is_job_branch else "base",
+            score_band=score_band(getattr(evaluation, "score", None)),
+        )
     except evaluation_service.EvaluationError as exc:
-        return JsonResponse({"error": str(exc)}, status=400)
+        return JsonResponse({"error": str(exc)}, status=_service_error_status(exc))
     return JsonResponse(evaluation_service.panel(resume, posting, evaluation, previous))
 
 
@@ -2049,7 +2103,7 @@ def resume_evaluation(request, pk, posting_id):
     try:
         evaluation, previous = evaluation_service.evaluate(resume, posting)
     except evaluation_service.EvaluationError as exc:
-        return JsonResponse({"error": str(exc)}, status=400)
+        return JsonResponse({"error": str(exc)}, status=_service_error_status(exc))
     return JsonResponse(evaluation_service.panel(resume, posting, evaluation, previous))
 
 
@@ -2129,7 +2183,7 @@ def improve_draft(request):
             request.user.profile.ui_language or "en",
         )
     except improvement_service.ImprovementError as exc:
-        return JsonResponse({"error": str(exc)}, status=400)
+        return JsonResponse({"error": str(exc)}, status=_service_error_status(exc))
     improvement_service.charge(request.user)
     return JsonResponse(result)
 
@@ -2154,8 +2208,9 @@ def improve_apply(request):
         evaluation, previous, posting = improvement_service.apply(
             request.user, resume, data.get("token") or "", data.get("accepted")
         )
+        track(request.user, "improvement_applied", lines=len(data.get("accepted") or []))
     except (improvement_service.ImprovementError, evaluation_service.EvaluationError) as exc:
-        return JsonResponse({"error": str(exc)}, status=400)
+        return JsonResponse({"error": str(exc)}, status=_service_error_status(exc))
     return JsonResponse(evaluation_service.panel(resume, posting, evaluation, previous))
 
 
@@ -2204,7 +2259,8 @@ def _agent_quota_exceeded(request, message):
 
 
 def _ai_credits_message(request, lang=None):
-    """What an over-quota AI action answers, in the person's language."""
+    """What an over-quota AI action answers, in the person's language. Counted."""
+    track(request.user, "quota_reached", allowance="ai_credits")
     lang = lang or request.user.profile.ui_language or "en"
     limit = settings.FREE_TIER_LIMITS["ai_credits"]
     if lang == "tr":
@@ -2277,6 +2333,7 @@ def _agent_response(outcome, active_resume_id, user_message):
             "effects": effects,
         }
     elif status == "error":
+        report_degraded("agent_llm_failure")
         payload = {
             "type": "agent_turn",
             "message": "The assistant is unavailable right now. Please try again.",
@@ -2483,9 +2540,8 @@ def toggle_agent_mode(request):
     POST body: {mode: 'standard' | 'agentic'}
     Returns:   {success: bool, mode: str}
     """
-    try:
-        data = json.loads(request.body)
-    except (ValueError, KeyError):
+    data = _json_body(request)
+    if data is None:
         return JsonResponse({"error": "Invalid JSON"}, status=400)
 
     mode = data.get("mode", "standard")
@@ -2495,6 +2551,7 @@ def toggle_agent_mode(request):
     profile = request.user.profile
     profile.ui_mode = mode
     profile.save(update_fields=["ui_mode"])
+    track(request.user, "ui_mode_changed", mode=mode)
 
     # Carry the resume the user is working on across the switch, so changing
     # mode reframes the same document instead of dropping them on a list.
@@ -2523,10 +2580,10 @@ def toggle_confirm_destructive(request):
     Turn the agent's "are you sure?" step on or off.
     POST body: {enabled: bool}
     """
-    try:
-        enabled = bool(json.loads(request.body).get("enabled", True))
-    except (ValueError, KeyError):
+    data = _json_body(request)
+    if data is None:
         return JsonResponse({"error": "Invalid JSON"}, status=400)
+    enabled = bool(data.get("enabled", True))
 
     profile = request.user.profile
     profile.confirm_destructive = enabled
@@ -2541,12 +2598,7 @@ def toggle_ui_language(request):
     POST body: {language: 'en' | 'tr'}
     Returns:   {status: 'ok', language: str}
     """
-    import json as _json
-    try:
-        body = _json.loads(request.body)
-        lang = body.get("language", "en")
-    except (ValueError, KeyError):
-        lang = "en"
+    lang = (_json_body(request) or {}).get("language", "en")
     if lang not in ("en", "tr"):
         lang = "en"
     profile = request.user.profile
@@ -2558,11 +2610,8 @@ def toggle_ui_language(request):
 @require_http_methods(["POST"])
 def submit_feedback(request):
     """Feedback from the floating widget. Signing in is optional."""
-    try:
-        data = json.loads(request.body)
-    except (ValueError, TypeError):
-        return JsonResponse({"error": "Invalid JSON"}, status=400)
-    if not isinstance(data, dict):
+    data = _json_body(request)
+    if data is None:
         return JsonResponse({"error": "Invalid JSON"}, status=400)
     message = str(data.get("message") or "").strip()
     if not message:

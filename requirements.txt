@@ -14,3 +14,5 @@ gunicorn==25.1.0
 dj-database-url
 whitenoise==6.11.0
 django-allauth[socialaccount]==65.19.3
+sentry-sdk[django]==2.71.0
+posthog==7.62.1

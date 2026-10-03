@@ -108,3 +108,20 @@ def report_degraded(kind, **tags):
             scope.set_tag(key, str(value)[:200])
         scope.fingerprint = ["degraded", kind]
         sentry_sdk.capture_message(f"Degraded: {kind}", level="warning")
+
+
+def report_exception(exc, **tags):
+    """
+    An exception the code caught to keep the page alive (the user still saw
+    an error). Unhandled ones reach Sentry on their own; these would not.
+    """
+    try:
+        import sentry_sdk
+    except ImportError:
+        return
+    if not sentry_sdk.get_client().is_active():
+        return
+    with sentry_sdk.new_scope() as scope:
+        for key, value in tags.items():
+            scope.set_tag(key, str(value)[:200])
+        sentry_sdk.capture_exception(exc)
