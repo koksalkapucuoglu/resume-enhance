@@ -21,7 +21,6 @@ from django.core import mail
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import resolve, reverse
 
-from core import email_verification
 from core.adapters import SocialAccountAdapter
 from core.forms import GoogleSignupForm
 from resume.models import Resume

@@ -218,9 +218,12 @@ def draft(user, resume, posting, rewrites, answers, lang="en"):
     return {"token": token, "changes": changes}
 
 
+def _squash(text):
+    return " ".join((text or "").split()).rstrip(" .;").lower()
+
+
 def _same(a, b):
-    squash = lambda t: " ".join((t or "").split()).rstrip(" .;").lower()
-    return squash(a) == squash(b)
+    return _squash(a) == _squash(b)
 
 
 def _write(content, posting, items, requirements, language):

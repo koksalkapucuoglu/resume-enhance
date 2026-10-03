@@ -651,7 +651,7 @@ def create_translated_copy(user, ctx, target_language, resume_id=None):
         derived_from=source.root,
         derived_kind=Resume.DERIVED_TRANSLATION,
     )
-    legacy = _service()._exec_translate_resume(
+    _service()._exec_translate_resume(
         user,
         {"resume_id": copy.id, "target_language": target_language},
         ctx["lang"],
