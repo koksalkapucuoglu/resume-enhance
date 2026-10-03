@@ -1,10 +1,11 @@
 {% load static %}
 <!DOCTYPE html>
-<html class="light" lang="en">
+<html class="light" lang="{{ ui_lang }}">
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>{{ UI.pricing_title }} - ResuStack</title>
+<meta name="description" content="ResuStack is free to start. Pro is a one-time payment: $9 for 3 months or $24 for 12 months, no subscription."/>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
@@ -17,24 +18,30 @@
         }},
     };
 </script>
+{% include "partials/analytics.html" %}
 </head>
 <body class="bg-background-light font-sans text-slate-900 min-h-screen flex flex-col">
 
 <header class="flex items-center justify-between whitespace-nowrap border-b border-slate-200 bg-white px-4 md:px-10 lg:px-20 py-4 sticky top-0 z-10">
-    <a href="{% url 'resume:dashboard' %}" class="flex items-center gap-3" title="{{ UI.dashboard }}">
+    <a href="{% if user.is_authenticated %}{% url 'resume:dashboard' %}{% else %}{% url 'resume:index' %}{% endif %}" class="flex items-center gap-3">
         <img src="{% static 'img/resustack_logo.png' %}" alt="ResuStack Logo" class="h-8 w-auto object-contain"/>
-        <h2 class="text-slate-900 text-2xl font-bold tracking-tight">ResuStack</h2>
+        <span class="text-slate-900 text-2xl font-bold tracking-tight">ResuStack</span>
     </a>
     <div class="flex items-center gap-4">
-        <a class="text-slate-500 text-sm font-medium hover:text-primary transition-colors" href="{% url 'resume:dashboard' %}">{{ UI.dashboard }}</a>
-        <a href="{% url 'profile' %}" class="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold border border-slate-300 hover:bg-primary hover:text-white hover:border-primary transition-all">
-            {{ user.username|slice:":1"|upper }}
-        </a>
+        {% if user.is_authenticated %}
+            <a class="text-slate-500 text-sm font-medium hover:text-primary transition-colors" href="{% url 'resume:dashboard' %}">{{ UI.dashboard }}</a>
+            <a href="{% url 'profile' %}" class="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold border border-slate-300 hover:bg-primary hover:text-white hover:border-primary transition-all">
+                {{ user.username|slice:":1"|upper }}
+            </a>
+        {% else %}
+            <a class="text-slate-500 text-sm font-medium hover:text-primary transition-colors" href="{% url 'login' %}?next={% url 'resume:pricing' %}">Log in</a>
+            <a class="px-4 py-2 rounded-lg bg-primary text-white text-sm font-bold hover:bg-primary-hover transition-colors" href="{% url 'signup' %}">{{ UI.pricing_start_free }}</a>
+        {% endif %}
     </div>
 </header>
 
 <main class="flex-1 px-4 md:px-10 lg:px-20 py-10">
-  <div class="max-w-[900px] mx-auto w-full">
+  <div class="max-w-[960px] mx-auto w-full">
     <div class="text-center">
       <h1 class="text-3xl md:text-4xl font-black tracking-tight">{{ UI.pricing_title }}</h1>
       <p class="text-slate-500 text-sm mt-2 max-w-xl mx-auto">{{ UI.pricing_subtitle }}</p>
@@ -48,27 +55,41 @@
       </div>
     {% endif %}
 
+    {% if just_paid and not is_pro %}
+      <div class="mt-8 bg-green-50 border border-green-200 rounded-2xl p-5 text-center" data-testid="paid-notice">
+        <h2 class="font-bold text-slate-900">{{ UI.pricing_paid_title }}</h2>
+        <p class="text-slate-600 text-sm mt-1">{{ UI.pricing_paid_body }}</p>
+      </div>
+    {% endif %}
+
     {% if not payments_live %}
-      <div class="mt-8 bg-amber-50 border border-amber-200 rounded-2xl p-6 text-center">
-        <span class="material-symbols-outlined text-amber-600 text-3xl">schedule</span>
-        <h2 class="text-lg font-bold text-slate-900 mt-1">{{ UI.pricing_soon_title }}</h2>
-        <p class="text-slate-600 text-sm mt-2 max-w-lg mx-auto">{{ UI.pricing_soon_body }}</p>
+      <div class="mt-8 bg-amber-50 border border-amber-200 rounded-2xl p-5 text-center">
+        <h2 class="font-bold text-slate-900">{{ UI.pricing_soon_title }}</h2>
+        <p class="text-slate-600 text-sm mt-1 max-w-lg mx-auto">{{ UI.pricing_soon_body }}</p>
       </div>
     {% endif %}
 
     {% if is_pro %}
-      <div class="mt-8 bg-white border-2 border-green-500 rounded-2xl p-6 text-center">
-        <span class="material-symbols-outlined text-green-600 text-4xl">verified</span>
-        <h2 class="text-lg font-bold text-slate-900 mt-1">{{ UI.pricing_current }}</h2>
+      <div class="mt-8 bg-white border-2 border-green-500 rounded-2xl p-5 text-center">
+        <span class="material-symbols-outlined text-green-600 text-3xl">verified</span>
+        <h2 class="font-bold text-slate-900">{{ UI.pricing_current }}</h2>
         {% if premium_until %}
-          <p class="text-slate-500 text-sm mt-1">
-            {{ UI.pricing_until }} {{ premium_until|date:"d M Y" }} · {{ days_left }} {{ UI.pricing_days_left }}
-          </p>
+          <p class="text-slate-500 text-sm mt-1">{{ UI.pricing_until }} {{ premium_until|date:"d M Y" }} · {{ days_left }} {{ UI.pricing_days_left }}</p>
         {% endif %}
       </div>
     {% endif %}
 
-    <div class="mt-8 grid gap-5 sm:grid-cols-2">
+    <!-- Plans -->
+    <div class="mt-8 grid gap-5 md:grid-cols-3">
+      <div class="bg-white rounded-2xl p-6 flex flex-col border-2 border-slate-200">
+        <h3 class="font-bold text-slate-900">{{ UI.pricing_free_name }}</h3>
+        <p class="text-4xl font-black text-slate-900 mt-2">$0</p>
+        <p class="text-slate-500 text-sm mt-2 flex-1">{{ UI.pricing_free_blurb }}</p>
+        {% if not user.is_authenticated %}
+          <a href="{% url 'signup' %}" class="mt-5 w-full py-2.5 rounded-lg font-bold text-sm text-center border-2 border-slate-200 text-slate-700 hover:bg-slate-50 transition-colors">{{ UI.pricing_start_free }}</a>
+        {% endif %}
+      </div>
+
       {% for plan in plans %}
         <div class="bg-white rounded-2xl p-6 flex flex-col border-2 {% if plan.highlight %}border-primary shadow-lg shadow-primary/10{% else %}border-slate-200{% endif %}">
           <div class="flex items-start justify-between gap-2">
@@ -77,26 +98,22 @@
               <span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold whitespace-nowrap">{{ UI.pricing_soon_badge }}</span>
             {% endif %}
           </div>
-          <p class="text-4xl font-black text-slate-900 mt-2">{{ plan.price_display }}</p>
+          <p class="text-4xl font-black text-slate-900 mt-2">{{ plan.price_display }} <span class="text-sm font-semibold text-slate-400">{{ UI.pricing_once }}</span></p>
           <p class="text-slate-500 text-sm mt-2 flex-1">{{ plan.blurb }}</p>
 
-          {% if not payments_live %}
+          {% if not user.is_authenticated %}
+            <a href="{% url 'signup' %}?next={% url 'resume:pricing' %}" class="mt-5 w-full py-2.5 rounded-lg font-bold text-sm text-center transition-colors {% if plan.highlight %}bg-primary text-white hover:bg-primary-hover{% else %}bg-slate-100 text-slate-700 hover:bg-slate-200{% endif %}">{{ UI.pricing_signup_to_buy }}</a>
+          {% elif not payments_live %}
             <form method="post" action="{% url 'resume:register_premium_interest' %}" class="mt-5">
               {% csrf_token %}
               <input type="hidden" name="plan" value="{{ plan.code }}">
-              <button type="submit"
-                      class="w-full py-2.5 rounded-lg font-bold text-sm transition-colors border-2 {% if plan.highlight %}border-primary text-primary hover:bg-primary hover:text-white{% else %}border-slate-200 text-slate-600 hover:bg-slate-50{% endif %}">
-                {{ UI.pricing_notify }}
-              </button>
+              <button type="submit" class="w-full py-2.5 rounded-lg font-bold text-sm transition-colors border-2 {% if plan.highlight %}border-primary text-primary hover:bg-primary hover:text-white{% else %}border-slate-200 text-slate-600 hover:bg-slate-50{% endif %}">{{ UI.pricing_notify }}</button>
             </form>
-          {% elif plan.checkout_url %}
-            <form method="post" action="{% url 'resume:start_checkout' plan.code %}" class="mt-5">
-              {% csrf_token %}
-              <button type="submit"
-                      class="w-full py-2.5 rounded-lg font-bold text-sm transition-colors {% if plan.highlight %}bg-primary text-white hover:bg-primary-hover{% else %}bg-slate-100 text-slate-700 hover:bg-slate-200{% endif %}">
-                {% if is_pro %}{{ UI.pricing_extend }}{% else %}{{ UI.pricing_buy }}{% endif %}
-              </button>
-            </form>
+          {% elif plan.price_id %}
+            <button type="button" data-price-id="{{ plan.price_id }}" data-plan="{{ plan.code }}"
+                    class="buy-btn mt-5 w-full py-2.5 rounded-lg font-bold text-sm transition-colors {% if plan.highlight %}bg-primary text-white hover:bg-primary-hover{% else %}bg-slate-100 text-slate-700 hover:bg-slate-200{% endif %}">
+              {% if is_pro %}{{ UI.pricing_extend }}{% else %}{{ UI.pricing_buy }}{% endif %}
+            </button>
           {% else %}
             <p class="mt-5 text-center text-xs text-slate-400 py-2.5">{{ UI.pricing_unavailable }}</p>
           {% endif %}
@@ -104,20 +121,86 @@
       {% endfor %}
     </div>
 
-    <section class="mt-10 bg-white border border-slate-200 rounded-2xl p-6">
-      <h2 class="text-sm font-bold text-slate-500 uppercase tracking-wide mb-4">{{ UI.pricing_included }}</h2>
-      <ul class="space-y-2.5 text-sm text-slate-700">
-        <li class="flex gap-2.5"><span class="material-symbols-outlined !text-[18px] text-green-600 flex-shrink-0">check_circle</span>{{ UI.pricing_feat_unlimited }}</li>
-        <li class="flex gap-2.5"><span class="material-symbols-outlined !text-[18px] text-green-600 flex-shrink-0">check_circle</span>{{ UI.pricing_feat_jd }}</li>
-        <li class="flex gap-2.5"><span class="material-symbols-outlined !text-[18px] text-green-600 flex-shrink-0">check_circle</span>{{ UI.pricing_feat_tailor }}</li>
-        <li class="flex gap-2.5"><span class="material-symbols-outlined !text-[18px] text-green-600 flex-shrink-0">check_circle</span>{{ UI.pricing_feat_tracking }}</li>
-      </ul>
+    <!-- What each plan allows -->
+    <section class="mt-8 bg-white border border-slate-200 rounded-2xl overflow-hidden">
+      <table class="w-full text-sm">
+        <thead class="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
+          <tr><th class="text-left font-semibold px-4 py-3"></th><th class="font-semibold px-4 py-3">{{ UI.pricing_free_name }}</th><th class="font-semibold px-4 py-3">Pro</th></tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <tr>
+            <td class="px-4 py-3"><p class="font-medium">{{ UI.pricing_row_ai }}</p><p class="text-xs text-slate-400">{{ UI.pricing_row_ai_hint }}</p></td>
+            <td class="px-4 py-3 text-center">{{ limits.ai_credits }} <span class="text-xs text-slate-400">{{ UI.pricing_per_month }}</span></td>
+            <td class="px-4 py-3 text-center font-semibold">{{ UI.pricing_unlimited }}</td>
+          </tr>
+          <tr>
+            <td class="px-4 py-3"><p class="font-medium">{{ UI.pricing_row_downloads }}</p></td>
+            <td class="px-4 py-3 text-center">{{ limits.download_count }} <span class="text-xs text-slate-400">{{ UI.pricing_per_month }}</span></td>
+            <td class="px-4 py-3 text-center font-semibold">{{ UI.pricing_unlimited }}</td>
+          </tr>
+          <tr>
+            <td class="px-4 py-3"><p class="font-medium">{{ UI.pricing_row_resumes }}</p><p class="text-xs text-slate-400">{{ UI.pricing_row_resumes_hint }}</p></td>
+            <td class="px-4 py-3 text-center">{{ limits.resume_count }}</td>
+            <td class="px-4 py-3 text-center font-semibold">{{ UI.pricing_unlimited }}</td>
+          </tr>
+          <tr>
+            <td class="px-4 py-3"><p class="font-medium">{{ UI.pricing_row_jobs }}</p><p class="text-xs text-slate-400">{{ UI.pricing_row_jobs_hint }}</p></td>
+            <td class="px-4 py-3 text-center">{{ limits.job_branch_count }}</td>
+            <td class="px-4 py-3 text-center font-semibold">{{ UI.pricing_unlimited }}</td>
+          </tr>
+          <tr>
+            <td class="px-4 py-3"><p class="font-medium">{{ UI.pricing_row_core }}</p></td>
+            <td class="px-4 py-3 text-center"><span class="material-symbols-outlined text-green-600 !text-[18px]">check</span></td>
+            <td class="px-4 py-3 text-center"><span class="material-symbols-outlined text-green-600 !text-[18px]">check</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <p class="mt-4 text-xs text-slate-500 text-center max-w-2xl mx-auto">{{ UI.pricing_processor }}</p>
+
+    <!-- FAQ -->
+    <section class="mt-10">
+      <h2 class="text-lg font-bold text-slate-900 mb-3">{{ UI.pricing_faq_title }}</h2>
+      <div class="bg-white border border-slate-200 rounded-2xl divide-y divide-slate-100">
+        <details class="px-5 py-4"><summary class="font-semibold text-sm cursor-pointer">{{ UI.pricing_faq_1_q }}</summary><p class="text-sm text-slate-600 mt-2">{{ UI.pricing_faq_1_a }}</p></details>
+        <details class="px-5 py-4"><summary class="font-semibold text-sm cursor-pointer">{{ UI.pricing_faq_2_q }}</summary><p class="text-sm text-slate-600 mt-2">{{ UI.pricing_faq_2_a }}</p></details>
+        <details class="px-5 py-4"><summary class="font-semibold text-sm cursor-pointer">{{ UI.pricing_faq_3_q }}</summary><p class="text-sm text-slate-600 mt-2">{{ UI.pricing_faq_3_a }} <a class="text-primary font-semibold hover:underline" href="{% url 'resume:refunds' %}">{{ UI.legal_refunds }}</a></p></details>
+        <details class="px-5 py-4"><summary class="font-semibold text-sm cursor-pointer">{{ UI.pricing_faq_4_q }}</summary><p class="text-sm text-slate-600 mt-2">{{ UI.pricing_faq_4_a }}</p></details>
+        <details class="px-5 py-4"><summary class="font-semibold text-sm cursor-pointer">{{ UI.pricing_faq_5_q }}</summary><p class="text-sm text-slate-600 mt-2">{{ UI.pricing_faq_5_a }}</p></details>
+      </div>
     </section>
   </div>
 </main>
 
-<footer class="mt-auto border-t border-slate-200 bg-white py-6 px-4">
-  <p class="text-slate-400 text-xs text-center">© 2026 ResuStack. All rights reserved.</p>
-</footer>
+{% include "partials/legal_footer.html" %}
+
+{% if checkout %}
+{{ checkout|json_script:"paddle-checkout" }}
+<script src="https://cdn.paddle.com/paddle/v2/paddle.js"></script>
+<script>
+(function () {
+    const cfg = JSON.parse(document.getElementById('paddle-checkout').textContent);
+    if (!window.Paddle || !cfg.token) return;
+    if (cfg.environment === 'sandbox') Paddle.Environment.set('sandbox');
+    Paddle.Initialize({token: cfg.token});
+    document.querySelectorAll('.buy-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (window.resustackTrack) window.resustackTrack('checkout_opened', {plan: btn.dataset.plan});
+            Paddle.Checkout.open({
+                items: [{priceId: btn.dataset.priceId, quantity: 1}],
+                customer: cfg.email ? {email: cfg.email} : undefined,
+                customData: cfg.custom_data,
+                settings: {
+                    displayMode: 'overlay',
+                    locale: '{{ ui_lang }}',
+                    successUrl: window.location.origin + '{% url "resume:pricing" %}?paid=1',
+                },
+            });
+        });
+    });
+})();
+</script>
+{% endif %}
 </body>
 </html>

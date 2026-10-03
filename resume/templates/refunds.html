@@ -1,0 +1,33 @@
+{% extends "legal_base.html" %}
+{% block title %}Refund Policy{% endblock %}
+{% block description %}ResuStack Pro can be refunded in full within 14 days of purchase.{% endblock %}
+{% block content %}
+<h1>Refund Policy</h1>
+<p class="text-sm text-slate-500">Last updated: {{ terms_updated }}</p>
+
+<h2>14 days, full refund</h2>
+<p>
+    If Pro is not what you needed, ask for a refund within <strong>14 days of your purchase</strong> and you get the
+    whole amount back. No questions asked, whether or not you used it.
+</p>
+
+<h2>How to ask</h2>
+<ul>
+    <li>Reply to the receipt email from Paddle, or use the link in it to manage your order — Paddle, our merchant of record, processes refunds; or</li>
+    <li>email <a href="mailto:{{ contact_email }}">{{ contact_email }}</a> with the email address you paid with.</li>
+</ul>
+<p>Refunds go back to the original payment method. Your bank may take a few days to show it.</p>
+
+<h2>What happens to your account</h2>
+<p>
+    Pro access from a refunded purchase ends when the refund is made. Your resumes, versions and scores stay;
+    the free plan's limits apply again.
+</p>
+
+<h2>After 14 days</h2>
+<p>
+    Pro is a one-time purchase that does not renew, so there is nothing to cancel. After 14 days we do not refund
+    the unused part of a period, except where the law requires it or if we shut the service down
+    (see the <a href="{% url 'resume:terms' %}">Terms of Service</a>).
+</p>
+{% endblock %}

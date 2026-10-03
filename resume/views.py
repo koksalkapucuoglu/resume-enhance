@@ -112,6 +112,20 @@ def privacy_policy(request):
     return render(request, "privacy.html")
 
 
+def _legal_context():
+    return {"contact_email": settings.CONTACT_EMAIL, "terms_updated": settings.TERMS_UPDATED}
+
+
+def terms_of_service(request):
+    """Terms of Service. Public, and required by the payment provider."""
+    return render(request, "terms.html", _legal_context())
+
+
+def refund_policy(request):
+    """Refund policy. Public, and required by the payment provider."""
+    return render(request, "refunds.html", _legal_context())
+
+
 def privacy_policy_tr(request):
     """
     The Turkish policy, written as the KVKK information notice.
@@ -1595,22 +1609,32 @@ def preview_saved_resume(request, pk):
 # ---------------------------------------------------------------------------
 
 
-@login_required
 def pricing_page(request):
-    """What Pro costs and what it unlocks."""
+    """
+    What each plan costs and allows. Public: a visitor decides before signing
+    up, and Paddle reviews this page when approving the account.
+    """
     from resume.services import payment_service
 
-    profile = request.user.profile
+    user = request.user if request.user.is_authenticated else None
+    profile = user.profile if user else None
+    live = payment_service.is_live()
     return render(
         request,
         "resume/pricing.html",
         {
             "plans": payment_service.plans(),
-            "payments_live": payment_service.is_live(),
-            "is_pro": profile.is_pro(),
-            "premium_until": profile.premium_until,
-            "days_left": profile.premium_days_left,
-            "settings": settings,
+            "payments_live": live,
+            "checkout": (
+                payment_service.get_provider().checkout_config(user)
+                if live and user
+                else None
+            ),
+            "is_pro": bool(profile and profile.is_pro()),
+            "premium_until": profile.premium_until if profile else None,
+            "days_left": profile.premium_days_left if profile else None,
+            "just_paid": request.GET.get("paid") == "1",
+            "limits": settings.FREE_TIER_LIMITS,
         },
     )
 
@@ -1645,37 +1669,6 @@ UI_WAITLIST_THANKS = {
 }
 
 
-@login_required
-@require_http_methods(["POST"])
-def start_checkout(request, plan_code):
-    """
-    Hand the user off to the provider's hosted checkout.
-
-    Card details never reach this app — the provider collects them and tells us
-    the outcome over the webhook.
-    """
-    from resume.services import payment_service
-
-    if not payment_service.is_live():
-        # Reachable only by a hand-made POST; the page offers no buy button.
-        messages.error(request, "Checkout is not open yet.")
-        return redirect("resume:pricing")
-
-    plan = payment_service.get_plan(plan_code)
-    if not plan:
-        messages.error(request, "That plan is not available.")
-        return redirect("resume:pricing")
-
-    url = payment_service.get_provider().checkout_url(plan, request.user)
-    if not url:
-        logger.error("No checkout URL configured for plan %s", plan_code)
-        messages.error(
-            request, "Checkout is not available right now. Please try again later."
-        )
-        return redirect("resume:pricing")
-    return redirect(url)
-
-
 @csrf_exempt
 @require_http_methods(["POST"])
 def payment_webhook(request):
@@ -1704,7 +1697,9 @@ def payment_webhook(request):
     try:
         parsed = provider.parse(request.body)
     except payment_service.PaymentError as exc:
+        # Possibly money taken with no access granted: someone has to look.
         logger.warning("Unusable payment webhook: %s", exc)
+        report_degraded("payment_webhook_unusable", reason=str(exc)[:120])
         return HttpResponse(status=400)
 
     if parsed is None:
@@ -1714,6 +1709,7 @@ def payment_webhook(request):
     user = User.objects.filter(pk=parsed["user_id"]).first()
     if not user:
         logger.error("Payment for unknown user %s", parsed["user_id"])
+        report_degraded("payment_for_unknown_user", order=parsed["external_id"])
         return HttpResponse(status=200)
 
     try:
@@ -1727,6 +1723,7 @@ def payment_webhook(request):
         )
     except payment_service.PaymentError as exc:
         logger.error("Could not apply purchase: %s", exc)
+        report_degraded("payment_not_granted", order=parsed["external_id"])
         return HttpResponse(status=400)
 
     return HttpResponse(status=200)

@@ -12,6 +12,8 @@ urlpatterns = [
     path("pricing/", views.pricing_page, name="pricing"),
     path("feedback/", views.submit_feedback, name="submit_feedback"),
     path("privacy/", views.privacy_policy, name="privacy"),
+    path("terms/", views.terms_of_service, name="terms"),
+    path("refunds/", views.refund_policy, name="refunds"),
     path("gizlilik/", views.privacy_policy_tr, name="privacy_tr"),
     # Domain proof for publishing as com.resustackapp/* in the MCP Registry.
     path(
@@ -19,7 +21,6 @@ urlpatterns = [
         views.mcp_registry_auth,
         name="mcp_registry_auth",
     ),
-    path("checkout/<str:plan_code>/", views.start_checkout, name="start_checkout"),
     path(
         "pricing/notify/",
         views.register_premium_interest,

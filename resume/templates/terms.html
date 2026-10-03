@@ -1,0 +1,90 @@
+{% extends "legal_base.html" %}
+{% block title %}Terms of Service{% endblock %}
+{% block description %}The terms for using ResuStack and buying Pro access.{% endblock %}
+{% block content %}
+<h1>Terms of Service</h1>
+<p class="text-sm text-slate-500">Last updated: {{ terms_updated }}</p>
+
+<p>
+    ResuStack (<a href="https://resustackapp.com">resustackapp.com</a> and the ResuStack MCP server) is operated by
+    <strong>Köksal Kapucuoğlu</strong>, an individual based in Türkiye ("we", "us"). By creating an account or using
+    the service you agree to these terms. Questions: <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.
+</p>
+
+<h2>The service</h2>
+<p>
+    ResuStack helps you write, design and export resumes, and measure a resume against a job posting. Some features
+    use AI models from third parties (listed in the <a href="{% url 'resume:privacy' %}">Privacy Policy</a>). AI output
+    can be wrong: you are responsible for checking what goes on your resume and for what you send to employers.
+    A score against a job posting is an estimate, not a promise of an interview or a job.
+</p>
+
+<h2>Your account</h2>
+<ul>
+    <li>You must be at least 16 years old.</li>
+    <li>Keep your password and API tokens secret; you are responsible for what happens under your account.</li>
+    <li>One person per account. Do not create accounts to get around the free plan's limits.</li>
+</ul>
+
+<h2>Your content</h2>
+<p>
+    What you put into ResuStack stays yours. You give us permission to store it, process it and send it to the
+    processors named in the Privacy Policy only as needed to run the features you use. You can delete any resume,
+    or your whole account, at any time.
+</p>
+
+<h2>Acceptable use</h2>
+<p>Do not use ResuStack to:</p>
+<ul>
+    <li>create resumes in someone else's name or with information you know to be false in order to deceive an employer;</li>
+    <li>upload content you have no right to use, or that is unlawful;</li>
+    <li>probe, overload or attack the service, scrape it, or bypass its limits or security.</li>
+</ul>
+<p>We may suspend accounts that do, after telling you why where we reasonably can.</p>
+
+<h2>Free plan and Pro</h2>
+<ul>
+    <li>The free plan has the limits shown on the <a href="{% url 'resume:pricing' %}">pricing page</a>. We may change them; changes do not affect Pro access you have already bought.</li>
+    <li><strong>Pro is a one-time purchase of a fixed period</strong> (3 or 12 months). It does not renew. When it ends your account returns to the free plan and your data stays.</li>
+    <li>"Unlimited" means no fixed cap for normal personal use. Automated or abusive use that threatens the service for others may be rate-limited.</li>
+</ul>
+
+<h2>Payments</h2>
+<p>
+    Our order process is conducted by our online reseller <a href="https://www.paddle.com">Paddle.com</a>.
+    Paddle.com is the Merchant of Record for all our orders. Paddle provides all customer service inquiries and
+    handles returns. Prices include or add VAT/KDV as required where you live; Paddle issues your invoice.
+</p>
+
+<h2>Refunds</h2>
+<p>See the <a href="{% url 'resume:refunds' %}">Refund Policy</a>: a full refund within 14 days of purchase.</p>
+
+<h2>Availability</h2>
+<p>
+    We work to keep ResuStack running, but it is provided "as is", without a guarantee that it will always be
+    available or error-free. Keep your own copy of anything important — every resume can be downloaded as a PDF.
+</p>
+
+<h2>Liability</h2>
+<p>
+    To the extent the law allows, we are not liable for indirect losses (such as lost opportunities), and our total
+    liability for any claim is limited to the amount you paid us in the 12 months before it. Nothing in these terms
+    limits rights you have as a consumer that cannot be limited by contract.
+</p>
+
+<h2>Ending</h2>
+<p>
+    You can stop using ResuStack and delete your account at any time from your Profile page. If we ever shut the
+    service down we will give at least 30 days' notice by email so you can download your resumes, and refund the
+    unused part of any Pro period.
+</p>
+
+<h2>Changes</h2>
+<p>
+    We may update these terms; the date at the top shows the latest version. If a change matters for how you use
+    ResuStack, we will tell you before it applies.
+</p>
+
+<h2>Law</h2>
+<p>These terms are governed by the laws of the Republic of Türkiye.</p>
+{% endblock %}

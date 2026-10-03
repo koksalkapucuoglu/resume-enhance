@@ -1,26 +1,35 @@
 """
-One-time purchases of Pro access.
+One-time purchases of Pro access, sold through Paddle.
 
 Not a subscription: the user buys a fixed period, it runs out, and their data
 stays. Resume writing is episodic — people finish a job search and leave — so
 billing them monthly mostly generates cancellations.
 
-The provider is behind a small adapter. LemonSqueezy is the first one because
-it acts as merchant of record (it handles VAT, which a solo operator selling
-into the EU and Turkey otherwise has to), but nothing above this module knows
-that: swapping providers means a new adapter and two settings.
+Paddle is the merchant of record: it is the seller on the receipt, collects
+and remits VAT/KDV, and accepts an individual in Türkiye as the vendor, so no
+company is needed to sell. Card details never reach this app — Paddle.js opens
+the checkout over our page and the outcome arrives on the webhook.
+
+Nothing outside this module knows the provider. Swapping it means a new
+provider class with the same three methods and two settings.
 """
 
 import hashlib
 import hmac
 import json
 import logging
+import time
 
 from django.conf import settings
 
 from resume.models import Purchase
 
 logger = logging.getLogger(__name__)
+
+# How old a webhook signature may be. Paddle's SDKs default to five seconds;
+# redeliveries are signed afresh and the order id makes a replay a no-op, so a
+# wider window only absorbs clock drift.
+SIGNATURE_TOLERANCE_SECONDS = 300
 
 
 class PaymentError(Exception):
@@ -31,11 +40,15 @@ def is_live():
     """
     Whether money can actually change hands.
 
-    False while a provider is still being chosen. The plans stay visible — what
-    Pro costs is useful information either way — but every path that would
-    start a payment stops here instead.
+    Needs the switch *and* the keys: a half-configured environment shows the
+    plans as coming soon instead of a buy button that cannot work.
     """
-    return settings.PAYMENTS.get("STATUS") == "live"
+    payments = settings.PAYMENTS
+    return (
+        payments.get("STATUS") == "live"
+        and bool(payments.get("CLIENT_TOKEN"))
+        and bool(payments.get("WEBHOOK_SECRET"))
+    )
 
 
 def plans():
@@ -47,93 +60,111 @@ def get_plan(code):
     return next((p for p in plans() if p["code"] == code), None)
 
 
+def plan_for_price(price_id):
+    """The plan a Paddle price belongs to — decided here, never by the client."""
+    if not price_id:
+        return None
+    return next((p for p in plans() if p.get("price_id") == price_id), None)
+
+
 # ---------------------------------------------------------------------------
-# Provider adapter
+# Provider
 # ---------------------------------------------------------------------------
 
 
-class LemonSqueezyProvider:
-    """
-    Checkout links and webhook verification for LemonSqueezy.
+class PaddleProvider:
+    """Paddle Billing: overlay checkout in the browser, signed webhooks."""
 
-    Checkout is a hosted link per plan (configured in settings), with the user
-    passed through as custom data so the webhook can find them again. That
-    keeps card details entirely on the provider's side — this app never sees
-    them.
-    """
+    name = "paddle"
 
-    name = "lemonsqueezy"
-
-    def checkout_url(self, plan, user):
-        base = plan.get("checkout_url")
-        if not base:
-            return None
-        separator = "&" if "?" in base else "?"
-        return (
-            f"{base}{separator}checkout[custom][user_id]={user.id}"
-            f"&checkout[email]={user.email}"
-            if user.email
-            else f"{base}{separator}checkout[custom][user_id]={user.id}"
-        )
+    def checkout_config(self, user):
+        """What the pricing page hands to Paddle.js. Nothing here is secret."""
+        return {
+            "environment": settings.PAYMENTS.get("ENVIRONMENT", "sandbox"),
+            "token": settings.PAYMENTS.get("CLIENT_TOKEN", ""),
+            "email": user.email or "",
+            # Paddle echoes this back on the webhook so the payment finds its
+            # account. Tampering with it only gifts Pro to someone else.
+            "custom_data": {"user_id": str(user.id)},
+        }
 
     def verify(self, body, headers):
-        """Reject anything not signed with the configured secret."""
+        """Reject anything not signed with the endpoint's secret key."""
         secret = settings.PAYMENTS.get("WEBHOOK_SECRET")
         if not secret:
             raise PaymentError("No webhook secret configured.")
 
-        signature = headers.get("X-Signature") or headers.get("HTTP_X_SIGNATURE") or ""
+        header = headers.get("Paddle-Signature") or ""
+        parts = dict(
+            item.split("=", 1) for item in header.split(";") if "=" in item
+        )
+        ts, signature = parts.get("ts", ""), parts.get("h1", "")
+        if not ts.isdigit() or not signature:
+            raise PaymentError("Missing or malformed Paddle-Signature header.")
+        if abs(time.time() - int(ts)) > SIGNATURE_TOLERANCE_SECONDS:
+            raise PaymentError("Signature timestamp outside tolerance.")
+
         expected = hmac.new(
-            secret.encode(), body, hashlib.sha256
+            secret.encode(), f"{ts}:".encode() + body, hashlib.sha256
         ).hexdigest()
         if not hmac.compare_digest(expected, signature):
             raise PaymentError("Signature mismatch.")
 
     def parse(self, body):
         """
-        Pull the fields we need out of the provider's payload.
+        Pull out what a completed one-time payment needs.
 
-        Returns None for events that are not a completed one-time payment, so
-        the caller can acknowledge them without acting.
+        Returns None for events that grant nothing, so the caller acknowledges
+        them without acting (an error answer makes Paddle retry).
         """
         try:
             payload = json.loads(body)
         except (ValueError, TypeError):
             raise PaymentError("Body is not JSON.")
+        if not isinstance(payload, dict):
+            raise PaymentError("Body is not a JSON object.")
 
-        meta = payload.get("meta") or {}
-        if meta.get("event_name") not in ("order_created",):
+        if payload.get("event_type") != "transaction.completed":
             return None
-
         data = payload.get("data") or {}
-        attributes = data.get("attributes") or {}
-        if attributes.get("status") not in ("paid", "completed"):
+        if data.get("status") != "completed":
             return None
 
-        custom = (meta.get("custom_data") or {})
+        custom = data.get("custom_data") or {}
         try:
             user_id = int(custom.get("user_id"))
         except (TypeError, ValueError):
             raise PaymentError("Payload carries no usable user_id.")
 
-        external_id = str(data.get("id") or attributes.get("identifier") or "")
+        external_id = str(data.get("id") or "")
         if not external_id:
-            raise PaymentError("Payload carries no order id.")
+            raise PaymentError("Payload carries no transaction id.")
 
+        items = data.get("items") or []
+        price_id = ((items[0] or {}).get("price") or {}).get("id") if items else None
+        plan = plan_for_price(price_id)
+        if not plan:
+            raise PaymentError(f"Unknown price: {price_id!r}")
+
+        totals = (data.get("details") or {}).get("totals") or {}
+        try:
+            amount = int(totals.get("total") or 0)
+        except (TypeError, ValueError):
+            amount = 0
         return {
             "user_id": user_id,
             "external_id": external_id,
-            "plan_code": str(custom.get("plan") or attributes.get("first_order_item", {}).get("product_name") or ""),
-            "amount_cents": int(attributes.get("total") or 0),
-            "currency": str(attributes.get("currency") or "USD"),
+            "plan_code": plan["code"],
+            "amount_cents": amount,
+            "currency": str(data.get("currency_code") or "USD"),
         }
 
 
-_PROVIDERS = {LemonSqueezyProvider.name: LemonSqueezyProvider}
+_PROVIDERS = {PaddleProvider.name: PaddleProvider}
 
 
 def get_provider(name=None):
-    name = name or settings.PAYMENTS.get("PROVIDER", LemonSqueezyProvider.name)
+    name = name or settings.PAYMENTS.get("PROVIDER", PaddleProvider.name)
     provider_class = _PROVIDERS.get(name)
     if not provider_class:
         raise PaymentError(f"Unknown payment provider: {name}")
@@ -153,7 +184,7 @@ def record_purchase(user, provider_name, external_id, plan_code, amount_cents=0,
     Providers retry webhooks; the unique external_id makes a redelivery a no-op
     rather than a second period. Returns (purchase, created).
     """
-    plan = get_plan(plan_code) or _plan_by_alias(plan_code)
+    plan = get_plan(plan_code)
     if not plan:
         raise PaymentError(f"Unknown plan: {plan_code!r}")
 
@@ -178,16 +209,3 @@ def record_purchase(user, provider_name, external_id, plan_code, amount_cents=0,
         plan["days"], user.id, plan["code"], external_id,
     )
     return purchase, True
-
-
-def _plan_by_alias(value):
-    """Match a provider's product name back to a plan when the code is absent."""
-    needle = (value or "").strip().lower()
-    if not needle:
-        return None
-    for plan in plans():
-        if needle in (plan["code"].lower(), plan["name"].lower()):
-            return plan
-        if str(plan.get("provider_product_id") or "").lower() == needle:
-            return plan
-    return None

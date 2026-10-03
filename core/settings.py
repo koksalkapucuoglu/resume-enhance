@@ -404,7 +404,8 @@ FREE_TIER_LIMITS = {
 }
 
 # Purchasable access. One-time periods, not subscriptions — see
-# resume/services/payment_service.py for why.
+# resume/services/payment_service.py for why. Prices are Paddle price ids
+# (pri_...), one per plan; amounts shown here must match them.
 PREMIUM_PLANS = [
     {
         "code": "pro_3m",
@@ -412,8 +413,7 @@ PREMIUM_PLANS = [
         "days": 90,
         "price_display": "$9",
         "blurb": "Covers a typical job search.",
-        "checkout_url": os.environ.get("CHECKOUT_URL_PRO_3M", ""),
-        "provider_product_id": os.environ.get("PRODUCT_ID_PRO_3M", ""),
+        "price_id": os.environ.get("PADDLE_PRICE_PRO_3M", ""),
         "highlight": True,
     },
     {
@@ -422,20 +422,29 @@ PREMIUM_PLANS = [
         "days": 365,
         "price_display": "$24",
         "blurb": "For a longer search, or coming back for the next one.",
-        "checkout_url": os.environ.get("CHECKOUT_URL_PRO_12M", ""),
-        "provider_product_id": os.environ.get("PRODUCT_ID_PRO_12M", ""),
+        "price_id": os.environ.get("PADDLE_PRICE_PRO_12M", ""),
         "highlight": False,
     },
 ]
 
 PAYMENTS = {
-    # "coming_soon" until a provider is chosen: the plans are shown so people
-    # know what Pro will cost, but nothing tries to take money. Flip to "live"
-    # once checkout URLs and a webhook secret are configured.
+    # "coming_soon" until Paddle has approved the account: the plans are shown
+    # so people know what Pro costs, but nothing tries to take money. "live"
+    # needs the client token and webhook secret as well (payment_service.is_live).
     "STATUS": os.environ.get("PAYMENT_STATUS", "coming_soon"),
-    "PROVIDER": os.environ.get("PAYMENT_PROVIDER", "lemonsqueezy"),
-    "WEBHOOK_SECRET": os.environ.get("PAYMENT_WEBHOOK_SECRET", ""),
+    "PROVIDER": "paddle",
+    # "sandbox" (sandbox-vendors.paddle.com) or "production".
+    "ENVIRONMENT": os.environ.get("PADDLE_ENVIRONMENT", "sandbox"),
+    # Client-side token (test_... / live_...): public, used by Paddle.js.
+    "CLIENT_TOKEN": os.environ.get("PADDLE_CLIENT_TOKEN", ""),
+    # Secret key of the notification destination: verifies webhooks.
+    "WEBHOOK_SECRET": os.environ.get("PADDLE_WEBHOOK_SECRET", ""),
 }
+
+# Where people reach a human: legal pages, payment questions, refunds.
+CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL", "privacy@resustackapp.com")
+# Date shown on the Terms of Service and Refund Policy.
+TERMS_UPDATED = "3 October 2026"
 
 # Agent Chat Rate Limiting
 AGENT_CHAT_RATE_LIMIT = {

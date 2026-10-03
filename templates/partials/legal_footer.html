@@ -1,0 +1,11 @@
+<footer class="mt-auto border-t border-slate-200 bg-white py-6 px-4">
+  <div class="max-w-[960px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400">
+    <p>© 2026 ResuStack</p>
+    <nav class="flex gap-4">
+      <a class="hover:text-primary" href="{% url 'resume:pricing' %}">{{ UI.pricing_title }}</a>
+      <a class="hover:text-primary" href="{% url 'resume:terms' %}">{{ UI.legal_terms }}</a>
+      <a class="hover:text-primary" href="{% url 'resume:refunds' %}">{{ UI.legal_refunds }}</a>
+      <a class="hover:text-primary" href="{% if ui_lang == 'tr' %}{% url 'resume:privacy_tr' %}{% else %}{% url 'resume:privacy' %}{% endif %}">{{ UI.legal_privacy }}</a>
+    </nav>
+  </div>
+</footer>

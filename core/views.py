@@ -56,6 +56,18 @@ class SignupForm(UserCreationForm):
         return user
 
 
+def _safe_next(request):
+    """A same-site path to return to after signing up (e.g. the pricing page)."""
+    from django.utils.http import url_has_allowed_host_and_scheme
+
+    target = request.POST.get("next") or request.GET.get("next") or ""
+    if target and url_has_allowed_host_and_scheme(
+        target, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+    ):
+        return target
+    return ""
+
+
 class SignupView(View):
     """User registration view."""
 
@@ -65,7 +77,9 @@ class SignupView(View):
             return redirect("resume:index")
 
         form = SignupForm()
-        return render(request, "registration/signup.html", {"form": form})
+        return render(
+            request, "registration/signup.html", {"form": form, "next": _safe_next(request)}
+        )
 
     def post(self, request):
         """Process signup form."""
@@ -80,9 +94,11 @@ class SignupView(View):
             # Two authentication backends are configured (allauth for Google),
             # so Django needs to be told which one vouched for this user.
             login(request, user, backend="django.contrib.auth.backends.ModelBackend")
-            return redirect("resume:index")
+            return redirect(_safe_next(request) or "resume:index")
 
-        return render(request, "registration/signup.html", {"form": form})
+        return render(
+            request, "registration/signup.html", {"form": form, "next": _safe_next(request)}
+        )
 
 
 @login_required

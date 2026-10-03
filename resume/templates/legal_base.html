@@ -1,0 +1,45 @@
+{% load static %}
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>{% block title %}{% endblock %} - ResuStack</title>
+    <meta name="description" content="{% block description %}{% endblock %}"/>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+    <script>
+        tailwind.config = {
+            theme: { extend: {
+                colors: { "primary": "#2563eb" },
+                fontFamily: { "sans": ["Inter", "sans-serif"] },
+            } },
+        }
+    </script>
+</head>
+<body class="bg-white text-slate-900 font-sans">
+    <nav class="border-b border-slate-100">
+        <div class="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between">
+            <a href="{% url 'resume:index' %}" class="flex items-center gap-2">
+                <img src="{% static 'img/resustack_logo.png' %}" alt="ResuStack" class="h-7 w-auto"/>
+                <span class="text-lg font-black tracking-tight">ResuStack</span>
+            </a>
+            <a href="{% url 'resume:pricing' %}" class="text-sm font-semibold text-slate-500 hover:text-primary">Pricing</a>
+        </div>
+    </nav>
+    <main class="max-w-3xl mx-auto px-4 py-12">
+        <article class="prose prose-slate max-w-none prose-headings:font-bold prose-a:text-primary">
+            {% block content %}{% endblock %}
+        </article>
+    </main>
+    <footer class="border-t border-slate-100 py-8">
+        <div class="max-w-3xl mx-auto px-4 flex flex-wrap gap-4 text-xs text-slate-400">
+            <span>© 2026 ResuStack</span>
+            <a class="hover:text-primary" href="{% url 'resume:terms' %}">Terms</a>
+            <a class="hover:text-primary" href="{% url 'resume:refunds' %}">Refunds</a>
+            <a class="hover:text-primary" href="{% url 'resume:privacy' %}">Privacy</a>
+            <a class="hover:text-primary" href="{% url 'resume:privacy_tr' %}" hreflang="tr">Gizlilik (KVKK)</a>
+        </div>
+    </footer>
+</body>
+</html>
