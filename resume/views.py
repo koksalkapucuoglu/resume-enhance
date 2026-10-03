@@ -274,11 +274,11 @@ class DashboardView(LoginRequiredMixin, ListView):
                                 "message_tr": f"**{r.display_name}** {months} aydır güncellenmedi. Yenilemek ister misiniz?",
                                 "chips": [
                                     f"Preview resume {r.id}",
-                                    f"Analyze resume {r.id}",
+                                    f"Edit resume {r.id}",
                                 ],
                                 "chips_tr": [
                                     f"Resume {r.id}'yi önizle",
-                                    f"Resume {r.id}'yi analiz et",
+                                    f"Resume {r.id}'yi düzenle",
                                 ],
                             }
                         )
@@ -291,11 +291,11 @@ class DashboardView(LoginRequiredMixin, ListView):
                                 "message_tr": f"**{r.display_name}** için yetenek eklenmemiş. Yetenek eklemek ATS eşleşmesine yardımcı olur!",
                                 "chips": [
                                     f"Edit resume {r.id}",
-                                    f"Analyze resume {r.id}",
+                                    f"Preview resume {r.id}",
                                 ],
                                 "chips_tr": [
                                     f"Resume {r.id}'yi düzenle",
-                                    f"Resume {r.id}'yi analiz et",
+                                    f"Resume {r.id}'yi önizle",
                                 ],
                             }
                         )
@@ -2298,6 +2298,9 @@ def _agent_context(request, active_resume, message="", history=None, posting_id=
 
     return {
         "lang": lang,
+        # What the person typed this turn. modify_resume reads it alongside the
+        # model's paraphrased instruction, which tends to drop details.
+        "user_message": message,
         "active_posting": active_posting,
         "confirm_destructive": profile.confirm_destructive,
         # Superusers get a trace of each turn in the chat (agent_loop._trace).

@@ -254,9 +254,10 @@ def edit_resume(user, ctx, resume_id=None):
     name="create_blank_resume",
     description=(
         "Create a new, empty resume and make it the active one. Use it when the "
-        "user wants to start from scratch. Then ask for their details a few at a "
-        "time (name and contact, roles, education, skills) and write each answer "
-        "in with modify_resume. Mention that the form editor is there too."
+        "user wants to start from scratch. If their message already has details, "
+        "write them all in with ONE modify_resume call; otherwise ask for name, "
+        "contact, roles, education and skills, and write each answer in with one "
+        "modify_resume call. Mention that the form editor is there too."
     ),
 )
 def create_blank_resume(user, ctx):
@@ -514,7 +515,8 @@ def promote_branch(user, ctx, resume_id=None):
     description=(
         "Apply a natural-language edit to a resume's content: update fields, add or "
         "remove experience, education, skills or projects, rewrite descriptions, or "
-        "tailor it for a role. Pass the user's instruction verbatim."
+        "tailor it for a role. Pass the user's instruction verbatim, with every "
+        "detail they gave — one call per message, not one per field."
     ),
     parameters={"resume_id": INT_OR_NULL, "instruction": {"type": "string"}},
     destructive=True,
@@ -523,6 +525,9 @@ def modify_resume(user, ctx, instruction, resume_id=None):
     resume, error = _resume_or_error(user, resume_id, ctx)
     if error:
         return error
+    said = (ctx.get("user_message") or "").strip()
+    if said and said not in instruction:
+        instruction = f"{instruction}\n\nThe user's own words this turn (use every detail they give):\n{said}"
     legacy = _service()._exec_modify_resume(
         user, {"resume_id": resume.id}, ctx["lang"], instruction, resume
     )

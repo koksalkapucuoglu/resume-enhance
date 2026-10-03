@@ -404,7 +404,11 @@ def _run_events(user, ctx, messages, effects, start_step, usage_totals, stream=F
             # A doubtful destructive call asks even when the user turned
             # confirmations off: that setting trusts the assistant to be right.
             if tool.destructive and (
-                ctx.get("confirm_destructive", True) or verdict.action == "warn"
+                verdict.action == "warn"
+                or (
+                    ctx.get("confirm_destructive", True)
+                    and not _nothing_to_lose(user, ctx, tool, _call_arguments(call))
+                )
             ):
                 lang = ctx.get("lang", "en")
                 # Every tool call in an assistant turn needs an answer before
@@ -453,6 +457,35 @@ def _safe_args(raw_arguments):
         return json.loads(raw_arguments or "{}")
     except ValueError:
         return {}
+
+
+def _nothing_to_lose(user, ctx, tool, arguments):
+    """
+    Writing into a resume that is still empty cannot destroy anything, so it
+    needs no "are you sure?". This is what makes building from scratch in chat
+    one answer per step instead of one approval per step.
+    """
+    if tool.name != "modify_resume":
+        return False
+    from resume.models import Resume
+
+    resume_id = arguments.get("resume_id")
+    resume = (
+        Resume.objects.filter(pk=resume_id, user=user).first()
+        if resume_id
+        else ctx.get("active_resume")
+    )
+    if resume is None:
+        return False
+    content = resume.content or {}
+    info = content.get("user_info") or {}
+    return not (
+        any(str(info.get(k) or "").strip() for k in ("full_name", "email", "phone", "github", "linkedin"))
+        or info.get("skills")
+        or content.get("experience")
+        or content.get("education")
+        or content.get("projects_and_publications")
+    )
 
 
 def _call_arguments(call):

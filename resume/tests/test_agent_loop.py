@@ -938,3 +938,37 @@ class CreateBlankResumeToolTest(TestCase):
         self.assertIn("error", result.data)
         self.assertEqual(Resume.objects.filter(user=self.user).count(), 3)
 
+
+class EmptyResumeNeedsNoApprovalTest(TestCase):
+    """Filling a brand-new resume is not destructive; changing a real one is."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("ada", password="x")
+
+    def _ctx(self, resume):
+        return {"lang": "en", "active_resume": resume, "resumes": [], "quota": {},
+                "confirm_destructive": True}
+
+    def _run(self, resume):
+        turns = [
+            (assistant(tool_calls=[call("modify_resume", {"instruction": "My name is Ada"})]), USAGE),
+            (assistant("Done."), USAGE),
+        ]
+        with patch("resume.services.agent_loop.send_openai_tool_turn", side_effect=turns), \
+                patch("resume.services.agent_service.send_openai_message", return_value=json.dumps({
+                    "modified_resume": {"user_info": {"full_name": "Ada"}},
+                    "changes_summary": "name", "response_message": "ok"})):
+            return agent_loop.run_turn(self.user, self._ctx(resume), [], "My name is Ada")
+
+    def test_an_empty_resume_is_written_without_asking(self):
+        resume = Resume.objects.create(user=self.user, title="New", content={})
+        out = self._run(resume)
+        self.assertEqual(out["status"], "done")
+        resume.refresh_from_db()
+        self.assertEqual(resume.content["user_info"]["full_name"], "Ada")
+
+    def test_a_resume_with_content_still_asks(self):
+        resume = Resume.objects.create(user=self.user, title="CV", content=content())
+        out = self._run(resume)
+        self.assertEqual(out["status"], "needs_approval")
+

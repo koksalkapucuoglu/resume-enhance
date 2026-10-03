@@ -106,9 +106,9 @@ class AgentService:
                 else f"You have {count} resume{'s' if count != 1 else ''}:"
             )
         quick_replies = (
-            ["Preview first resume", "Analyze resume", "Create new"]
+            ["Preview first resume", "Score against a job posting", "Create new"]
             if lang == "en"
-            else ["İlk resume'u önizle", "Resume'u analiz et", "Yeni oluştur"]
+            else ["İlk resume'u önizle", "İlana göre puanla", "Yeni oluştur"]
         )
         return {
             "type": "chat",
@@ -129,9 +129,9 @@ class AgentService:
             "tr": f"**{resume.display_name}** onizlemesi sagda gosteriliyor.",
         }.get(lang, f"Previewing resume {resume.id}.")
         quick_replies = (
-            ["Analyze this resume", "Download PDF", "Edit in form"]
+            ["Score against a job posting", "Download PDF", "Edit in form"]
             if lang == "en"
-            else ["Bu resume'u analiz et", "PDF indir", "Formda düzenle"]
+            else ["İlana göre puanla", "PDF indir", "Formda düzenle"]
         )
         return {
             "type": "preview",
@@ -255,6 +255,9 @@ class AgentService:
             return {"type": "chat", "message": msg}
 
         resume_json = json.dumps(resume.content, ensure_ascii=False, indent=2)
+        # An empty resume shows no field names, and keys the model invents
+        # ("name" for full_name) are dropped on save — so say what they are.
+        schema_json = json.dumps(resume_content.CONTENT_SCHEMA, ensure_ascii=False)
         experiences = resume.content.get("experience", [])
         last_exp_note = ""
         if experiences:
@@ -270,6 +273,9 @@ CURRENT RESUME:
 {resume_json}
 
 {last_exp_note}
+
+THE SHAPE (use exactly these keys; anything else is dropped when saved):
+{schema_json}
 
 RULES:
 - Return the COMPLETE modified resume JSON (all fields, even unchanged ones).
@@ -326,6 +332,7 @@ Respond ONLY with valid JSON:
         # Retry once with simpler prompt
         logger.info("modify_resume: first attempt failed, retrying with simpler prompt")
         retry_prompt = f"""Modify this resume JSON as instructed. Return ONLY valid JSON with key "modified_resume" containing the full resume.
+Shape: {schema_json}
 Current resume: {resume_json}
 User request: {user_message}"""
         retry_result = send_openai_message(

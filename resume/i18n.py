@@ -212,7 +212,7 @@ TRANSLATIONS = {
         "pricing_unavailable": "Checkout is not set up yet.",
         "pricing_soon_badge": "Coming soon",
         "pricing_soon_title": "Pro is not on sale yet",
-        "pricing_soon_body": "Everything below is built and working — we're still choosing how to take payment. Tell us which plan you'd want and we'll let you know the moment it opens.",
+        "pricing_soon_body": "Everything below is built and working; checkout opens as soon as our payment provider approves the store. Tell us which plan you'd want and we'll let you know the moment it opens.",
         "pricing_notify": "Tell me when it's ready",
         # Usage (profile)
         "usage_title": "Free plan usage",
@@ -515,7 +515,7 @@ TRANSLATIONS = {
         "pricing_unavailable": "Ödeme henüz kurulmadı.",
         "pricing_soon_badge": "Yakında",
         "pricing_soon_title": "Pro henüz satışta değil",
-        "pricing_soon_body": "Aşağıdaki her şey hazır ve çalışıyor — ödemeyi nasıl alacağımıza henüz karar vermedik. Hangi planı isterdiğinizi söyleyin, satışa çıktığı anda haber verelim.",
+        "pricing_soon_body": "Aşağıdaki her şey hazır ve çalışıyor; ödeme sağlayıcımız mağazayı onaylar onaylamaz satış açılıyor. Hangi planı istediğinizi söyleyin, açıldığı anda haber verelim.",
         "pricing_notify": "Hazır olunca haber ver",
         # Usage (profile)
         "usage_title": "Ücretsiz plan kullanımı",
