@@ -146,7 +146,7 @@
                 <div class="px-6 py-4 border-b border-slate-100 bg-slate-50">
                     <h2 class="font-semibold text-slate-900 flex items-center gap-2">
                         <span class="material-symbols-outlined text-primary">card_membership</span>
-                        Subscription Plan
+                        {{ UI.subscription_plan }}
                     </h2>
                 </div>
                 <div class="p-6">
@@ -161,12 +161,12 @@
                             </p>
                             <p class="text-sm text-slate-500 mt-1">
                                 {% if request.user.profile.is_pro %}
-                                    Unlimited resumes, imports, enhancements &amp; downloads
+                                    {{ UI.plan_pro_hint }}
                                     {% if request.user.profile.premium_until %}
                                         · {{ UI.pricing_until|lower }} {{ request.user.profile.premium_until|date:"d M Y" }}
                                     {% endif %}
                                 {% else %}
-                                    Limited features with monthly quotas
+                                    {{ UI.plan_free_hint }}
                                 {% endif %}
                             </p>
                         </div>
