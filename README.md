@@ -9,18 +9,17 @@
 ## ✨ Features
 
 ### Resume builder
-- **PDF & LinkedIn import** — upload an existing resume or a LinkedIn PDF; AI extracts and structures it
+- **PDF import** — upload an existing resume or a LinkedIn profile PDF (told apart automatically); AI extracts and structures it and flags anything the file does not support
 - **Split-pane editor** — the form on the left, a live preview on the right, with page breaks where the PDF will break
 - **14 designs on 6 layouts** — single column, banner, label gutter, header grid, left sidebar and right rail; ATS-safe designs are marked, and switching keeps your content
 - **English and Turkish resumes** — headings, "Present", month names and degree phrasing print in the language the resume is written in
 - **"What I'm working on"** — an optional section above Education, shown only when you tick it
-- **Sign in with Google** — or with a username and password; email sign-ups confirm their address before using the AI features
+- **Sign in with Google** — or with a username and password; email sign-ups can import their first PDF at once and confirm their address before the other AI features
 - **PDF export** — rendered with WeasyPrint from the same template the preview uses
 
 ### AI
 - **One-click enhance** — rewrites experience and project descriptions into stronger bullet points
-- **Analyze and compare** — score a resume and see where it is weak, or compare two versions
-- **Guided build** — build a resume step by step through questions
+- **Start from scratch in chat** — the assistant creates the resume and fills it in as you answer
 
 ### Agentic mode
 - **Edit by chatting** — *"Make my last role sound more senior"*; the agent uses tools, streams its progress and asks for approval before destructive actions
@@ -31,9 +30,10 @@
 - A restore point before every save and every AI or MCP edit
 - Diff any version against the current one, and restore it — on every plan
 
-### Job applications
-- **Match** a resume against a job posting and **tailor** a version for it
-- **Track** applications, each with a snapshot of the exact resume you sent; clone a snapshot back into an editable resume
+### Job postings
+- **Score** a resume against a posting, requirement by requirement, with where the evidence is
+- **Job copy** — improve a copy for one posting while the main resume stays as it is
+- **Improve the gaps** — answer a question per gap, review drafted lines, apply, see the score move
 
 ### Language versions
 - Translate a resume in place, or create a translated copy linked to the original
@@ -140,15 +140,12 @@ Free to start. Pro is a **one-time purchase for a period** — no subscription.
 
 | Free plan | Limit |
 |---|---|
-| Resumes | 3 |
-| PDF or LinkedIn imports | 2 / month |
-| AI enhancements | 10 / month |
+| AI credits (import, AI rewrite, improvement draft, chat message) | 30 / month |
 | PDF downloads | 5 / month |
-| Agent chat messages | 10 / month |
-| Tracked applications | 3 |
-| Restore points per resume | 5 |
+| Resumes (language versions are free) | 3 |
+| Job copies | 3 |
 
-Pro removes these limits. Current prices are on the [pricing page](https://resustackapp.com/pricing/). Limits live in `FREE_TIER_LIMITS` in `core/settings.py`.
+Pro ($9 for 3 months, $24 for 12 months, one-time) removes these limits. Payments are handled by [Paddle](https://www.paddle.com), the merchant of record. Limits live in `FREE_TIER_LIMITS` in `core/settings.py`; see the [pricing page](https://resustackapp.com/pricing/).
 
 ---
 
@@ -212,14 +209,12 @@ Setting it up on a new server:
 2. Open `http://YOUR_SERVER_IP:3000` and create an admin account
 3. Create a project → add an **Application** → connect this GitHub repository
 4. Add a **PostgreSQL** service in the same project
-5. Set the environment variables (see `.env.prod.example`) and the domain, then deploy
+5. Set the environment variables (see `.env.example` and `.claude/integrations/`) and the domain, then deploy
 
 Notes:
 - Leave Dokploy's **Run Command** empty — the Dockerfile's `ENTRYPOINT` does everything
 - Behind Cloudflare's proxy, set Dokploy's domain encryption to **None** and Cloudflare SSL to **Full**
 - The image installs the fonts the resume designs use; nothing is fetched at render time
-
-`docker-compose.prod.yml` and the `Caddyfile` are kept for self-hosting without Dokploy; they are not what production uses.
 
 ---
 
@@ -250,14 +245,14 @@ What ResuStack collects, who processes it (including OpenAI for AI features) and
 
 ## 🏗️ Architecture
 
-Monolithic Django: views, DRF API, an MCP endpoint, WeasyPrint for PDFs, OpenAI for parsing and writing. Resume content is a single `JSONField`; every design comes from one catalogue in `resume/resume_templates.py`. The full guide — conventions, patterns and pitfalls — is in [`.claude/CLAUDE.md`](.claude/CLAUDE.md).
+Monolithic Django: views, an MCP endpoint, WeasyPrint for PDFs, OpenAI for writing, TypeSafe Jev for scores and checks, Paddle for payments, Sentry and PostHog (both optional) for errors and the product funnel. Resume content is a single `JSONField`; every design comes from one catalogue in `resume/resume_templates.py`. The full guide — conventions, patterns and pitfalls — is in [`.claude/CLAUDE.md`](.claude/CLAUDE.md); every integration has its own page in [`.claude/integrations/`](.claude/integrations/), and the current state and next steps are in [`.claude/HANDOFF.md`](.claude/HANDOFF.md).
 
 ---
 
 ## 🗺️ Roadmap
 
 - [x] Multiple resume designs (14)
-- [x] Job description matching and application tracking
+- [x] Job posting scoring, job copies and gap improvement
 - [x] Agentic mode with tool calling, approvals and undo
 - [x] Change history with diff and restore
 - [x] MCP server for Claude and other clients

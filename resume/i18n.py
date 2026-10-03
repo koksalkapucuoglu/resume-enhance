@@ -17,7 +17,6 @@ TRANSLATIONS = {
         "manage_documents": "Manage and organize your professional documents",
         "new_resume": "New Resume",
         "upload_pdf": "Upload PDF",
-        "import_linkedin": "Import from LinkedIn",
         "btn_edit": "Edit",
         "btn_download": "Download",
         "btn_duplicate": "Duplicate",
@@ -287,7 +286,7 @@ TRANSLATIONS = {
         "badge_classic": "Classic",
         "welcome_msg": (
             "Hello! I'm your ResuStack assistant. I can list your resumes, show previews, "
-            "download PDFs, analyze strength, and help you create or edit them.\n\n"
+            "download PDFs, score a resume against a job posting, and help you create or edit them.\n\n"
             "Tip: Select a resume first, then describe any changes you want — in plain language!"
         ),
         # Profile
@@ -321,7 +320,6 @@ TRANSLATIONS = {
         "manage_documents": "Profesyonel belgelerinizi yönetin ve düzenleyin",
         "new_resume": "Yeni Özgeçmiş",
         "upload_pdf": "PDF Yükle",
-        "import_linkedin": "LinkedIn'den İçe Aktar",
         "btn_edit": "Düzenle",
         "btn_download": "İndir",
         "btn_duplicate": "Kopyala",
@@ -591,7 +589,7 @@ TRANSLATIONS = {
         "badge_classic": "Klasik",
         "welcome_msg": (
             "Merhaba! ResuStack asistanınım. Özgeçmişlerinizi listeleyebilir, önizleme gösterebilir, "
-            "PDF indirebilir, güç analizi yapabilir ve oluşturmanıza veya düzenlemenize yardımcı olabilirim.\n\n"
+            "PDF indirebilir, bir özgeçmişi iş ilanına göre puanlayabilir ve oluşturmanıza veya düzenlemenize yardımcı olabilirim.\n\n"
             "İpucu: Önce bir özgeçmiş seçin, sonra istediğiniz değişiklikleri doğal dille söyleyin!"
         ),
         # Profile

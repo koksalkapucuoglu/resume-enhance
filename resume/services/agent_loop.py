@@ -4,7 +4,7 @@ The agent loop.
 Replaces one-shot intent classification: the model may call tools, read their
 results and keep going until it has an answer. Tool results are appended to the
 message list, which is what lets a single user message drive several steps
-("analyse it, fix the weak parts, switch template, download").
+("score it against this posting, fix the gaps, switch template, download").
 
 Destructive tools interrupt the loop. The pending call and the conversation so
 far are parked server-side under a single-use token; approving resumes the same
