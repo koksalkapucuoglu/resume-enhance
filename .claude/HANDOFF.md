@@ -13,6 +13,8 @@ Last updated: 2026-10-03
 3. `.claude/product/analysis-2026-10.md` — product review (pricing, modes,
    job evaluation, onboarding, MCP).
 4. `.claude/product/feature-tree.md` — what exists vs. what a buyer needs.
+5. `.claude/product/modes-analysis.md` — standard vs agentic: confusion points, parity gaps, recommendation.
+6. `.claude/product/smoke-test.md` — every user-facing capability as a UI checklist.
 
 Run locally: `docker compose up -d --build`, tests:
 `docker compose exec web python manage.py test resume core mcp_server --parallel 4`.
