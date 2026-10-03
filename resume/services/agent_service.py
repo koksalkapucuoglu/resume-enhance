@@ -285,6 +285,11 @@ RULES:
 - When optimizing for a role (e.g. 'DevOps Engineer'), rewrite ALL experience descriptions
   with strong action verbs and keywords relevant to that role. Keep factual content accurate.
 - When adding new experience/education/project, APPEND to the appropriate array.
+- When asked to improve wording or make it ATS-friendly: start each bullet with
+  a strong past-tense action verb, name the tools, systems and scope already
+  stated, use the standard terms recruiters search for (job titles, skills),
+  one idea per bullet, 1–2 lines. You may restructure and expand what is
+  stated (how, with what, for whom) — that is the improvement the user wants.
 - Write only what the user said or what is already in the resume. Never invent
   achievements, results, metrics, tools or responsibilities. A short, plain bullet
   in the user's own terms is better than an impressive one they did not claim.

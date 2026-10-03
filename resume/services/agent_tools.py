@@ -429,25 +429,51 @@ def evaluate_posting(user, ctx, posting, target=None, resume_id=None):
 @tool(
     name="improve_for_posting",
     description=(
-        "Start improving the active resume for the active posting's gaps. Pass "
-        "the requirement ids (from the context) the user wants, or none for "
-        "every gap. Nothing changes yet: the user answers what is needed "
-        "(where they did something missing, in their own words) and approves "
-        "each change in a card. Never write those bullets yourself with "
-        "modify_resume."
+        "Close the OPEN POSTING's gaps: requirements the evaluation marks partial "
+        "or missing. Only when the user asks about the posting (\"fix the gaps\", "
+        "\"add what this job wants\", \"improve it for this posting\"). Pass the "
+        "requirement ids, or none for every gap. Nothing changes yet: cards ask "
+        "what they did and show each line for approval. Not for general wording "
+        "or ATS polishing of an experience — that is modify_resume."
     ),
     parameters={"requirement_ids": {"type": ["array", "null"], "items": {"type": "string"}}},
 )
 def improve_for_posting(user, ctx, requirement_ids=None):
+    from resume.services import evaluation_service
+
     resume = ctx.get("active_resume")
     posting = ctx.get("active_posting")
     if resume is None or posting is None:
         return ToolResult(data={"error": "No evaluation is open. Evaluate a posting first."})
+    try:
+        evaluation, _ = evaluation_service.evaluate(resume, posting)
+    except evaluation_service.EvaluationError as exc:
+        return ToolResult(data={"error": str(exc)})
+    labels = {r["id"]: r.get("label") or r.get("text", "") for r in posting.requirements}
+    gaps = [
+        {"id": row["id"], "requirement": labels.get(row["id"], ""), "status": row["status"]}
+        for row in evaluation.rows
+        if row.get("status") != "covered"
+        and (not requirement_ids or row["id"] in requirement_ids)
+    ]
+    if not gaps:
+        # Nothing for the cards to ask about. Say so instead of promising them.
+        return ToolResult(data={
+            "nothing_to_improve": True,
+            "score": evaluation.score,
+            "note": (
+                "Every requirement of this posting is already covered, so there is "
+                "nothing to close. Tell the user that in one sentence and offer to "
+                "polish the wording of a section with modify_resume instead. Do not "
+                "say that cards or approvals are coming."
+            ),
+        })
     return ToolResult(
         data={
             "started": True,
+            "gaps": gaps,
             "note": (
-                "Cards below walk the user through it. Reply with one short "
+                "Cards below ask the user about these gaps. Reply with one short "
                 "sentence in the user's language; do not list the changes."
             ),
         },

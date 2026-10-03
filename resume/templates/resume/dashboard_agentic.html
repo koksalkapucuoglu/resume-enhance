@@ -459,6 +459,8 @@ const EVAL_LABELS = {
   improve_rewrites: `{{ UI.improve_rewrites|escapejs }}`,
   improve_questions: `{{ UI.improve_questions|escapejs }}`,
   improve_did_not: `{{ UI.improve_did_not|escapejs }}`,
+  improve_nothing: `{{ UI.improve_nothing|escapejs }}`,
+  resume_selected: `{{ UI.resume_selected|escapejs }}`,
   improve_fact_placeholder: `{{ UI.improve_fact_placeholder|escapejs }}`,
   improve_draft: `{{ UI.improve_draft|escapejs }}`,
   improve_writing: `{{ UI.improve_writing|escapejs }}`,
@@ -1162,6 +1164,12 @@ function showEvaluationResult(data, announce) {
     rememberInHistory('assistant', line);
 }
 
+// The evaluation panel's "CV" button: back to the resume's preview.
+function showActiveResume() {
+    if (activeResumeId) loadPreviewPanel(activeResumeId, activeResumeName);
+    else showContextDefault();
+}
+
 function showEvaluation() {
     if (lastEvaluation && lastEvaluation.resume.id === Number(activeResumeId)
             && lastEvaluation.posting_id === activePostingId) {
@@ -1321,7 +1329,11 @@ async function startImprovement(requirementIds, announce = true) {
     const ev = lastEvaluation;
     if (!ev) return;
     const chosen = ev.rows.filter(r => r.status !== 'covered' && (!requirementIds.length || requirementIds.includes(r.id)));
-    if (!chosen.length) return;
+    if (!chosen.length) {
+        // Never leave a promise of cards hanging with nothing on screen.
+        appendMessage('bot', EVAL_LABELS.improve_nothing);
+        return;
+    }
     if (announce) {
         const line = fill(EVAL_LABELS.improve_user_msg, {job: ev.posting_short, items: chosen.map(r => r.label).join(', ')});
         appendMessage('user', line);
@@ -2042,7 +2054,7 @@ function selectResumeFromList(id, name) {
     setActiveResume(id, name);
     loadPreviewPanel(id, name);
     const displayName = name.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'");
-    appendMessage('bot', `**${displayName}** selected. You can now ask me to make changes to it.`);
+    appendMessage('bot', fill(EVAL_LABELS.resume_selected, {name: displayName}));
 }
 
 function loadPreviewPanel(resumeId, title) {

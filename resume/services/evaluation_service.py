@@ -78,7 +78,7 @@ def add_posting(user, text, lang="en"):
 
     fingerprint = JobPosting.fingerprint_of(text)
     existing = JobPosting.objects.filter(user=user, fingerprint=fingerprint).first()
-    if existing:
+    if existing and not job_match.needs_reparse(existing.requirements):
         return existing
 
     requirements = job_match.parse_posting(text)
@@ -93,6 +93,17 @@ def add_posting(user, text, lang="en"):
         requirement["label"] = (
             described["labels"].get(requirement["id"]) or job_match._short(requirement["text"])
         )[:60]
+
+    if existing:
+        # Parsed by the older splitter into one long line: the stored yardstick
+        # was wrong, so its scores go with it.
+        existing.requirements = requirements
+        existing.title = existing.title or described["title"]
+        existing.company = existing.company or described["company"]
+        existing.save(update_fields=["requirements", "title", "company"])
+        Evaluation.objects.filter(posting=existing).delete()
+        logger.info("Posting %s re-parsed: %d requirements", existing.pk, len(requirements))
+        return existing
 
     posting = JobPosting.objects.create(
         user=user,

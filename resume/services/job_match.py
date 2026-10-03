@@ -199,7 +199,12 @@ def looks_like_posting(text):
 # Splitting
 # --------------------------------------------------------------------------
 
-_BULLET = re.compile(r"^[\s\-–—•*·●▪►✓✔]+")
+# Glyphs postings use as bullets, also mid-line when a list was pasted into one
+# paragraph ("Looking for:✅ 1–3 years… ✅ SQL…"). The middle dot is left out of
+# the inline set: it separates words inside a line ("Remote · Full-time").
+_BULLET_GLYPHS = "•●▪►✓✔✅☑★➤➡▶◆◦🔹🔸👉📌🔍"
+_BULLET = re.compile(r"^[\s\-–—*·" + _BULLET_GLYPHS + r"]+")
+_INLINE_BULLET = re.compile(r"\s*[" + _BULLET_GLYPHS + r"]\s*")
 
 
 def split_posting(description):
@@ -209,6 +214,7 @@ def split_posting(description):
     # A posting pasted as one paragraph: fall back to sentences and inline bullets.
     if len([r for r in raw if r.strip()]) < 5 and len(text) > 300:
         raw = re.split(r"(?<=[.!?;])\s+|\s+[•·●▪]\s+", text)
+    raw = [part for line in raw for part in _INLINE_BULLET.split(line)]
 
     lines, seen = [], set()
     for line in raw:
@@ -222,6 +228,18 @@ def split_posting(description):
         seen.add(key)
         lines.append(line)
     return lines[:MAX_LINES]
+
+
+def needs_reparse(requirements):
+    """
+    Requirements stored by the older splitter that kept an inline bullet list
+    as one line. Such a posting is parsed again the next time it is added.
+    """
+    for requirement in requirements or []:
+        parts = _INLINE_BULLET.split(str(requirement.get("text") or ""))
+        if len([part for part in parts if part.strip()]) > 1:
+            return True
+    return False
 
 
 def evidence_index(content):

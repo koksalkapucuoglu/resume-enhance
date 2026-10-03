@@ -2565,7 +2565,10 @@ def resume_revisions(request, pk):
 @require_http_methods(["GET"])
 def resume_revision_diff(request, pk, revision_id):
     """
-    Field-level diff between a revision and the resume's current state.
+    What this step changed: the revision (the state just before the step)
+    against the state just after it — the next restore point, or the current
+    resume when this is the latest. Comparing every entry with today's resume
+    made an old step look as if it had made every later change too.
     GET /resume/<pk>/revisions/<revision_id>/diff/
     """
     resume = _get_owned_resume(request, pk)
@@ -2576,16 +2579,25 @@ def resume_revision_diff(request, pk, revision_id):
     if not revision:
         return JsonResponse({"error": "Revision not found."}, status=404)
 
-    changes = diff_service.diff_resume_content(revision.content, resume.content)
+    after = (
+        ResumeRevision.objects.filter(resume=resume, created_at__gte=revision.created_at)
+        .exclude(pk=revision.pk)
+        .exclude(created_at=revision.created_at, pk__lt=revision.pk)
+        .order_by("created_at", "pk")
+        .first()
+    )
+    after_content = after.content if after else resume.content
+    after_template = after.template_selector if after else resume.template_selector
+    changes = diff_service.diff_resume_content(revision.content, after_content)
     return JsonResponse(
         {
             "revision_id": revision.pk,
             "created_at_display": revision.created_at.strftime("%d %b %Y, %H:%M"),
             "source_label": revision.get_source_display(),
             "tool_name": revision.tool_name,
-            "template_changed": revision.template_selector != resume.template_selector,
+            "template_changed": revision.template_selector != after_template,
             "template_before": revision.template_selector,
-            "template_after": resume.template_selector,
+            "template_after": after_template,
             "changes": changes,
             "summary": diff_service.summarize(changes),
             "copy": diff_service.copy(_requested_lang(request)),

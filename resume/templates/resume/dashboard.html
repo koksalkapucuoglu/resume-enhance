@@ -510,7 +510,16 @@ function submitFeedback() {
   .then(() => {
     document.getElementById('feedback-success').classList.remove('hidden');
     btn.classList.add('hidden');
-    setTimeout(() => document.getElementById('feedback-modal').classList.add('hidden'), 2000);
+    // Close and clear, so the next opening is a fresh form, not the sent one.
+    setTimeout(() => {
+      document.getElementById('feedback-modal').classList.add('hidden');
+      document.getElementById('feedback-message').value = '';
+      setRating(0);
+      document.getElementById('feedback-success').classList.add('hidden');
+      btn.classList.remove('hidden');
+      btn.disabled = false;
+      btn.textContent = 'Send Feedback';
+    }, 1500);
   })
   .catch(() => { btn.disabled = false; btn.textContent = 'Send Feedback'; alert('Error. Please try again.'); });
 }

@@ -202,6 +202,7 @@ def draft(user, resume, posting, rewrites, answers, lang="en"):
             "label": requirements.get(item["req_id"], {}).get("label", ""),
             "entry": item["entry"], "bullet": item["bullet"], "job": _job_label(job),
             "before": item["current"], "after": text, "fact": item["fact"],
+            "context": [str(b)[:300] for b in (job.get("description") or [])][:12],
         }
         change["words"] = diff_service.word_segments(item["current"], text) if item["current"] else []
         changes.append(change)
@@ -240,21 +241,33 @@ def _write(content, posting, items, requirements, language):
         for item in items
     ]
     meta_prompt = f"""
-    You improve resume bullets for one job posting, one bullet per item.
+    You write resume bullets that an applicant tracking system (ATS) and a
+    recruiter will match to one job posting. One bullet per item.
+
+    What a good bullet is:
+    - Starts with a strong past-tense action verb (Built, Automated, Designed,
+      Migrated, Managed, Maintained…), then what was done, with what, for what
+      system or audience. One sentence, 15–30 words.
+    - Uses the posting's own words for the skill in `requirement` (e.g. "version
+      control", "cloud platforms", "ETL pipelines") where the sources support it,
+      so a keyword search finds it.
+    - Describes work done, never a claim of knowledge ("Familiar with…").
+    - Reads like `role_bullets` in tone; written in {language} (translate the
+      person's words if they wrote in another language).
+
+    What you may draw on: `what_they_did` (the person's own words),
+    `current_bullet`, and `role_bullets` — the same job, so you may name the
+    systems, data or domain they show (e.g. "the DWH and reporting code").
 
     Hard rules:
-    - Use ONLY what the item gives you: `current_bullet` and `what_they_did`.
-      Never add a technology, number, scale, team size or result that is not
-      in them. Inventing experience is the one unacceptable outcome.
-    - With `current_bullet`: rewrite it so the work it describes shows the
-      requirement more clearly, using `what_they_did` if given. Keep every
-      fact it already states. If the sources give nothing more to say about
-      the requirement, return `current_bullet` exactly as it is — never pad it
-      with a purpose or outcome ("to ensure efficiency…") it does not state.
-    - Without `current_bullet`: write ONE new bullet from `what_they_did`.
-    - A bullet describes work done ("Built…", "Migrated…"), never a claim of
-      knowledge ("Familiar with…", "Knowledge of…").
-    - One sentence, in {language}, in the style of `role_bullets`.
+    - Never add a technology, number, percentage, team size, scale or result
+      (faster, saved, increased…) that none of those sources states. Inventing
+      experience is the one unacceptable outcome.
+    - With `current_bullet`: rewrite it so it shows the requirement clearly,
+      keeping every fact it states. If the sources give nothing more to say
+      about the requirement, return `current_bullet` exactly as it is.
+    - Without `current_bullet`: write ONE new bullet from `what_they_did`,
+      expanded with the role's context — not a word-for-word translation.
 
     Respond ONLY with JSON: {{"bullets": {{"<key>": "the bullet"}}}}
     """.strip()
@@ -280,10 +293,12 @@ def _flag_unsupported(changes):
         change["id"]: Noul(
             instructions=(
                 f"Is everything this new resume line claims stated in its sources — the "
-                f"original line {json.dumps(change['before'] or None, ensure_ascii=False)} and "
-                f"what the person said {json.dumps(change['fact'] or None, ensure_ascii=False)}? "
-                f"New line: {json.dumps(change['after'], ensure_ascii=False)}. Rewording is "
-                "fine; a technology, number, scale or result neither source gives is not."
+                f"original line {json.dumps(change['before'] or None, ensure_ascii=False)}, "
+                f"what the person said {json.dumps(change['fact'] or None, ensure_ascii=False)}, "
+                f"and the other lines of the same job {json.dumps(change.get('context') or [], ensure_ascii=False)}? "
+                f"New line: {json.dumps(change['after'], ensure_ascii=False)}. Rewording, naming "
+                "the job's own systems and using the posting's term for the skill are fine; a "
+                "technology, number, scale or result none of these gives is not."
             ),
             criteria=SUPPORTED,
         )

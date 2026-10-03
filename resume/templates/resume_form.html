@@ -174,7 +174,7 @@
         </a>
         
         <!--
-          Only Save, Dashboard and Ask AI stay visible as the viewport narrows.
+          Only Save and Ask AI stay visible as the viewport narrows.
           Secondary actions (Dashboard, History, Download) collapse into the
           overflow menu so the bar cannot push its own buttons off-screen.
         -->
@@ -185,13 +185,8 @@
                 <span class="hidden md:inline">{{ UI.unsaved_changes }}</span>
             </span>
 
-            <!-- The editor is not a mode: it goes back to the dashboard, or hands
-                 this resume to the assistant. -->
-            <a href="{% url 'resume:dashboard' %}"
-               class="flex items-center gap-1 px-2 md:px-3 py-1.5 rounded-md text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all">
-                <span class="material-symbols-outlined !text-[16px]">arrow_back</span>
-                <span class="hidden sm:inline">{{ UI.dashboard }}</span>
-            </a>
+            <!-- The editor is not a mode. The logo goes back to the dashboard;
+                 "Ask AI" hands this resume to the assistant. -->
             {% if resume_id %}
             <button type="button" id="btn-agentic" onclick="switchToAgentic()"
                     class="flex items-center gap-1 px-2 md:px-3 py-1.5 rounded-md text-xs font-semibold text-primary bg-primary/10 hover:bg-primary/20 transition-all">
@@ -1519,7 +1514,16 @@ function submitFeedback() {
   .then(() => {
     document.getElementById('feedback-success').classList.remove('hidden');
     btn.classList.add('hidden');
-    setTimeout(() => document.getElementById('feedback-modal').classList.add('hidden'), 2000);
+    // Close and clear, so the next opening is a fresh form, not the sent one.
+    setTimeout(() => {
+      document.getElementById('feedback-modal').classList.add('hidden');
+      document.getElementById('feedback-message').value = '';
+      setRating(0);
+      document.getElementById('feedback-success').classList.add('hidden');
+      btn.classList.remove('hidden');
+      btn.disabled = false;
+      btn.textContent = 'Send Feedback';
+    }, 1500);
   })
   .catch(() => { btn.disabled = false; btn.textContent = 'Send Feedback'; alert('Error. Please try again.'); });
 }
