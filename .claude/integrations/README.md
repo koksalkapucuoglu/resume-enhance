@@ -12,9 +12,9 @@ are set in Dokploy (production) and `.env` (local, git-ignored).
 | Google sign-in + email verification | live | [google-auth.md](google-auth.md) | `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` |
 | Email (SMTP) | live | [email.md](email.md) | `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL`, `EMAIL_*` |
 | MCP server + MCP Registry | live | [mcp.md](mcp.md) | `MCP_REGISTRY_AUTH` |
-| Paddle (payments, merchant of record) | code ready, account pending | [payments.md](payments.md) | `PAYMENT_STATUS`, `PADDLE_*`, `CONTACT_EMAIL` |
-| Sentry (error tracking) | code ready, DSN pending | [sentry.md](sentry.md) | `SENTRY_DSN`, `SENTRY_BROWSER_DSN`, `SENTRY_ENVIRONMENT` |
-| PostHog (product analytics) | code ready, key pending | [posthog.md](posthog.md) | `POSTHOG_API_KEY`, `POSTHOG_HOST` |
+| Payments, merchant of record (Paddle adapter) | sandbox works (`PAYMENT_STATUS=test`); Paddle live **rejected** (CV-builder category), appeal sent; next: Dodo Payments | [payments.md](payments.md) | `PAYMENT_STATUS`, `PADDLE_*`, `CONTACT_EMAIL` |
+| Sentry (error tracking) | live, alerts set | [sentry.md](sentry.md) | `SENTRY_DSN`, `SENTRY_BROWSER_DSN`, `SENTRY_ENVIRONMENT` |
+| PostHog (product analytics) | code live, key not set yet | [posthog.md](posthog.md) | `POSTHOG_API_KEY`, `POSTHOG_HOST` |
 | Dokploy + Cloudflare (hosting) | live | [deployment.md](deployment.md) | `SECRET_KEY`, `DEBUG`, `ALLOWED_HOSTS`, `POSTGRES_*`, `CACHE_LOCATION` |
 
 ## Checking what is configured

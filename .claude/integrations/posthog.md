@@ -1,6 +1,8 @@
 # PostHog — product analytics (pre-sales funnel)
 
-**Status:** code ready, off until a key is set
+**Status (2026-10-04):** code live, **key not set yet** — next step: create
+the EU Cloud project, set `POSTHOG_API_KEY`, enable cookieless server hash
+mode, then `check_integrations --send` and build the funnels below.
 **Code:** `core/analytics.py` (`track`, `EVENTS`), `templates/partials/analytics.html` (cookieless web snippet), call sites in `resume/views.py`, `core/views.py`, `core/forms.py`, `resume/services/agent_tools.py`, `resume/services/evaluation_service.py`, `mcp_server/tools.py`
 **Env:** `POSTHOG_API_KEY` (project key, public), `POSTHOG_HOST` (default `https://eu.i.posthog.com`)
 

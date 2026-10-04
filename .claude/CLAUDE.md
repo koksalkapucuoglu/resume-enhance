@@ -16,7 +16,7 @@
 | **AI** | OpenAI `gpt-4o-mini` via `resume/openai_engine.py` (writes text); TypeSafe Jev via `resume/typesafe_engine.py` (typed judgments) |
 | **PDF Engine** | WeasyPrint (HTML/CSS → PDF) |
 | **Auth** | Django built-in auth + custom `SignupView`, `ProfileView` |
-| **Payments** | Paddle (merchant of record), one-time Pro periods — `integrations/payments.md` |
+| **Payments** | Merchant-of-record adapter (`payment_service`, Paddle implemented; Paddle live rejected, Dodo next), one-time Pro periods, `PAYMENT_STATUS` coming_soon / test (staff only) / live — `integrations/payments.md` |
 | **Observability** | Sentry (errors only) + PostHog (content-free funnel events) — `core/observability.py`, `core/analytics.py` |
 | **Deployment** | Dokploy (Dockerfile build, Traefik); every push to `main` deploys |
 | **Main Purpose** | AI-powered resume builder: create manually or import from PDF, enhance with AI, export as PDF |

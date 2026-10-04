@@ -1,8 +1,37 @@
-# Payments — Paddle (merchant of record)
+# Payments — merchant of record (Paddle adapter; provider decision open)
 
-**Status:** code ready, account pending (`PAYMENT_STATUS=coming_soon`)
+**Status (2026-10-04):** Paddle **sandbox** works end to end on production in
+`PAYMENT_STATUS=test` (staff-only checkout → signed webhook → `Purchase` →
+Pro). Paddle **live was rejected** at domain review: "Other/Resume/CV
+Builders" is a category outside Paddle's Acceptable Use Policy. An appeal was
+sent (text below). **Next:** apply to Dodo Payments and, if accepted, add a
+`DodoProvider` next to `PaddleProvider` (see "Switching provider").
 **Code:** `resume/services/payment_service.py`, `views.pricing_page`, `views.payment_webhook`, `resume/templates/resume/pricing.html`, `Purchase` + `UserProfile.premium_until`
 **Env:** `PAYMENT_STATUS`, `PADDLE_ENVIRONMENT`, `PADDLE_CLIENT_TOKEN`, `PADDLE_WEBHOOK_SECRET`, `PADDLE_PRICE_PRO_3M`, `PADDLE_PRICE_PRO_12M`, `CONTACT_EMAIL`
+
+## Rejection, appeal and alternatives
+
+- Paddle's reason is the category (resume builders' free-build → paywall at
+  download → hidden subscription pattern causes chargebacks), not our site.
+  The appeal argued our model is the opposite: free plan includes 5 PDF
+  downloads/month, one-time purchase, no renewal, no converting trial, prices
+  public before sign-up, software only, no fake credentials or impersonation.
+- **Dodo Payments**: lists "Resume, hiring, or exam tools" under *categories
+  that require review* (condition: no impersonation or cheating features) —
+  not prohibited. Accepts individuals by government ID; Türkiye eligible.
+  Recommended next provider.
+- **Polar**: same "requires review" listing; payouts via Stripe Connect
+  Express — whether a Türkiye individual can onboard is unclear.
+- **Lemon Squeezy**: new merchants invite-gated; prohibits service-type
+  products. Not pursued.
+- **iyzico / PayTR**: category fine, but need a tax registration (şahıs
+  şirketi) and you remit KDV yourself.
+- Live Paddle objects already created (product `pro_01m42zgngbxpzjhcyma5h4qz5y`,
+  prices `pri_01m42zhrjc6e432vnedx7rs45r` / `pri_01m42zjdyrdk7kpdbe9xhp90z4`,
+  webhook, client token `resustack-web`) — unused unless the appeal succeeds.
+- Answers given in Paddle's forms (product overview, delivery): software
+  only, delivered as a web app, Pro activates automatically on payment, PDFs
+  downloaded in-app. Reuse for the next provider's application.
 
 ## Model
 

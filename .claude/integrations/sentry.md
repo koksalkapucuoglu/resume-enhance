@@ -1,6 +1,8 @@
 # Sentry — error tracking
 
-**Status:** code ready, off until a DSN is set
+**Status (2026-10-04):** live — EU org, server + browser DSNs set in Dokploy;
+`check_integrations --send` event received. Alert rules created: "new issue →
+email" and "tag `degraded` starts with `payment_` → email" (5 min throttle).
 **Code:** `core/observability.py` (init, scrubbing, `report_degraded`, `report_exception`), `core/wsgi.py` (init), `templates/partials/analytics.html` (browser SDK), `core/views.py` (error pages)
 **Env:** `SENTRY_DSN` (server), `SENTRY_BROWSER_DSN` (browser, optional, can be the same project), `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`
 
