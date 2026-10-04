@@ -1,15 +1,39 @@
 {% extends "legal_base.html" %}
 {% block title %}Refund Policy{% endblock %}
-{% block description %}ResuStack Pro can be refunded in full within 14 days of purchase.{% endblock %}
+{% block description %}ResuStack Pro can be refunded within 14 days of purchase if it has not been used beyond the free plan's limits.{% endblock %}
 {% block content %}
 <h1>Refund Policy</h1>
 <p class="text-sm text-slate-500">Last updated: {{ terms_updated }}</p>
 
-<h2>14 days, full refund</h2>
 <p>
-    If Pro is not what you needed, ask for a refund within <strong>14 days of your purchase</strong> and you get the
-    whole amount back. No questions asked, whether or not you used it.
+    Pro is a one-time purchase of a fixed period. It starts the moment you buy, and what it adds to the free plan is
+    higher limits. So whether a refund is due depends on whether those extra limits were used.
 </p>
+
+<h2>Full refund within 14 days, if Pro was not used beyond the free plan</h2>
+<p>
+    Ask within <strong>14 days of your purchase</strong> and you get the whole amount back, as long as, since buying,
+    you have stayed within what the free plan allows:
+</p>
+<ul>
+    <li>no more than <strong>{{ limits.ai_credits }} AI credits</strong> (imports, AI rewrites, improvement drafts, chat messages), and</li>
+    <li>no more than <strong>{{ limits.download_count }} PDF downloads</strong>.</li>
+</ul>
+<p>In other words: if you bought Pro and found it was not what you needed before relying on it, you are refunded in full.</p>
+
+<h2>When a refund is not given</h2>
+<p>
+    If you have used Pro beyond those limits, the purchase is not refunded, because the service you paid for has been
+    supplied. By completing the purchase you agree that Pro starts immediately, and you acknowledge that this ends the
+    right of withdrawal for digital services where the law allows it.
+</p>
+
+<h2>Always refunded</h2>
+<ul>
+    <li>A technical problem on our side that stops you using Pro and that we cannot fix within a reasonable time.</li>
+    <li>A purchase made twice by mistake.</li>
+    <li>Any case where the law where you live requires a refund. Nothing in this policy limits those rights.</li>
+</ul>
 
 <h2>How to ask</h2>
 <ul>
@@ -26,8 +50,7 @@
 
 <h2>After 14 days</h2>
 <p>
-    Pro is a one-time purchase that does not renew, so there is nothing to cancel. After 14 days we do not refund
-    the unused part of a period, except where the law requires it or if we shut the service down
-    (see the <a href="{% url 'resume:terms' %}">Terms of Service</a>).
+    Pro does not renew, so there is nothing to cancel. After 14 days we do not refund the unused part of a period,
+    except where the law requires it or if we shut the service down (see the <a href="{% url 'resume:terms' %}">Terms of Service</a>).
 </p>
 {% endblock %}

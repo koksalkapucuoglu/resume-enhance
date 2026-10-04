@@ -72,7 +72,7 @@ signature; 503 while not live.
 
 ## Refunds
 
-Policy: full refund within 14 days (`/refunds/`). Refunds are issued in the
+Policy (`/refunds/`): full refund within 14 days **if Pro was not used beyond the free plan's limits** (30 AI credits, 5 PDF downloads since purchase); beyond that no refund except a problem we cannot fix, a duplicate purchase, or where the law requires it. Check usage in admin (User profiles → counters) before approving. The pricing page shows a consent line under the buy buttons (immediate start, refund terms). Refunds are issued in the
 Paddle dashboard. Access is not revoked automatically yet: after a refund set
 the user's `premium_until` back in Django admin. (Automating it = handle
 `adjustment.updated` with `action=refund`, `status=approved`.)

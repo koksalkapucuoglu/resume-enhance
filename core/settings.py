@@ -473,7 +473,7 @@ POSTHOG_HOST = os.environ.get("POSTHOG_HOST", "https://eu.i.posthog.com")
 # Where people reach a human: legal pages, payment questions, refunds.
 CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL", "privacy@resustackapp.com")
 # Date shown on the Terms of Service and Refund Policy.
-TERMS_UPDATED = "3 October 2026"
+TERMS_UPDATED = "4 October 2026"
 
 # Agent Chat Rate Limiting
 AGENT_CHAT_RATE_LIMIT = {

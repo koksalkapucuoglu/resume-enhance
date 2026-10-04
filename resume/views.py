@@ -115,7 +115,11 @@ def privacy_policy(request):
 
 
 def _legal_context():
-    return {"contact_email": settings.CONTACT_EMAIL, "terms_updated": settings.TERMS_UPDATED}
+    return {
+        "contact_email": settings.CONTACT_EMAIL,
+        "terms_updated": settings.TERMS_UPDATED,
+        "limits": settings.FREE_TIER_LIMITS,
+    }
 
 
 def terms_of_service(request):

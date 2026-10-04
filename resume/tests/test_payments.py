@@ -257,6 +257,12 @@ class PricingPageTest(TestCase):
         self.assertIn("test_client_token", html)
         self.assertIn(f'"user_id": "{self.user.id}"', html)
 
+    def test_buyers_see_the_refund_terms_next_to_the_buy_button(self):
+        self.client.force_login(self.user)
+        html = self.client.get(reverse("resume:pricing")).content.decode()
+        self.assertIn('data-testid="purchase-consent"', html)
+        self.assertIn(reverse("resume:refunds"), html)
+
     def test_a_plan_without_a_price_shows_as_unavailable(self):
         self.client.force_login(self.user)
         html = self.client.get(reverse("resume:pricing")).content.decode()
@@ -279,7 +285,11 @@ class PricingPageTest(TestCase):
             self.assertIn(reverse(name), html)
             self.assertEqual(self.client.get(reverse(name)).status_code, 200)
         self.assertIn("Merchant of Record", self.client.get(reverse("resume:terms")).content.decode())
-        self.assertIn("14 days", self.client.get(reverse("resume:refunds")).content.decode())
+        refunds = self.client.get(reverse("resume:refunds")).content.decode()
+        self.assertIn("14 days", refunds)
+        # Refunds depend on use beyond the free plan, stated with the real limits.
+        self.assertIn("30 AI credits", refunds)
+        self.assertIn("5 PDF downloads", refunds)
 
 
 @override_settings(PREMIUM_PLANS=PLANS, PAYMENTS=LIVE)

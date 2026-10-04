@@ -178,6 +178,9 @@
       </table>
     </section>
 
+    {% if checkout %}
+      <p class="mt-4 text-xs text-slate-600 text-center max-w-2xl mx-auto" data-testid="purchase-consent">{{ UI.pricing_consent }} <a class="text-primary font-semibold hover:underline" href="{% url 'resume:refunds' %}">{{ UI.legal_refunds }}</a>.</p>
+    {% endif %}
     <p class="mt-4 text-xs text-slate-500 text-center max-w-2xl mx-auto">{{ UI.pricing_processor }}</p>
 
     <!-- FAQ -->
