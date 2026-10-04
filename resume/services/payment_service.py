@@ -36,19 +36,44 @@ class PaymentError(Exception):
     """Raised when a webhook cannot be trusted or understood."""
 
 
+# PAYMENT_STATUS values:
+#   coming_soon — plans shown, no checkout, webhook closed (the default)
+#   test        — checkout only for staff accounts, webhook open: a sandbox
+#                 purchase can be tested on the live site while every other
+#                 visitor still sees "not on sale yet"
+#   live        — checkout for everyone
+STATUS_COMING_SOON, STATUS_TEST, STATUS_LIVE = "coming_soon", "test", "live"
+
+
+def _configured():
+    payments = settings.PAYMENTS
+    return bool(payments.get("CLIENT_TOKEN")) and bool(payments.get("WEBHOOK_SECRET"))
+
+
 def is_live():
     """
-    Whether money can actually change hands.
+    Whether everyone can buy.
 
     Needs the switch *and* the keys: a half-configured environment shows the
     plans as coming soon instead of a buy button that cannot work.
     """
-    payments = settings.PAYMENTS
-    return (
-        payments.get("STATUS") == "live"
-        and bool(payments.get("CLIENT_TOKEN"))
-        and bool(payments.get("WEBHOOK_SECRET"))
-    )
+    return settings.PAYMENTS.get("STATUS") == STATUS_LIVE and _configured()
+
+
+def is_test_mode():
+    return settings.PAYMENTS.get("STATUS") == STATUS_TEST and _configured()
+
+
+def checkout_open_for(user):
+    """Whether this visitor gets a buy button: everyone when live, staff in test mode."""
+    if is_live():
+        return True
+    return is_test_mode() and bool(user and user.is_authenticated and user.is_staff)
+
+
+def accepts_webhooks():
+    """The webhook grants access in test mode too — that is what the test is for."""
+    return is_live() or is_test_mode()
 
 
 def plans():

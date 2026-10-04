@@ -41,7 +41,9 @@ class Command(BaseCommand):
         out(f"  PADDLE_WEBHOOK_SECRET     {_set(payments.get('WEBHOOK_SECRET'))}")
         for plan in settings.PREMIUM_PLANS:
             out(f"  price {plan['code']:<18}{_set(plan.get('price_id'))}")
-        out(f"  checkout live             {payment_service.is_live()}")
+        out(f"  checkout for everyone     {payment_service.is_live()}")
+        out(f"  test mode (staff only)    {payment_service.is_test_mode()}")
+        out(f"  webhook accepts payments  {payment_service.accepts_webhooks()}")
 
         out("Sentry")
         out(f"  SENTRY_DSN                {_set(settings.SENTRY_DSN)}  env={settings.SENTRY_ENVIRONMENT}")

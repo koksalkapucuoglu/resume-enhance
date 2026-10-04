@@ -363,3 +363,49 @@ class ComingSoonTest(TestCase):
         self.user.profile.tier = "pro"
         self.user.profile.save()
         self.assertTrue(self.user.profile.is_pro())
+
+
+TEST_MODE = {**LIVE, "STATUS": "test"}
+
+
+@override_settings(PREMIUM_PLANS=PLANS, PAYMENTS=TEST_MODE)
+class TestModeTest(TestCase):
+    """A sandbox purchase on the live site that only staff can make."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("ada", password="x")
+        self.staff = User.objects.create_user("owner", password="x", is_staff=True)
+
+    def test_visitors_and_customers_still_see_coming_soon(self):
+        html = self.client.get(reverse("resume:pricing")).content.decode()
+        self.assertNotIn("paddle.js", html)
+        self.client.force_login(self.user)
+        html = self.client.get(reverse("resume:pricing")).content.decode()
+        self.assertNotIn("paddle.js", html)
+        self.assertIn("not on sale yet", html)
+        self.assertNotIn("Test mode", html)
+
+    def test_staff_get_the_checkout_and_a_test_banner(self):
+        self.client.force_login(self.staff)
+        html = self.client.get(reverse("resume:pricing")).content.decode()
+        self.assertIn("cdn.paddle.com/paddle/v2/paddle.js", html)
+        self.assertIn("Test mode", html)
+
+    def test_the_webhook_grants_access(self):
+        body = transaction(self.staff.id)
+        resp = self.client.post(
+            reverse("resume:payment_webhook"), body,
+            content_type="application/json", HTTP_PADDLE_SIGNATURE=sign(body),
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.staff.profile.refresh_from_db()
+        self.assertTrue(self.staff.profile.is_pro())
+
+    def test_it_is_not_live(self):
+        self.assertFalse(payment_service.is_live())
+        self.assertTrue(payment_service.is_test_mode())
+
+    @override_settings(PAYMENTS={**TEST_MODE, "WEBHOOK_SECRET": ""})
+    def test_without_keys_test_mode_is_off(self):
+        self.assertFalse(payment_service.is_test_mode())
+        self.assertFalse(payment_service.accepts_webhooks())

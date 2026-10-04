@@ -1718,7 +1718,7 @@ def pricing_page(request):
 
     user = request.user if request.user.is_authenticated else None
     profile = user.profile if user else None
-    live = payment_service.is_live()
+    live = payment_service.checkout_open_for(user)
     if user:
         track(user, "pricing_viewed", is_pro=profile.is_pro(), live=live)
     return render(
@@ -1737,6 +1737,8 @@ def pricing_page(request):
             "days_left": profile.premium_days_left if profile else None,
             "just_paid": request.GET.get("paid") == "1",
             "limits": settings.FREE_TIER_LIMITS,
+            # Staff testing a sandbox purchase while everyone else sees "coming soon".
+            "payments_test_mode": live and not payment_service.is_live(),
         },
     )
 
@@ -1783,7 +1785,7 @@ def payment_webhook(request):
     """
     from resume.services import payment_service
 
-    if not payment_service.is_live():
+    if not payment_service.accepts_webhooks():
         # No provider is configured to call this yet, so anything arriving here
         # is not something to act on.
         logger.warning("Payment webhook received while checkout is not live")

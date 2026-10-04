@@ -61,9 +61,14 @@ signature; 503 while not live.
 6. Dokploy env: `PADDLE_ENVIRONMENT=production`, `PADDLE_CLIENT_TOKEN`,
    `PADDLE_WEBHOOK_SECRET`, `PADDLE_PRICE_PRO_3M`, `PADDLE_PRICE_PRO_12M`,
    then `PAYMENT_STATUS=live`. Redeploy.
-7. Before that, do the same in the **sandbox** (sandbox-vendors.paddle.com,
-   `test_…` token, test card `4242 4242 4242 4242`) against a local tunnel or
-   staging, and buy once end to end.
+7. Before that, test in the **sandbox** on the live site: sandbox keys +
+   `PADDLE_ENVIRONMENT=sandbox` + `PAYMENT_STATUS=test`. Only staff accounts
+   (`is_staff`) see the buy button; everyone else still sees "not on sale
+   yet", and the webhook accepts the sandbox purchase. Buy once with
+   `4242 4242 4242 4242`, then go back to `coming_soon`.
+
+`PAYMENT_STATUS`: `coming_soon` (default: no checkout, webhook 503) · `test`
+(checkout for staff only, webhook open) · `live` (checkout for everyone).
 
 ## Refunds
 

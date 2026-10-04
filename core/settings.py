@@ -429,8 +429,10 @@ PREMIUM_PLANS = [
 
 PAYMENTS = {
     # "coming_soon" until Paddle has approved the account: the plans are shown
-    # so people know what Pro costs, but nothing tries to take money. "live"
-    # needs the client token and webhook secret as well (payment_service.is_live).
+    # so people know what Pro costs, but nothing tries to take money. "test"
+    # opens checkout to staff accounts only (sandbox test on the live site).
+    # "live" opens it to everyone. Both need the client token and webhook
+    # secret as well (see payment_service).
     "STATUS": os.environ.get("PAYMENT_STATUS", "coming_soon"),
     "PROVIDER": "paddle",
     # "sandbox" (sandbox-vendors.paddle.com) or "production".

@@ -62,6 +62,13 @@
       </div>
     {% endif %}
 
+    {% if payments_test_mode %}
+      <div class="mt-8 bg-violet-50 border border-violet-200 rounded-2xl p-5 text-center" data-testid="payments-test-mode">
+        <h2 class="font-bold text-slate-900">Test mode — only staff see checkout</h2>
+        <p class="text-slate-600 text-sm mt-1 max-w-lg mx-auto">Everyone else sees "not on sale yet". With sandbox keys, pay with the test card 4242 4242 4242 4242, any future date and any CVC.</p>
+      </div>
+    {% endif %}
+
     {% if not payments_live %}
       <div class="mt-8 bg-amber-50 border border-amber-200 rounded-2xl p-5 text-center">
         <h2 class="font-bold text-slate-900">{{ UI.pricing_soon_title }}</h2>
