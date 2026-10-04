@@ -1798,7 +1798,10 @@ def payment_webhook(request):
         # Usually a webhook secret that does not match the destination's: every
         # purchase is then paid and not granted, so it must reach someone.
         logger.warning("Rejected payment webhook: %s", exc)
-        report_degraded("payment_webhook_rejected", reason=exc.code)
+        # A request with no signature at all is a stray POST, not Paddle; only
+        # a signed one that fails means our configuration is wrong.
+        if exc.code != "no_signature":
+            report_degraded("payment_webhook_rejected", reason=exc.code)
         return HttpResponse(status=401)
 
     try:

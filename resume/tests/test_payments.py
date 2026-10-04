@@ -427,6 +427,14 @@ class WebhookDiagnosticsTest(TestCase):
         self.assertEqual(resp.status_code, 401)
         report.assert_called_once_with("payment_webhook_rejected", reason="signature_mismatch")
 
+    def test_an_unsigned_stray_post_is_not_reported(self):
+        from unittest.mock import patch
+
+        with patch("resume.views.report_degraded") as report:
+            resp = self.client.post(self.url, b"{}", content_type="application/json")
+        self.assertEqual(resp.status_code, 401)
+        report.assert_not_called()
+
     def test_any_of_several_signatures_may_match(self):
         body = transaction(self.user.id)
         good = sign(body)
