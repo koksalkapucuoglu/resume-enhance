@@ -238,6 +238,10 @@ class PricingPageTest(TestCase):
         # No checkout for a visitor: the payment must find an account.
         self.assertNotIn("paddle.js", html)
 
+    def test_the_faq_explains_declined_cards(self):
+        html = self.client.get(reverse("resume:pricing")).content.decode()
+        self.assertIn("My card was declined", html)
+
     def test_the_free_plan_limits_are_on_the_page(self):
         from django.conf import settings
 

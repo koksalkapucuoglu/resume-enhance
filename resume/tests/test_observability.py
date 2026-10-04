@@ -153,6 +153,7 @@ class TelemetrySnippetTest(TestCase):
         self.assertNotIn("posthog.init", profile)
         self.assertIn("browser.sentry-cdn.com", profile)
 
+    @override_settings(POSTHOG_API_KEY="", SENTRY_BROWSER_DSN="")
     def test_nothing_loads_without_keys(self):
         landing = self.client.get(reverse("resume:index")).content.decode()
         self.assertNotIn("posthog.init", landing)
