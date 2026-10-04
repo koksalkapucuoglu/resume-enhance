@@ -58,8 +58,22 @@
     {% if just_paid and not is_pro %}
       <div class="mt-8 bg-green-50 border border-green-200 rounded-2xl p-5 text-center" data-testid="paid-notice">
         <h2 class="font-bold text-slate-900">{{ UI.pricing_paid_title }}</h2>
-        <p class="text-slate-600 text-sm mt-1">{{ UI.pricing_paid_body }}</p>
+        <p class="text-slate-600 text-sm mt-1" id="paid-body">{{ UI.pricing_paid_body }}</p>
       </div>
+      <script>
+        // The webhook usually lands within seconds: look again for about a
+        // minute, then say what to do instead of leaving the page waiting.
+        (function () {
+          const params = new URLSearchParams(window.location.search);
+          const attempt = Number(params.get('check') || 0);
+          if (attempt >= 15) {
+            document.getElementById('paid-body').textContent = `{{ UI.pricing_paid_slow|escapejs }}`;
+            return;
+          }
+          params.set('check', attempt + 1);
+          setTimeout(() => { window.location.search = params.toString(); }, 4000);
+        })();
+      </script>
     {% endif %}
 
     {% if payments_test_mode %}

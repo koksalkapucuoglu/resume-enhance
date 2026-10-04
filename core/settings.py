@@ -403,6 +403,18 @@ FREE_TIER_LIMITS = {
     "job_branch_count": 3,  # Job copies in total
 }
 
+def _env_key(name, default=""):
+    """
+    A key pasted into a hosting panel, cleaned: surrounding whitespace and one
+    pair of quotes removed. A stray quote or newline in a webhook secret makes
+    every signature check fail with nothing visibly wrong.
+    """
+    value = (os.environ.get(name) or default).strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+        value = value[1:-1].strip()
+    return value
+
+
 # Purchasable access. One-time periods, not subscriptions — see
 # resume/services/payment_service.py for why. Prices are Paddle price ids
 # (pri_...), one per plan; amounts shown here must match them.
@@ -413,7 +425,7 @@ PREMIUM_PLANS = [
         "days": 90,
         "price_display": "$9",
         "blurb": "Covers a typical job search.",
-        "price_id": os.environ.get("PADDLE_PRICE_PRO_3M", ""),
+        "price_id": _env_key("PADDLE_PRICE_PRO_3M"),
         "highlight": True,
     },
     {
@@ -422,7 +434,7 @@ PREMIUM_PLANS = [
         "days": 365,
         "price_display": "$24",
         "blurb": "For a longer search, or coming back for the next one.",
-        "price_id": os.environ.get("PADDLE_PRICE_PRO_12M", ""),
+        "price_id": _env_key("PADDLE_PRICE_PRO_12M"),
         "highlight": False,
     },
 ]
@@ -433,14 +445,14 @@ PAYMENTS = {
     # opens checkout to staff accounts only (sandbox test on the live site).
     # "live" opens it to everyone. Both need the client token and webhook
     # secret as well (see payment_service).
-    "STATUS": os.environ.get("PAYMENT_STATUS", "coming_soon"),
+    "STATUS": _env_key("PAYMENT_STATUS", "coming_soon"),
     "PROVIDER": "paddle",
     # "sandbox" (sandbox-vendors.paddle.com) or "production".
-    "ENVIRONMENT": os.environ.get("PADDLE_ENVIRONMENT", "sandbox"),
+    "ENVIRONMENT": _env_key("PADDLE_ENVIRONMENT", "sandbox"),
     # Client-side token (test_... / live_...): public, used by Paddle.js.
-    "CLIENT_TOKEN": os.environ.get("PADDLE_CLIENT_TOKEN", ""),
+    "CLIENT_TOKEN": _env_key("PADDLE_CLIENT_TOKEN"),
     # Secret key of the notification destination: verifies webhooks.
-    "WEBHOOK_SECRET": os.environ.get("PADDLE_WEBHOOK_SECRET", ""),
+    "WEBHOOK_SECRET": _env_key("PADDLE_WEBHOOK_SECRET"),
 }
 
 # Error tracking (Sentry). Off without a DSN. Errors only — see core/observability.py.

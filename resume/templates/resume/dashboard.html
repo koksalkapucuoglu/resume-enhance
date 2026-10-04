@@ -90,6 +90,7 @@
             </div>
 
             <div class="flex items-center gap-4">
+                {% include "partials/plan_link.html" %}
                 <a href="{% url 'profile' %}" class="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold border border-slate-300 hover:bg-primary hover:text-white hover:border-primary transition-all" title="Profile">
                     {{ user.username|slice:":1"|upper }}
                 </a>

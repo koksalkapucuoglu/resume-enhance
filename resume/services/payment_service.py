@@ -35,6 +35,11 @@ SIGNATURE_TOLERANCE_SECONDS = 300
 class PaymentError(Exception):
     """Raised when a webhook cannot be trusted or understood."""
 
+    def __init__(self, message, code="unusable"):
+        super().__init__(message)
+        # A short, content-free reason for logs and Sentry tags.
+        self.code = code
+
 
 # PAYMENT_STATUS values:
 #   coming_soon — plans shown, no checkout, webhook closed (the default)
@@ -117,23 +122,27 @@ class PaddleProvider:
         """Reject anything not signed with the endpoint's secret key."""
         secret = settings.PAYMENTS.get("WEBHOOK_SECRET")
         if not secret:
-            raise PaymentError("No webhook secret configured.")
+            raise PaymentError("No webhook secret configured.", code="no_secret")
 
         header = headers.get("Paddle-Signature") or ""
-        parts = dict(
-            item.split("=", 1) for item in header.split(";") if "=" in item
-        )
-        ts, signature = parts.get("ts", ""), parts.get("h1", "")
-        if not ts.isdigit() or not signature:
-            raise PaymentError("Missing or malformed Paddle-Signature header.")
+        ts, signatures = "", []
+        for item in header.split(";"):
+            key, _, value = item.strip().partition("=")
+            if key == "ts":
+                ts = value
+            elif key == "h1" and value:
+                # More than one h1 while Paddle rotates a secret: any may match.
+                signatures.append(value)
+        if not ts.isdigit() or not signatures:
+            raise PaymentError("Missing or malformed Paddle-Signature header.", code="no_signature")
         if abs(time.time() - int(ts)) > SIGNATURE_TOLERANCE_SECONDS:
-            raise PaymentError("Signature timestamp outside tolerance.")
+            raise PaymentError("Signature timestamp outside tolerance.", code="stale_timestamp")
 
         expected = hmac.new(
             secret.encode(), f"{ts}:".encode() + body, hashlib.sha256
         ).hexdigest()
-        if not hmac.compare_digest(expected, signature):
-            raise PaymentError("Signature mismatch.")
+        if not any(hmac.compare_digest(expected, s) for s in signatures):
+            raise PaymentError("Signature mismatch.", code="signature_mismatch")
 
     def parse(self, body):
         """

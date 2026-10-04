@@ -38,7 +38,11 @@ class Command(BaseCommand):
         out(f"  PAYMENT_STATUS            {payments.get('STATUS')}")
         out(f"  PADDLE_ENVIRONMENT        {payments.get('ENVIRONMENT')}")
         out(f"  PADDLE_CLIENT_TOKEN       {_set(payments.get('CLIENT_TOKEN'))}")
-        out(f"  PADDLE_WEBHOOK_SECRET     {_set(payments.get('WEBHOOK_SECRET'))}")
+        secret = payments.get("WEBHOOK_SECRET") or ""
+        # The last four characters only: Paddle shows the same on the
+        # destination page ("****Uhc3"), so the two can be compared.
+        hint = f"  (…{secret[-4:]}, {len(secret)} chars)" if secret else ""
+        out(f"  PADDLE_WEBHOOK_SECRET     {_set(secret)}{hint}")
         for plan in settings.PREMIUM_PLANS:
             out(f"  price {plan['code']:<18}{_set(plan.get('price_id'))}")
         out(f"  checkout for everyone     {payment_service.is_live()}")

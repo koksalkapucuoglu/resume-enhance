@@ -24,7 +24,7 @@ things become events:
 | `evaluation_unavailable` | `evaluation_service` | Jev did not answer; no score (503) |
 | `pdf_render_failed` | editor / dashboard / signed link | WeasyPrint failed (503) |
 | `verification_email_failed` | `core/email_verification.py` | SMTP refused |
-| `payment_webhook_unusable` / `payment_not_granted` / `payment_for_unknown_user` | `views.payment_webhook` | **money may be taken without access — act immediately** |
+| `payment_webhook_rejected` (tag `reason`: signature_mismatch, stale_timestamp, no_signature, no_secret) / `payment_webhook_unusable` / `payment_not_granted` / `payment_for_unknown_user` | `views.payment_webhook` | **money may be taken without access — act immediately** |
 
 `report_exception(exc, **tags)` is for exceptions the code catches to keep a
 page alive (agent stream, MCP dispatcher).

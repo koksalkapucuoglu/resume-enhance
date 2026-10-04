@@ -409,3 +409,53 @@ class TestModeTest(TestCase):
     def test_without_keys_test_mode_is_off(self):
         self.assertFalse(payment_service.is_test_mode())
         self.assertFalse(payment_service.accepts_webhooks())
+
+
+@override_settings(PREMIUM_PLANS=PLANS, PAYMENTS=LIVE)
+class WebhookDiagnosticsTest(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("ada", password="x")
+        self.url = reverse("resume:payment_webhook")
+
+    def test_a_rejected_signature_is_reported_with_its_reason(self):
+        from unittest.mock import patch
+
+        body = transaction(self.user.id)
+        with patch("resume.views.report_degraded") as report:
+            resp = self.client.post(self.url, body, content_type="application/json",
+                                    HTTP_PADDLE_SIGNATURE=sign(body, secret="wrong"))
+        self.assertEqual(resp.status_code, 401)
+        report.assert_called_once_with("payment_webhook_rejected", reason="signature_mismatch")
+
+    def test_any_of_several_signatures_may_match(self):
+        body = transaction(self.user.id)
+        good = sign(body)
+        ts, h1 = good.split(";")
+        rotated = f"{ts};h1=deadbeef;{h1}"
+        resp = self.client.post(self.url, body, content_type="application/json",
+                                HTTP_PADDLE_SIGNATURE=rotated)
+        self.assertEqual(resp.status_code, 200)
+
+
+class EnvKeyTest(TestCase):
+    def test_quotes_and_whitespace_are_stripped(self):
+        import os
+        from unittest.mock import patch
+
+        from core.settings import _env_key
+
+        with patch.dict(os.environ, {"X_KEY": '  "pdl_ntfset_abc"\n'}):
+            self.assertEqual(_env_key("X_KEY"), "pdl_ntfset_abc")
+        with patch.dict(os.environ, {"X_KEY": "plain"}):
+            self.assertEqual(_env_key("X_KEY"), "plain")
+        self.assertEqual(_env_key("MISSING_KEY_FOR_TEST", "dflt"), "dflt")
+
+
+class PlanLinkTest(TestCase):
+    def test_signed_in_pages_link_to_pricing(self):
+        user = User.objects.create_user("ada", password="x")
+        self.client.force_login(user)
+        html = self.client.get(reverse("resume:dashboard")).content.decode()
+        self.assertIn(reverse("resume:pricing"), html)
+        self.assertIn("Upgrade", html)
+

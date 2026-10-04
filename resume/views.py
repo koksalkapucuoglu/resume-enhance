@@ -1795,7 +1795,10 @@ def payment_webhook(request):
     try:
         provider.verify(request.body, request.headers)
     except payment_service.PaymentError as exc:
+        # Usually a webhook secret that does not match the destination's: every
+        # purchase is then paid and not granted, so it must reach someone.
         logger.warning("Rejected payment webhook: %s", exc)
+        report_degraded("payment_webhook_rejected", reason=exc.code)
         return HttpResponse(status=401)
 
     try:

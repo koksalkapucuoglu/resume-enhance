@@ -240,6 +240,11 @@
                         <span class="material-symbols-outlined text-lg text-slate-400">person</span>
                         {{ UI.profile }}
                     </a>
+                    <a href="{% url 'resume:pricing' %}"
+                       class="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+                        <span class="material-symbols-outlined text-lg text-slate-400">workspace_premium</span>
+                        {{ UI.pricing_title }}
+                    </a>
                     <a href="{% url 'logout' %}"
                        class="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors">
                         <span class="material-symbols-outlined text-lg">logout</span>
